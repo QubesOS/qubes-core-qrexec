@@ -10,14 +10,14 @@ import setuptools.command.install
 # don't import: import * is unreliable and there is no need, since this is
 # compile time and we have source files
 def get_console_scripts():
-    yield 'qrexec-policy', 'qrexec.cli'
-    yield 'qrexec-policy-agent', 'qrexec.agent'
-    yield 'qrexec-policy-graph', 'qrexec.graph'
-#    for filename in os.listdir('./qubes/tools'):
-#        basename, ext = os.path.splitext(os.path.basename(filename))
-#        if basename == '__init__' or ext != '.py':
-#            continue
-#        yield basename.replace('_', '-'), 'qubes.tools.{}'.format(basename)
+    yield 'qrexec-policy', 'qrexec.tools.policy'
+    yield 'qrexec-policy-agent', 'qrexec.tools.dbusagent'
+    yield 'qrexec-policy-graph', 'qrexec.tools.graph'
+    for filename in os.listdir('./qrexec/tools'):
+        basename, ext = os.path.splitext(os.path.basename(filename))
+        if basename == '__init__' or ext != '.py':
+            continue
+        yield basename.replace('_', '-'), 'qrexec.tools.{}'.format(basename)
 
 # create simple scripts that run much faster than "console entry points"
 class CustomInstall(setuptools.command.install.install):
