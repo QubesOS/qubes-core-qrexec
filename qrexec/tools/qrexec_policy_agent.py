@@ -35,7 +35,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib
 # pylint: enable=import-error
 
-from .utils import sanitize_domain_name, sanitize_service_name
+from ..utils import sanitize_domain_name, sanitize_service_name
 
 # pylint: enable=wrong-import-position
 
@@ -284,7 +284,7 @@ class FocusStealingHelper(GtkOneTimerHelper):
 
 
 class RPCConfirmationWindow:
-    # pylint: disable=too-few-public-methods
+    # pylint: disable=too-few-public-methods,too-many-instance-attributes
     _source_file = pkg_resources.resource_filename('qubespolicy',
         os.path.join('glade', "RPCConfirmationWindow.glade"))
     _source_id = {'window': "RPCConfirmationWindow",
@@ -391,6 +391,7 @@ class RPCConfirmationWindow:
 
     def __init__(self, entries_info, source, rpc_operation, targets_list,
             target=None):
+        # pylint: disable=too-many-arguments
         sanitize_domain_name(source, assert_sanitized=True)
         sanitize_service_name(source, assert_sanitized=True)
 
@@ -563,7 +564,7 @@ class PolicyAgent(object):
     def ConfirmPolicyCreate(source, service_name):
         # pylint: disable=invalid-name
 
-        response = confirm_policy(
+        response = confirm_create(
             source, service_name)
         return response
 

@@ -1,4 +1,3 @@
-# -*- encoding: utf8 -*-
 #
 # The Qubes OS Project, http://www.qubes-os.org
 #
@@ -17,13 +16,17 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
+#
+
 import argparse
 import logging
 import logging.handlers
-import os
 
 import sys
 
+from .. import DEFAULT_POLICY, POLICYPATH
+from .. import exc
+from .. import utils
 from ..policy import parser
 
 argparser = argparse.ArgumentParser(description="Evaluate qrexec policy")
@@ -46,21 +49,9 @@ argparser.add_argument('service_name', metavar='service-name',
 argparser.add_argument('process_ident', metavar='process-ident',
     help='Qrexec process identifier - for connecting data channel')
 
-DEFAULT_POLICY = '''\
-## Policy file automatically created on first service call.
-## Fell free to edit.
-## Note that policy parsing stops at the first match
-
-## Please use a single # to start your custom comments
-
-@anyvm  @anyvm  ask
-'''
-
 def create_default_policy(service_name):
-    policy_file = os.path.join(policy.POLICY_DIR, service_name)
-    with open(policy_file, "w") as policy:
+    with open(str(POLICYPATH / service_name), "w") as policy:
         policy.write(DEFAULT_POLICY)
-
 
 def main(args=None):
     args = argparser.parse_args(args)
@@ -76,14 +67,14 @@ def main(args=None):
     log_prefix = 'qrexec: {}: {} -> {}: '.format(
         args.service_name, args.domain, args.target)
     try:
-        system_info = policy.get_system_info()
-    except policy.QubesMgmtException as e:
-        log.error(log_prefix + 'error getting system info: ' + str(e))
+        system_info = utils.get_system_info()
+    except exc.QubesMgmtException as err:
+        log.error(log_prefix + 'error getting system info: ' + str(err))
         return 1
     try:
         try:
-            policy = policy.Policy(args.service_name)
-        except policy.PolicyNotFound:
+            policy = parser.Policy(args.service_name)
+        except exc.PolicyNotFound:
             service_name = args.service_name.split('+')[0]
             import pydbus
             bus = pydbus.SystemBus()
@@ -93,20 +84,20 @@ def main(args=None):
                 args.domain, service_name)
             if create_policy:
                 create_default_policy(service_name)
-                policy = policy.Policy(args.service_name)
+                policy = parser.Policy(args.service_name)
             else:
                 raise
 
         action = policy.evaluate(system_info, args.domain, args.target)
-        if args.assume_yes_for_ask and action.action == policy.Action.ask:
-            action.action = policy.Action.allow
+        if args.assume_yes_for_ask and action.action == parser.Action.ask:
+            action.action = parser.Action.allow
         if args.just_evaluate:
             return {
-                policy.Action.allow: 0,
-                policy.Action.deny: 1,
-                policy.Action.ask: 1,
+                parser.Action.allow: 0,
+                parser.Action.deny: 1,
+                parser.Action.ask: 1,
             }[action.action]
-        if action.action == policy.Action.ask:
+        if action.action == parser.Action.ask:
             # late import to save on time for allow/deny actions
             import pydbus
             bus = pydbus.SystemBus()
@@ -133,11 +124,11 @@ def main(args=None):
                 action.handle_user_response(False)
         log.info(log_prefix + 'allowed to {}'.format(action.target))
         action.execute(caller_ident)
-    except policy.PolicySyntaxError as e:
-        log.error(log_prefix + 'error loading policy: ' + str(e))
+    except exc.PolicySyntaxError as err:
+        log.error(log_prefix + 'error loading policy: ' + str(err))
         return 1
-    except policy.AccessDenied as e:
-        log.info(log_prefix + 'denied: ' + str(e))
+    except exc.AccessDenied as err:
+        log.info(log_prefix + 'denied: ' + str(err))
         return 1
     return 0
 

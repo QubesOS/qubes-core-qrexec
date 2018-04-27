@@ -4,6 +4,7 @@
 # Copyright (C) 2013-2015  Joanna Rutkowska <joanna@invisiblethingslab.com>
 # Copyright (C) 2013-2017  Marek Marczykowski-Górecki
 #                                   <marmarek@invisiblethingslab.com>
+# Copyright (C) 2018  Wojtek Porczyk <woju@invisiblethingslab.com>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -19,37 +20,17 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
 ''' Qrexec policy parser and evaluator '''
+
+import abc
 import enum
-import itertools
-import json
-import os
-import os.path
-import socket
+import logging
+import pathlib
 import subprocess
 
-# don't import 'qubes.config' please, it takes 0.3s
-QREXEC_CLIENT = '/usr/lib/qubes/qrexec-client'
-POLICY_DIR = '/etc/qubes-rpc/policy'
-QUBESD_INTERNAL_SOCK = '/var/run/qubesd.internal.sock'
-QUBESD_SOCK = '/var/run/qubesd.sock'
-
-
-class AccessDenied(Exception):
-    ''' Raised when qrexec policy denied access '''
-    pass
-
-
-class PolicySyntaxError(AccessDenied):
-    ''' Syntax error in qrexec policy, abort parsing '''
-    def __init__(self, filename, lineno, msg):
-        super(PolicySyntaxError, self).__init__(
-            '{}:{}: {}'.format(filename, lineno, msg))
-
-class PolicyNotFound(AccessDenied):
-    ''' Policy was not found for this service '''
-    def __init__(self, service_name):
-        super(PolicyNotFound, self).__init__(
-            'Policy not found for service {}'.format(service_name))
+from .. import QREXEC_CLIENT, POLICYPATH
+from ..exc import (
+    AccessDenied, PolicySyntaxError, PolicyNotFound, QubesMgmtException)
+from ..utils import qubesd_call
 
 
 class Action(enum.Enum):
@@ -130,6 +111,7 @@ def verify_special_value(value, for_target=True, specific_target=False):
 
 class PolicyRule(object):
     ''' A single line of policy file '''
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, line, filename=None, lineno=None):
         '''
         Load a single line of qrexec policy and check its syntax.
@@ -142,6 +124,7 @@ class PolicyRule(object):
         :param filename: name of the file from which this line is loaded
         :param lineno: line number from which this line is loaded
         '''
+        # pylint: disable=too-many-branches
 
         self.lineno = lineno
         self.filename = filename
@@ -332,6 +315,7 @@ class PolicyRule(object):
         :param system_info: information about the system
         :return: matching domains
         '''
+        # pylint: disable=too-many-branches
 
         if self.target.startswith('@tag:'):
             tag = self.target.split(':', 1)[1]
@@ -394,6 +378,8 @@ class PolicyAction(object):
     either ask or allow action '''
     def __init__(self, service, source, target, rule, original_target,
             targets_for_ask=None):
+        # pylint: disable=too-many-arguments
+
         #: service name
         self.service = service
         #: calling domain
@@ -430,6 +416,7 @@ class PolicyAction(object):
         :param target: target chosen by the user (if reponse==True)
         :return: None
         '''
+        # pylint: disable=redefined-variable-type
         assert self.action == Action.ask
         if response:
             assert target in self.targets_for_ask
@@ -507,8 +494,8 @@ class PolicyAction(object):
             return
         try:
             qubesd_call(self.target, 'admin.vm.Start')
-        except QubesMgmtException as e:
-            if e.exc_type == 'QubesVMNotHaltedError':
+        except QubesMgmtException as err:
+            if err.exc_type == 'QubesVMNotHaltedError':
                 pass
             else:
                 raise
@@ -524,7 +511,66 @@ class PolicyAction(object):
         qubesd_call(dispvm, 'admin.vm.Kill')
 
 
-class Policy(object):
+class AbstractPolicyParser(metaclass=abc.ABCMeta):
+    '''A minimal, pluggable, validating policy parser'''
+    policy_path = POLICYPATH
+
+    def __init__(self, *, policy_path=None):
+        if policy_path is not None:
+            self.policy_path = pathlib.Path(policy_path)
+
+    def load_policy_file(self, file, filename=None):
+        '''Parse a policy file'''
+        if filename is None:
+            if isinstance(file, (str, pathlib.Path)):
+                filename = str(file)
+                file = open(filename)
+            else:
+                try:
+                    filename = file.name
+                except AttributeError:
+                    filename = '<unknown>'
+
+        for lineno, line in enumerate(file, start=1):
+            line = line.strip()
+
+            # skip empty lines and comments
+            if not line or line[0] == '#':
+                continue
+
+            # compatibility with old keywords notation
+            line = line.replace('$', '@')
+
+            if line.startswith('@include:'):
+                self.handle_include(line.split(':', 1)[-1],
+                    filename=filename, lineno=lineno)
+                continue
+
+            # this can raise PolicySyntaxError on its own
+            self.handle_rule(PolicyRule(line, filename, lineno),
+                filename=filename, lineno=lineno)
+
+        return self
+
+    @abc.abstractmethod
+    def handle_include(self, included_path, filename, lineno):
+        '''Handle ``@include:`` line when encountered in
+        :meth:`policy_load_file`.
+
+        This method is to be provided by subclass.
+        '''
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def handle_rule(self, rule, filename, lineno):
+        '''Handle a line with a rule.
+
+        This method is to be provided by subclass.
+        '''
+        raise NotImplementedError()
+
+
+class Policy(AbstractPolicyParser):
     ''' Full policy for a given service
 
     Usage:
@@ -538,16 +584,15 @@ class Policy(object):
 
     '''
 
-    def __init__(self, service, policy_dir=POLICY_DIR):
-        policy_file = os.path.join(policy_dir, service)
-        if not os.path.exists(policy_file):
-            # fallback to policy without specific argument set (if any)
-            policy_file = os.path.join(policy_dir, service.split('+')[0])
-        if not os.path.exists(policy_file):
-            raise PolicyNotFound(service)
+    def __init__(self, service, policy_path=None):
+        super().__init__(policy_path=policy_path)
 
-        #: policy storage directory
-        self.policy_dir = policy_dir
+        policy_file = self.policy_path / service
+        if not policy_file.exists():
+            # fallback to policy without specific argument set (if any)
+            policy_file = self.policy_path / service.split('+')[0]
+        if not policy_file.exists():
+            raise PolicyNotFound(service)
 
         #: service name
         self.service = service
@@ -556,35 +601,20 @@ class Policy(object):
         self.policy_rules = []
         try:
             self.load_policy_file(policy_file)
-        except OSError as e:
+        except OSError as err:
             raise AccessDenied(
-                'failed to load {} file: {!s}'.format(e.filename, e))
+                'failed to load {} file: {!s}'.format(err.filename, err))
 
-    def load_policy_file(self, path):
-        ''' Load policy file and append rules to :py:attr:`policy_rules`
 
-        :param path: file to load
-        '''
-        with open(path) as policy_file:
-            for lineno, line in zip(itertools.count(start=1),
-                    policy_file.readlines()):
-                line = line.strip()
-                # compatibility with old keywords notation
-                line = line.replace('$', '@')
-                if not line:
-                    # skip empty lines
-                    continue
-                if line[0] == '#':
-                    # skip comments
-                    continue
-                if line.startswith('@include:'):
-                    include_path = line.split(':', 1)[1]
-                    # os.path.join will leave include_path unchanged if it's
-                    # already absolute
-                    include_path = os.path.join(self.policy_dir, include_path)
-                    self.load_policy_file(include_path)
-                else:
-                    self.policy_rules.append(PolicyRule(line, path, lineno))
+    def handle_include(self, included_path, filename, lineno):
+        # pylint: disable=unused-argument
+        included_path = self.policy_path / included_path
+        self.load_policy_file(included_path)
+
+    def handle_rule(self, rule, filename, lineno):
+        # pylint: disable=unused-argument
+        self.policy_rules.append(rule)
+
 
     def find_matching_rule(self, system_info, source, target):
         ''' Find the first rule matching given arguments '''
@@ -642,6 +672,7 @@ class Policy(object):
         :return tuple(rule, considered_targets) - where considered targets is a
         list of possible targets for 'ask' action (rule.action == Action.ask)
         '''
+        # pylint: disable=too-many-branches
         if target == '':
             target = '@default'
         rule = self.find_matching_rule(system_info, source, target)
@@ -693,62 +724,151 @@ class Policy(object):
             raise AccessDenied(
                 'invalid action?! {}:{}'.format(rule.filename, rule.lineno))
 
+class ValidateIncludesParser(AbstractPolicyParser):
+    '''A parser that checks if included file does indeed exist.
 
-class QubesMgmtException(Exception):
-    ''' Exception returned by qubesd '''
-    def __init__(self, exc_type):
-        super(QubesMgmtException, self).__init__()
-        self.exc_type = exc_type
-
-
-def qubesd_call(dest, method, arg=None, payload=None):
-    if method.startswith('internal.'):
-        socket_path = QUBESD_INTERNAL_SOCK
-    else:
-        socket_path = QUBESD_SOCK
-    try:
-        client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client_socket.connect(socket_path)
-    except IOError:
-        # TODO:
-        raise
-
-    # src, method, dest, arg
-    for call_arg in ('dom0', method, dest, arg):
-        if call_arg is not None:
-            client_socket.sendall(call_arg.encode('ascii'))
-        client_socket.sendall(b'\0')
-    if payload is not None:
-        client_socket.sendall(payload)
-
-    client_socket.shutdown(socket.SHUT_WR)
-
-    return_data = client_socket.makefile('rb').read()
-    if return_data.startswith(b'0\x00'):
-        return return_data[2:]
-    elif return_data.startswith(b'2\x00'):
-        (_, exc_type, _traceback, _format_string, _args) = \
-            return_data.split(b'\x00', 4)
-        raise QubesMgmtException(exc_type.decode('ascii'))
-    else:
-        raise AssertionError(
-            'invalid qubesd response: {!r}'.format(return_data))
-
-
-def get_system_info():
-    ''' Get system information
-
-    This retrieve information necessary to process qrexec policy. Returned
-    data is nested dict structure with this structure:
-
-    - domains:
-       - `<domain name>`:
-          - tags: list of tags
-          - type: domain type
-          - template_for_dispvms: should DispVM based on this VM be allowed
-          - default_dispvm: name of default AppVM for DispVMs started from here
-
+    The included file is not read, because if it exists, it is assumed it
+    already passed syntax check.
     '''
+    def handle_include(self, included_path, filename, lineno):
+        # TODO disallow anything other that @include:[include/]<file>
+        if not (self.policy_path / included_path).is_file():
+            raise PolicySyntaxError(filename, lineno,
+                'included path {!s} does not exist'.format(included_path))
 
-    system_info = qubesd_call('dom0', 'internal.GetSystemInfo')
-    return json.loads(system_info.decode('utf-8'))
+    def handle_rule(self, rule, filename, lineno):
+        pass
+
+class CheckIfNotIncludedParser(AbstractPolicyParser):
+    '''A parser that checks if a particular file is *not* included.
+
+    This is used while removing a particular file, to check that it is not used
+    anywhere else.
+    '''
+    def __init__(self, *args, to_be_removed, **kwds):
+        self.to_be_removed = self.policy_path / to_be_removed
+        super().__init__(*args, **kwds)
+
+    def handle_include(self, included_path, filename, lineno):
+        included_path = self.policy_path / included_path
+        if included_path.samefile(self.to_be_removed):
+            raise PolicySyntaxError(filename, lineno,
+                'included path {!s}'.format(included_path))
+
+    def handle_rule(self, rule, filename, lineno):
+        pass
+
+class ToposortParser(AbstractPolicyParser):
+    '''A helper for topological sorting the policy files'''
+
+    def __init__(self, *args, filepath, **kwds):
+        super().__init__(*args, **kwds)
+        self.filepath = filepath
+        self.file = open(str(self.policy_path / filepath))
+        self.included_paths = set()
+        self.state = None
+        self.load_policy_file(self.file, filename=str(self.filepath))
+        self.file.seek(0)
+
+    def handle_include(self, included_path, filename, lineno):
+        logging.debug('ToposortParser(filepath=%r).handle_include(included_path=%r)',
+            self.filepath, included_path)
+        if '/' in included_path and (
+                not included_path.startswith('include/')
+                or included_path.count('/') > 1):
+            # TODO make this an error, since we shouldn't accept this anyway
+            logging.warning('ignoring path %r included in %s on line %d; '
+                'expect problems with import order',
+                included_path, filename, lineno)
+            return
+        self.included_paths.add(included_path)
+
+    def handle_rule(self, rule, filename, lineno):
+        pass
+
+
+# TODO this should inherit from common policy exception
+class PolicyDirectoryLoadingError(Exception):
+    pass
+
+class AbstractPolicyDirectoryLoader:
+    def __init__(self, policy_path):
+        logging.debug('AbstractPolicyDirectoryLoader(policy_path=%r)',
+            policy_path)
+        if not policy_path.is_dir():
+            raise ValueError('path is not a directory')
+        self.policy_path = policy_path
+
+        for filepath in self.walk_files():
+            self.handle_file(filepath)
+
+    def walk_files(self, *, path=None, in_include=False):
+        if path is None:
+            path = self.policy_path
+        for filepath in path.iterdir():
+            if filepath.is_dir():
+                if in_include or filepath.name != 'include':
+                    raise PolicyDirectoryLoadingError(
+                        'found unexpected directory {}'.format(filepath))
+                yield from self.walk_files(path=filepath, in_include=True)
+                continue
+            if not filepath.is_file():
+                raise PolicyDirectoryLoadingError(
+                    'found {} which is not a file'.format(filepath))
+            yield filepath
+
+    def handle_file(self, filepath):
+        raise NotImplementedError()
+
+class Toposorter(AbstractPolicyDirectoryLoader):
+    @enum.unique
+    class State(enum.Enum):
+        ON_PATH, IN_ORDER = object(), object()
+
+    def __init__(self, *args, **kwds):
+        self.parsers = {}
+        super().__init__(*args, **kwds)
+
+        self.order = []
+        self.queue = set(self.parsers.values())
+        while self.queue:
+            self.dfs(self.queue.pop())
+
+        del self.parsers
+
+    def handle_file(self, filepath):
+        logging.debug('Toposorter.handle_file(filepath=%r)', filepath)
+        self.parsers[str(filepath.relative_to(self.policy_path))] = ToposortParser(
+            filepath=filepath,
+            policy_path=self.policy_path)
+
+    def dfs(self, node):
+        node.state = self.State.ON_PATH
+
+        for path in node.included_paths:
+            nextnode = self.parsers[path]
+            if nextnode.state == self.State.ON_PATH:
+                raise ValueError('circular include; {} → {}'.format(
+                    node.filepath, nextnode.filepath))
+            if nextnode.state == self.State.IN_ORDER:
+                continue
+
+            self.queue.discard(nextnode)
+            self.dfs(nextnode)
+
+        self.order.append(node)
+        node.state = self.State.IN_ORDER
+
+def toposort(path):
+    '''Given path to a directory, yield (file, filename) in order suitable for
+    mass-uploading.
+
+    A file does not include anything from any file that follows in the
+    sequence.
+
+    *file* is an open()'d file for reading, *filename* is relative to *path*
+    '''
+    # TODO allow for different loader, like from backup, zipfile or whatever
+    path = path.resolve()
+    for parser in Toposorter(path).order:
+        yield (parser.file, str(parser.filepath.relative_to(path)))
