@@ -41,7 +41,7 @@
 #ifdef HAVE_PAM
 #include <security/pam_appl.h>
 #endif
-#include "qrexec.h"
+#include <qrexec.h>
 #include <libvchan.h>
 #include "libqrexec-utils.h"
 #include "qrexec-agent.h"
