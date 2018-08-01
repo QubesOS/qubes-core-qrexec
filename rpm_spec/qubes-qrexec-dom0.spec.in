@@ -65,7 +65,7 @@ The Qubes qrexec files for installation on Dom0.
 %setup -q
 
 %build
-
+%{?set_build_flags}
 make all-dom0
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
 
