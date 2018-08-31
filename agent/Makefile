@@ -21,6 +21,8 @@ install:
 	install qrexec-fork-server $(DESTDIR)/usr/bin
 ifeq ($(shell lsb_release -is), Debian)
 	install -D -m 0644 qrexec.pam.debian $(DESTDIR)/etc/pam.d/qrexec
+else ifeq ($(shell lsb_release -is), Ubuntu)
+	install -D -m 0644 qrexec.pam.debian $(DESTDIR)/etc/pam.d/qrexec
 else ifeq ($(shell lsb_release -is), Arch)
 	install -D -m 0644 qrexec.pam.archlinux $(DESTDIR)/etc/pam.d/qrexec
 else
