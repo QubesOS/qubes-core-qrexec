@@ -25,7 +25,7 @@ import argparse
 import pathlib
 import sys
 
-from .. import POLICY_DIR
+from .. import POLICYPATH
 from ..policy import api, parser
 
 argparser = argparse.ArgumentParser()
@@ -39,7 +39,7 @@ argparser.add_argument('--dest', metavar='DIRECTORY',
 argparser.add_argument('path', metavar='DIRECTORY',
     type=pathlib.Path,
     help='directory with policy files in it (and maybe include/ subdirectory)')
-argparser.set_defaults(dest=pathlib.Path(POLICY_DIR))
+argparser.set_defaults(dest=POLICYPATH)
 
 def main(args=None):
     # pylint: disable=missing-docstring

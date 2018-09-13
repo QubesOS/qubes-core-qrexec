@@ -7,11 +7,10 @@ import string
 
 # don't import 'qubes.config' please, it takes 0.3s
 QREXEC_CLIENT = '/usr/lib/qubes/qrexec-client'
-POLICY_DIR = '/etc/qubes-rpc/policy'
 QUBESD_INTERNAL_SOCK = '/var/run/qubesd.internal.sock'
 QUBESD_SOCK = '/var/run/qubesd.sock'
 
-POLICYPATH = pathlib.Path(POLICY_DIR)
+POLICYPATH = pathlib.Path('/etc/qubes/policy.d')
 INCLUDEPATH = POLICYPATH / 'include'
 
 RPCNAME_ALLOWED_CHARS = (
