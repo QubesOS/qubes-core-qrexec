@@ -21,7 +21,7 @@
 import argparse
 import logging
 import logging.handlers
-
+import pathlib
 import sys
 
 from .. import DEFAULT_POLICY, POLICYPATH
@@ -29,101 +29,121 @@ from .. import exc
 from .. import utils
 from ..policy import parser
 
-argparser = argparse.ArgumentParser(description="Evaluate qrexec policy")
+def create_default_policy(service_name):
+    with open(str(POLICYPATH / service_name), 'w') as policy:
+        policy.write(DEFAULT_POLICY)
 
-argparser.add_argument("--assume-yes-for-ask", action="store_true",
-    dest="assume_yes_for_ask", default=False,
-    help="Allow run of service without confirmation if policy say 'ask'")
-argparser.add_argument("--just-evaluate", action="store_true",
-    dest="just_evaluate", default=False,
-    help="Do not run the service, only evaluate policy; "
-         "retcode=0 means 'allow'")
+class JustEvaluateAllowResolution(parser.AllowResolution):
+    def execute(self, caller_ident, *, system_info):
+        sys.exit(0)
+
+class JustEvaluateAskResolution(parser.AskResolution):
+    def execute(self, caller_ident, *, system_info):
+        sys.exit(1)
+
+class AssumeYesForAskResolution(parser.AskResolution):
+    def execute(self, caller_ident, *, system_info):
+        return self.handle_user_response(True, self.request.target).execute(
+            caller_ident, system_info=system_info)
+
+class DBusAskResolution(parser.AskResolution):
+    def execute(self, caller_ident, *, system_info):
+        import pydbus
+        bus = pydbus.SystemBus()
+        proxy = bus.get('org.qubesos.PolicyAgent',
+            '/org/qubesos/PolicyAgent')
+
+        # prepare icons
+        icons = {name: system_info['domains'][name]['icon']
+            for name in system_info['domains'].keys()}
+        for dispvm_base in system_info['domains']:
+            if not (system_info['domains'][dispvm_base]
+                    ['template_for_dispvms']):
+                continue
+            dispvm_api_name = '@dispvm:' + dispvm_base
+            icons[dispvm_api_name] = \
+                system_info['domains'][dispvm_base]['icon']
+            icons[dispvm_api_name] = \
+                icons[dispvm_api_name].replace('app', 'disp')
+
+        response = proxy.Ask(self.request.source, self.request.service,
+            self.targets_for_ask, self.request.target or '', icons)
+
+        if response:
+            return self.handle_user_response(True, response).execute(
+                caller_ident, system_info=system_info)
+        else:
+            return self.handle_user_response(False, None)
+
+def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask):
+    ret = {
+        'ask_resolution_type': DBusAskResolution,
+        'allow_resolution_type': parser.AllowResolution}
+    if just_evaluate:
+        ret['ask_resolution_type'] = JustEvaluateAskResolution
+        ret['allow_resolution_type'] = JustEvaluateAllowResolution
+    if assume_yes_for_ask:
+        ret['ask_resolution_type'] = AssumeYesForAskResolution
+    return ret
+
+argparser = argparse.ArgumentParser(description='Evaluate qrexec policy')
+
+argparser.add_argument('--assume-yes-for-ask', action='store_true',
+    dest='assume_yes_for_ask', default=False,
+    help='Allow run of service without confirmation if policy say \'ask\'')
+argparser.add_argument('--just-evaluate', action='store_true',
+    dest='just_evaluate', default=False,
+    help='Do not run the service, only evaluate policy; '
+         'retcode=0 means \'allow\'')
+argparser.add_argument('--path',
+    type=pathlib.Path, default=POLICYPATH,
+    help='Use alternative policy path')
+
 argparser.add_argument('domain_id', metavar='src-domain-id',
     help='Source domain ID (Xen ID or similar, not Qubes ID)')
-argparser.add_argument('domain', metavar='src-domain-name',
-    help='Source domain name')
-argparser.add_argument('target', metavar='dst-domain-name',
-    help='Target domain name')
-argparser.add_argument('service_name', metavar='service-name',
+argparser.add_argument('service_and_arg', metavar='SERVICE+ARGUMENT',
     help='Service name')
+argparser.add_argument('source', metavar='SOURCE',
+    help='Source domain name')
+argparser.add_argument('intended_target', metavar='TARGET',
+    help='Target domain name')
 argparser.add_argument('process_ident', metavar='process-ident',
     help='Qrexec process identifier - for connecting data channel')
-
-def create_default_policy(service_name):
-    with open(str(POLICYPATH / service_name), "w") as policy:
-        policy.write(DEFAULT_POLICY)
 
 def main(args=None):
     args = argparser.parse_args(args)
 
     # Add source domain information, required by qrexec-client for establishing
     # connection
-    caller_ident = args.process_ident + "," + args.domain + "," + args.domain_id
+    caller_ident = args.process_ident + "," + args.source + "," + args.domain_id
     log = logging.getLogger('policy')
     log.setLevel(logging.INFO)
     if not log.handlers:
         handler = logging.handlers.SysLogHandler(address='/dev/log')
         log.addHandler(handler)
     log_prefix = 'qrexec: {}: {} -> {}: '.format(
-        args.service_name, args.domain, args.target)
+        args.service_and_arg, args.source, args.intended_target)
     try:
         system_info = utils.get_system_info()
     except exc.QubesMgmtException as err:
         log.error(log_prefix + 'error getting system info: ' + str(err))
         return 1
+
+    service, argument, *_ = args.service_and_arg.split('+', 1) + ['+']
+
     try:
-        try:
-            policy = parser.Policy(args.service_name)
-        except exc.PolicyNotFound:
-            service_name = args.service_name.split('+')[0]
-            import pydbus
-            bus = pydbus.SystemBus()
-            proxy = bus.get('org.qubesos.PolicyAgent',
-                '/org/qubesos/PolicyAgent')
-            create_policy = proxy.ConfirmPolicyCreate(
-                args.domain, service_name)
-            if create_policy:
-                create_default_policy(service_name)
-                policy = parser.Policy(args.service_name)
-            else:
-                raise
+        policy = parser.FilePolicy(policy_path=args.path)
 
-        action = policy.evaluate(system_info, args.domain, args.target)
-        if args.assume_yes_for_ask and action.action == parser.Action.ask:
-            action.action = parser.Action.allow
-        if args.just_evaluate:
-            return {
-                parser.Action.allow: 0,
-                parser.Action.deny: 1,
-                parser.Action.ask: 1,
-            }[action.action]
-        if action.action == parser.Action.ask:
-            # late import to save on time for allow/deny actions
-            import pydbus
-            bus = pydbus.SystemBus()
-            proxy = bus.get('org.qubesos.PolicyAgent',
-                '/org/qubesos/PolicyAgent')
+        request = parser.Request(
+            service, argument, args.source, args.intended_target,
+            system_info=system_info,
+            **prepare_resolution_types(
+                just_evaluate=args.just_evaluate,
+                assume_yes_for_ask=args.assume_yes_for_ask))
+        resolution = policy.evaluate(request)
+        result = resolution.execute(caller_ident, system_info=system_info)
+        log.info(log_prefix + 'allowed to {}'.format(resolution.target))
 
-            icons = {name: system_info['domains'][name]['icon']
-                for name in system_info['domains'].keys()}
-            for dispvm_base in system_info['domains']:
-                if not (system_info['domains'][dispvm_base]
-                        ['template_for_dispvms']):
-                    continue
-                dispvm_api_name = '@dispvm:' + dispvm_base
-                icons[dispvm_api_name] = \
-                    system_info['domains'][dispvm_base]['icon']
-                icons[dispvm_api_name] = \
-                    icons[dispvm_api_name].replace('app', 'disp')
-
-            response = proxy.Ask(args.domain, args.service_name,
-                action.targets_for_ask, action.target or '', icons)
-            if response:
-                action.handle_user_response(True, response)
-            else:
-                action.handle_user_response(False)
-        log.info(log_prefix + 'allowed to {}'.format(action.target))
-        action.execute(caller_ident)
     except exc.PolicySyntaxError as err:
         log.error(log_prefix + 'error loading policy: ' + str(err))
         return 1

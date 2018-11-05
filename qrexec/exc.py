@@ -25,9 +25,9 @@ class AccessDenied(Exception):
 
 class PolicySyntaxError(AccessDenied):
     ''' Syntax error in qrexec policy, abort parsing '''
-    def __init__(self, filename, lineno, msg):
+    def __init__(self, filepath, lineno, msg):
         super(PolicySyntaxError, self).__init__(
-            '{}:{}: {}'.format(filename, lineno, msg))
+            '{}:{}: {}'.format(filepath or '<unknown>', lineno, msg))
 
 class PolicyNotFound(AccessDenied):
     ''' Policy was not found for this service '''
