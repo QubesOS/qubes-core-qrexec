@@ -26,3 +26,11 @@ DEFAULT_POLICY = '''\
 
 @anyvm  @anyvm  ask
 '''
+
+try:
+    from .client_dom0 import call
+except ImportError:
+    try:
+        from .client_vm import call
+    except ImportError:
+        pass

@@ -21,6 +21,7 @@
 
 import json
 import socket
+import subprocess
 
 from . import QUBESD_SOCK, QUBESD_INTERNAL_SOCK
 from .exc import QubesMgmtException
@@ -50,9 +51,9 @@ def _sanitize_name(input_string, extra_allowed_characters, assert_sanitized):
     result = ''.join(_sanitize_char(character, extra_allowed_characters)
                     for character in input_string)
 
-    if assert_sanitized:
-        assert input_string == result, \
-               'Input string was expected to be sanitized, but was not.'
+    if assert_sanitized and not input_string == result:
+        raise ValueError(
+            'Input string was expected to be sanitized, but was not.')
     return result
 
 
@@ -116,3 +117,18 @@ def get_system_info():
 
     system_info = qubesd_call('dom0', 'internal.GetSystemInfo')
     return json.loads(system_info.decode('utf-8'))
+
+def prepare_subprocess_kwds(input):
+    '''Prepare kwds for :py:func:`subprocess.run` for given input
+    '''
+    kwds = {}
+    if input is None:
+        kwds['stdin'] = subprocess.DEVNULL
+    elif isinstance(input, bytes):
+        kwds['input'] = input
+    elif isinstance(input, str):
+        kwds['input'] = input.encode()
+    else:
+        # XXX this breaks on file-like objects that don't have .fileno
+        kwds['stdin'] = input
+    return kwds

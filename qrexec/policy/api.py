@@ -36,6 +36,8 @@
 
 import subprocess
 
+from .. import call as _call
+
 QREXEC_CLIENT = '/usr/bin/qrexec-client-vm'
 
 def _qrexec(rpcname, *, name=None, argument=None, input=None):
@@ -55,9 +57,7 @@ def _qrexec(rpcname, *, name=None, argument=None, input=None):
         rpcname = '{}+{}'.format(rpcname, name)
 
     kwds = {}
-    if argument is None and input is None:
-        kwds['stdin'] = subprocess.DEVNULL
-    else:
+    if argument is not None or input is not None:
         if argument is None:
             argument = b'\n'
         elif not isinstance(argument, bytes):
@@ -72,10 +72,9 @@ def _qrexec(rpcname, *, name=None, argument=None, input=None):
         elif not isinstance(input, bytes):
             input = input.encode()
 
-        kwds['input'] = argument + input
+        input = argument + input
 
-    return subprocess.check_output(
-        [QREXEC_CLIENT, 'dom0', rpcname], **kwds).decode()
+    return _call('dom0', rpcname, input=input).decode()
 
 # pylint: disable=invalid-name
 
