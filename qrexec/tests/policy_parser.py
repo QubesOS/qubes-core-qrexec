@@ -4,6 +4,7 @@
 #
 # Copyright (C) 2017 Marek Marczykowski-Górecki
 #                               <marmarek@invisiblethingslab.com>
+# Copyright (C) 2018  Wojtek Porczyk <woju@invisiblethingslab.com>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -23,7 +24,7 @@ import unittest.mock
 
 import shutil
 
-import qubes.tests
+#import qubes.tests
 
 from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
@@ -91,140 +92,597 @@ SYSTEM_INFO = {
 }
 
 
-class TC_00_PolicyRule(qubes.tests.QubesTestCase):
-    def test_000_verify_target_value(self):
-        self.assertTrue(
-            parser.verify_target_value(SYSTEM_INFO, 'test-vm1'))
-        self.assertTrue(
-            parser.verify_target_value(SYSTEM_INFO, 'default-dvm'))
-        self.assertTrue(
-            parser.verify_target_value(SYSTEM_INFO, '@dispvm'))
-        self.assertTrue(
-            parser.verify_target_value(SYSTEM_INFO, '@dispvm:default-dvm'))
-        self.assertTrue(
-            parser.verify_target_value(SYSTEM_INFO, 'test-template'))
-        self.assertTrue(
-            parser.verify_target_value(SYSTEM_INFO, 'test-standalone'))
-        self.assertTrue(
-            parser.verify_target_value(SYSTEM_INFO, '@adminvm'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, 'no-such-vm'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO,
-                '@dispvm:test-invalid-dvm'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, '@dispvm:test-vm1'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, ''))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, '@default'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, '@anyvm'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, '@tag:tag1'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, '@dispvm:@tag:tag1'))
-        self.assertFalse(
-            parser.verify_target_value(SYSTEM_INFO, '@invalid'))
+class TC_00_VMToken(unittest.TestCase):
+    def test_010_Source(self):
+#       with self.assertRaises(exc.PolicySyntaxError):
+#           parser.Source(None)
+        parser.Source('test-vm1')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@adminvm')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('dom0')
+        parser.Source('@anyvm')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@default')
+        parser.Source('@type:AppVM')
+        parser.Source('@tag:tag1')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@dispvm')
+        parser.Source('@dispvm:default-dvm')
+        parser.Source('@dispvm:@tag:tag3')
 
-    def test_010_verify_special_value(self):
-        self.assertTrue(parser.verify_special_value('@tag:tag',
-            for_target=False))
-        self.assertTrue(parser.verify_special_value('@tag:other-tag',
-            for_target=False))
-        self.assertTrue(parser.verify_special_value('@type:AppVM',
-            for_target=False))
-        self.assertTrue(parser.verify_special_value('@adminvm',
-            for_target=False))
-        self.assertTrue(parser.verify_special_value('@dispvm:some-vm',
-            for_target=True))
-        self.assertTrue(parser.verify_special_value('@dispvm:@tag:tag1',
-            for_target=True))
-        self.assertFalse(parser.verify_special_value('@default',
-            for_target=False))
-        self.assertFalse(parser.verify_special_value('@dispvm',
-            for_target=False))
-        self.assertFalse(parser.verify_special_value('@dispvm:some-vm',
-            for_target=False))
-        self.assertFalse(parser.verify_special_value('@dispvm:@tag:tag1',
-            for_target=False))
-        self.assertFalse(parser.verify_special_value('@invalid',
-            for_target=False))
-        self.assertFalse(parser.verify_special_value('vm-name',
-            for_target=False))
-        self.assertFalse(parser.verify_special_value('@tag:',
-            for_target=False))
-        self.assertFalse(parser.verify_special_value('@type:',
-            for_target=False))
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@invalid')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@dispvm:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@dispvm:@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source('@type:')
+
+    def test_020_Target(self):
+        parser.Target('test-vm1')
+        parser.Target('@adminvm')
+        parser.Target('dom0')
+        parser.Target('@anyvm')
+        parser.Target('@default')
+        parser.Target('@type:AppVM')
+        parser.Target('@tag:tag1')
+        parser.Target('@dispvm')
+        parser.Target('@dispvm:default-dvm')
+        parser.Target('@dispvm:@tag:tag3')
+
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Target('@invalid')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Target('@dispvm:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Target('@dispvm:@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Target('@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Target('@type:')
+
+    def test_021_Target_expand(self):
+        self.assertCountEqual(
+            parser.Target('test-vm1').expand(system_info=SYSTEM_INFO),
+            ['test-vm1'])
+        self.assertCountEqual(
+            parser.Target('@adminvm').expand(system_info=SYSTEM_INFO),
+            ['@adminvm'])
+        self.assertCountEqual(
+            parser.Target('dom0').expand(system_info=SYSTEM_INFO),
+            ['@adminvm'])
+        self.assertCountEqual(
+            parser.Target('@anyvm').expand(system_info=SYSTEM_INFO), [
+                'test-vm1', 'test-vm2', 'test-vm3',
+                '@dispvm:test-vm3',
+                'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
+                'test-no-dvm', 'test-template', 'test-standalone', '@dispvm'])
+        self.assertCountEqual(
+            parser.Target('@default').expand(system_info=SYSTEM_INFO),
+            [])
+        self.assertCountEqual(
+            parser.Target('@type:AppVM').expand(system_info=SYSTEM_INFO), [
+                'test-vm1', 'test-vm2', 'test-vm3',
+                'default-dvm', 'test-invalid-dvm', 'test-no-dvm'])
+        self.assertCountEqual(
+            parser.Target('@type:TemplateVM').expand(system_info=SYSTEM_INFO),
+            ['test-template'])
+        self.assertCountEqual(
+            parser.Target('@tag:tag1').expand(system_info=SYSTEM_INFO), [
+                'test-vm1', 'test-invalid-dvm',
+                'test-template', 'test-standalone', 'test-no-dvm'])
+        self.assertCountEqual(
+            parser.Target('@tag:tag2').expand(system_info=SYSTEM_INFO), [
+                'test-vm1', 'test-vm2',
+                'test-invalid-dvm', 'test-template', 'test-standalone',
+                'test-no-dvm'])
+        self.assertCountEqual(
+            parser.Target('@tag:no-such-tag').expand(system_info=SYSTEM_INFO),
+            [])
+        self.assertCountEqual(
+            parser.Target('@dispvm').expand(system_info=SYSTEM_INFO),
+            ['@dispvm'])
+        self.assertCountEqual(
+            parser.Target('@dispvm:default-dvm').expand(system_info=SYSTEM_INFO),
+            ['@dispvm:default-dvm'])
+
+        # no DispVM from test-vm1 allowed
+        self.assertCountEqual(
+            parser.Target('@dispvm:test-vm1').expand(system_info=SYSTEM_INFO),
+            [])
+
+        self.assertCountEqual(
+            parser.Target('@dispvm:test-vm3').expand(system_info=SYSTEM_INFO),
+            ['@dispvm:test-vm3'])
+        self.assertCountEqual(
+            parser.Target('@dispvm:@tag:tag1').expand(system_info=SYSTEM_INFO),
+            [])
+        self.assertCountEqual(
+            parser.Target('@dispvm:@tag:tag3').expand(system_info=SYSTEM_INFO),
+            ['@dispvm:test-vm3'])
+
+    def test_030_Redirect(self):
+        self.assertIs(parser.Redirect(None), None)
+
+        parser.Redirect('test-vm1')
+        parser.Redirect('@adminvm')
+        parser.Redirect('dom0')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@anyvm')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@default')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@type:AppVM')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@tag:tag1')
+        parser.Redirect('@dispvm')
+        parser.Redirect('@dispvm:default-dvm')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@dispvm:@tag:tag3')
+
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@invalid')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@dispvm:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@dispvm:@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('@type:')
+
+    def test_040_IntendedTarget(self):
+        parser.IntendedTarget('test-vm1')
+        parser.IntendedTarget('@adminvm')
+        parser.IntendedTarget('dom0')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@anyvm')
+        parser.IntendedTarget('@default')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@type:AppVM')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@tag:tag1')
+        parser.IntendedTarget('@dispvm')
+        parser.IntendedTarget('@dispvm:default-dvm')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@dispvm:@tag:tag3')
+
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@invalid')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@dispvm:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@dispvm:@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@tag:')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('@type:')
+
+    def test_100_match_single(self):
+        self.assertTrue(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('@default').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@default').match(
+            parser.IntendedTarget('@default').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@tag:tag1').match(
+            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@type:AppVM').match(
+            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@type:TemplateVM').match(
+            parser.IntendedTarget('test-template').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('@dispvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('@dispvm:default-dvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@dispvm').match(
+            parser.IntendedTarget('@dispvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@dispvm:@tag:tag3').match(
+            parser.IntendedTarget('@dispvm:test-vm3').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@adminvm').match(
+            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@adminvm').match(
+            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('dom0').match(
+            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('dom0').match(
+            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@dispvm:default-dvm').match(
+            parser.IntendedTarget('@dispvm:default-dvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('@dispvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+
+        self.assertFalse(parser.VMToken('@default').match(
+            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@tag:tag1').match(
+            parser.IntendedTarget('test-vm3').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('no-such-vm').verify(system_info=SYSTEM_INFO)
+
+        # test-vm1.template_for_dispvms=False
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('@dispvm:test-vm1').verify(
+                system_info=SYSTEM_INFO)
+
+        # test-vm3 has not tag1
+        self.assertFalse(parser.VMToken('@dispvm:@tag:tag1').match(
+            parser.IntendedTarget('@dispvm:test-vm3').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        # default-dvm has no tag3
+        self.assertFalse(parser.VMToken('@dispvm:@tag:tag3').match(
+            parser.IntendedTarget('@dispvm:default-dvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@anyvm').match(
+            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@tag:dom0-tag').match(
+            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@type:AdminVM').match(
+            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@tag:dom0-tag').match(
+            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@type:AdminVM').match(
+            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@tag:tag1').match(
+            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('@tag:tag1').verify(system_info=SYSTEM_INFO)
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('@type:AppVM').verify(system_info=SYSTEM_INFO)
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('@invalid').verify(system_info=SYSTEM_INFO)
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('no-such-vm').verify(system_info=SYSTEM_INFO)
+        self.assertFalse(parser.VMToken('@dispvm').match(
+            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@dispvm').match(
+            parser.IntendedTarget('default-dvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertFalse(parser.VMToken('@dispvm:default-dvm').match(
+            parser.IntendedTarget('default-dvm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('test-vm1\n').verify(system_info=SYSTEM_INFO)
+        with self.assertRaises(exc.AccessDenied):
+            parser.IntendedTarget('test-vm1  ').verify(system_info=SYSTEM_INFO)
+
+class TC_01_Request(unittest.TestCase):
+    def test_000_init(self):
+        request = parser.Request(
+            'qrexec.Service', '+argument', 'test-vm1', 'test-vm2',
+            system_info=SYSTEM_INFO)
+        self.assertEqual(request.service, 'qrexec.Service')
+        self.assertEqual(request.argument, '+argument')
+        self.assertEqual(request.source, 'test-vm1')
+        self.assertEqual(request.target, 'test-vm2')
+        self.assertEqual(request.system_info, SYSTEM_INFO)
+
+    def test_001_invalid_argument(self):
+        with self.assertRaises(AssertionError):
+            parser.Request(
+                'qrexec.Service', 'argument', 'test-vm1', '@type:AppVM',
+                system_info=SYSTEM_INFO)
+
+    def test_002_invalid_target(self):
+        for invalid_target in ['no-such-vm', '@type:AppVM',
+                '@dispvm:test-invalid-dvm', '@dispvm:test-vm1', #'@default',
+                '@anyvm', '@tag:tag1', '@dispvm:@tag:tag1', '@invalid']:
+            with self.subTest(invalid_target):
+                with self.assertRaises(exc.AccessDenied):
+                    parser.Request('qrexec.Service', '+argument', 'test-vm1',
+                        invalid_target, system_info=SYSTEM_INFO)
+
+#class TC_00_Rule(qubes.tests.QubesTestCase):
+class TC_10_Rule(unittest.TestCase):
+    def test_000_init(self):
+        line = parser.Rule(
+            'test.Service', '+argument', '@anyvm', '@anyvm', 'allow', (),
+            policy=None, filepath='filename', lineno=12)
+
+        self.assertEqual(line.service, 'test.Service')
+        self.assertEqual(line.argument, '+argument')
+        self.assertEqual(line.source, '@anyvm')
+        self.assertIsInstance(line.source, parser.VMToken)
+        self.assertEqual(line.target, '@anyvm')
+        self.assertIsInstance(line.target, parser.VMToken)
+        self.assertIsInstance(line.action, parser.Action.allow.value)
 
     def test_020_line_simple(self):
-        line = parser.PolicyRule('@anyvm @anyvm ask', 'filename', 12)
-        self.assertEqual(line.filename, 'filename')
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
         self.assertEqual(line.lineno, 12)
-        self.assertEqual(line.action, parser.Action.ask)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, '@anyvm')
         self.assertEqual(line.target, '@anyvm')
-        self.assertEqual(line.full_action, 'ask')
-        self.assertIsNone(line.override_target)
-        self.assertIsNone(line.override_user)
-        self.assertIsNone(line.default_target)
+        self.assertIsNone(line.action.target)
+        self.assertIsNone(line.action.user)
+        self.assertIsNone(line.action.default_target)
 
     def test_021_line_simple(self):
         # also check spaces in action field
-        line = parser.PolicyRule(
-            '@tag:tag1 @type:AppVM ask, target=test-vm2, user=user',
-            'filename', 12)
-        self.assertEqual(line.filename, 'filename')
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @tag:tag1 @type:AppVM ask target=test-vm2 user=user',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
         self.assertEqual(line.lineno, 12)
-        self.assertEqual(line.action, parser.Action.ask)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, '@tag:tag1')
         self.assertEqual(line.target, '@type:AppVM')
-        self.assertEqual(line.full_action, 'ask, target=test-vm2, user=user')
-        self.assertEqual(line.override_target, 'test-vm2')
-        self.assertEqual(line.override_user, 'user')
-        self.assertIsNone(line.default_target)
+        self.assertEqual(line.action.target, 'test-vm2')
+        self.assertEqual(line.action.user, 'user')
+        self.assertIsNone(line.action.default_target)
 
     def test_022_line_simple(self):
-        line = parser.PolicyRule(
-            '@anyvm @default allow,target=@dispvm:test-vm2',
-            'filename', 12)
-        self.assertEqual(line.filename, 'filename')
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @default allow target=@dispvm:test-vm2',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
         self.assertEqual(line.lineno, 12)
-        self.assertEqual(line.action, parser.Action.allow)
+        self.assertIsInstance(line.action, parser.Action.allow.value)
         self.assertEqual(line.source, '@anyvm')
         self.assertEqual(line.target, '@default')
-        self.assertEqual(line.full_action, 'allow,target=@dispvm:test-vm2')
-        self.assertEqual(line.override_target, '@dispvm:test-vm2')
-        self.assertIsNone(line.override_user)
-        self.assertIsNone(line.default_target)
+        self.assertEqual(line.action.target, '@dispvm:test-vm2')
+        self.assertIsNone(line.action.user)
+        with self.assertRaises(AttributeError):
+            line.action.default_target
 
     def test_023_line_simple(self):
-        line = parser.PolicyRule(
-            '@anyvm @default ask,default_target=test-vm1',
-            'filename', 12)
-        self.assertEqual(line.filename, 'filename')
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @default ask default_target=test-vm1',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
         self.assertEqual(line.lineno, 12)
-        self.assertEqual(line.action, parser.Action.ask)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, '@anyvm')
         self.assertEqual(line.target, '@default')
-        self.assertEqual(line.full_action, 'ask,default_target=test-vm1')
-        self.assertIsNone(line.override_target)
-        self.assertIsNone(line.override_user)
-        self.assertEqual(line.default_target, 'test-vm1')
+        self.assertIsNone(line.action.target)
+        self.assertIsNone(line.action.user)
+        self.assertEqual(line.action.default_target, 'test-vm1')
 
     def test_024_line_simple(self):
-        line = parser.PolicyRule(
-            '@anyvm @adminvm ask,default_target=@adminvm',
-            'filename', 12)
-        self.assertEqual(line.filename, 'filename')
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @adminvm ask default_target=@adminvm',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
         self.assertEqual(line.lineno, 12)
-        self.assertEqual(line.action, parser.Action.ask)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, '@anyvm')
         self.assertEqual(line.target, '@adminvm')
-        self.assertEqual(line.full_action, 'ask,default_target=@adminvm')
-        self.assertIsNone(line.override_target)
-        self.assertIsNone(line.override_user)
-        self.assertEqual(line.default_target, '@adminvm')
+        self.assertIsNone(line.action.target)
+        self.assertIsNone(line.action.user)
+        self.assertEqual(line.action.default_target, '@adminvm')
+
+    def test_030_line_invalid(self):
+        invalid_lines = [
+            'test.Service +argument @dispvm @default allow',  # @dispvm can't be a source
+            'test.Service +argument @default @default allow',  # @default can't be a source
+            'test.Service +argument @anyvm @default allow,target=@dispvm:@tag:tag1',  # @dispvm:@tag
+            #  as override target
+            'test.Service +argument @anyvm @default allow,target=@tag:tag1',  # @tag as override target
+            'test.Service +argument @anyvm @default deny,target=test-vm1',  # target= used with deny
+            'test.Service +argument @anyvm @anyvm deny,default_target=test-vm1',  # default_target=
+            # with deny
+            'test.Service +argument @anyvm @anyvm deny,user=user',  # user= with deny
+            'test.Service +argument @anyvm @anyvm invalid',  # invalid action
+            'test.Service +argument @anyvm @anyvm allow,invalid=xx',  # invalid option
+            'test.Service +argument @anyvm @anyvm',  # missing action
+            'test.Service +argument @anyvm @anyvm allow,default_target=test-vm1',  # default_target=
+            #  with allow
+            'test.Service +argument @invalid @anyvm allow',  # invalid source
+            'test.Service +argument @anyvm @invalid deny',  # invalid target
+            '',  # empty line
+            'test.Service +argument @anyvm @anyvm allow extra',  # trailing words
+            'test.Service +argument @anyvm @default allow',  # @default allow without target=
+
+            '* +argument @anyvm @default allow', # specific argument for * service
+        ]
+        for line in invalid_lines:
+            with self.subTest(line):
+                with self.assertRaises(exc.PolicySyntaxError):
+                    parser.Rule.from_line(None, line,
+                        filepath='filename', lineno=12)
+
+    def test_050_match(self):
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        self.assertTrue(line.is_match(parser.Request(
+            'test.Service', '+argument', 'test-vm1', 'test-vm2',
+            system_info=SYSTEM_INFO)))
+
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        self.assertTrue(line.is_match(parser.Request(
+            'test.Service', '+argument', 'no-such-vm', 'test-vm2',
+            system_info=SYSTEM_INFO)))
+
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @dispvm allow',
+            filepath='filename', lineno=12)
+        self.assertTrue(line.is_match(parser.Request(
+            'test.Service', '+argument', 'test-vm1', '@dispvm',
+            system_info=SYSTEM_INFO)))
+
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @dispvm allow',
+            filepath='filename', lineno=12)
+        self.assertFalse(line.is_match(parser.Request(
+            'test.Service', '+argument', 'test-vm1', '@dispvm:default-dvm',
+            system_info=SYSTEM_INFO)))
+
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @dispvm:default-dvm allow',
+            filepath='filename', lineno=12)
+        self.assertTrue(line.is_match(parser.Request(
+            'test.Service', '+argument', 'test-vm1', '@dispvm',
+            system_info=SYSTEM_INFO)))
+
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @dispvm:default-dvm allow',
+            filepath='filename', lineno=12)
+        self.assertTrue(line.is_match(parser.Request(
+            'test.Service', '+argument', 'test-vm1', '@dispvm:default-dvm',
+            system_info=SYSTEM_INFO)))
+
+        line = parser.Rule.from_line(None,
+            'test.Service +argument @anyvm @dispvm:@tag:tag3 allow',
+            filepath='filename', lineno=12)
+        self.assertTrue(line.is_match(parser.Request(
+            'test.Service', '+argument', 'test-vm1', '@dispvm:test-vm3',
+            system_info=SYSTEM_INFO)))
+
+#   def test_070_expand_override_target(self):
+#       line = parser.Rule.from_line(None,
+#           'test.Service +argument @anyvm @anyvm allow target=test-vm2',
+#           filepath='filename', lineno=12)
+#       self.assertEqual(
+#           line.action.target.resolve(SYSTEM_INFO, 'test-vm1'),
+#           'test-vm2')
+
+#   def test_071_expand_override_target_dispvm(self):
+#       line = parser.Rule.from_line(
+#           'test.Service +argument @anyvm @anyvm allow target=@dispvm',
+#           filepath='filename', lineno=12)
+#       self.assertEqual(
+#           line.action.target.redirect(SYSTEM_INFO, 'test-vm1'),
+#           '@dispvm:default-dvm')
+
+#   def test_072_expand_override_target_dispvm_specific(self):
+#       line = parser.Rule.from_line(
+#           'test.Service +argument @anyvm @anyvm allow target=@dispvm:test-vm3',
+#           filepath='filename', lineno=12)
+#       self.assertEqual(
+#           line.action.target.redirect(SYSTEM_INFO, 'test-vm1'),
+#           '@dispvm:test-vm3')
+
+#   def test_073_expand_override_target_dispvm_none(self):
+#       line = parser.Rule.from_line(
+#           'test.Service +argument @anyvm @anyvm allow target=@dispvm',
+#           filepath='filename', lineno=12)
+#       self.assertEqual(
+#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
+#           None)
+
+#   def test_074_expand_override_target_dom0(self):
+#       line = parser.Rule.from_line(
+#           'test.Service +argument @anyvm @anyvm allow target=dom0',
+#           filepath='filename', lineno=12)
+#       self.assertEqual(
+#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
+#           '@adminvm')
+
+#   def test_075_expand_override_target_dom0(self):
+#       line = parser.Rule.from_line(
+#           'test.Service +argument @anyvm @anyvm allow target=@adminvm',
+#           filepath='filename', lineno=12)
+#       self.assertEqual(
+#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
+#           '@adminvm')
+
+class TC_11_Rule_service(unittest.TestCase):
+    def test_020_line_simple(self):
+        line = parser.Rule.from_line_service(None, 'test.Service', '+argument',
+            '@anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
+        self.assertEqual(line.lineno, 12)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
+        self.assertEqual(line.source, '@anyvm')
+        self.assertEqual(line.target, '@anyvm')
+        self.assertIsNone(line.action.target)
+        self.assertIsNone(line.action.user)
+#       self.assertIsNone(line.default_target)
+
+    def test_021_line_simple(self):
+        # also check spaces in action field
+        line = parser.Rule.from_line_service(None, 'test.Service', '+argument',
+            '@tag:tag1 @type:AppVM ask target=test-vm2 user=user',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
+        self.assertEqual(line.lineno, 12)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
+        self.assertEqual(line.source, '@tag:tag1')
+        self.assertEqual(line.target, '@type:AppVM')
+        self.assertEqual(line.action.target, 'test-vm2')
+        self.assertEqual(line.action.user, 'user')
+#       self.assertIsNone(line.default_target)
+
+    def test_022_line_simple(self):
+        line = parser.Rule.from_line_service(None, 'test.Service', '+argument',
+            '@anyvm @default allow target=@dispvm:test-vm2',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
+        self.assertEqual(line.lineno, 12)
+        self.assertIsInstance(line.action, parser.Action.allow.value)
+        self.assertEqual(line.source, '@anyvm')
+        self.assertEqual(line.target, '@default')
+        self.assertEqual(line.action.target, '@dispvm:test-vm2')
+        self.assertIsNone(line.action.user)
+#       self.assertIsNone(line.action.default)
+
+    def test_023_line_simple(self):
+        line = parser.Rule.from_line_service(None, 'test.Service', '+argument',
+            '@anyvm @default ask default_target=test-vm1',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
+        self.assertEqual(line.lineno, 12)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
+        self.assertEqual(line.source, '@anyvm')
+        self.assertEqual(line.target, '@default')
+        self.assertIsNone(line.action.target)
+        self.assertIsNone(line.action.user)
+        self.assertEqual(line.action.default_target, 'test-vm1')
+
+    def test_024_line_simple(self):
+        line = parser.Rule.from_line_service(None, 'test.Service', '+argument',
+            '@anyvm @adminvm ask default_target=@adminvm',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
+        self.assertEqual(line.lineno, 12)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
+        self.assertEqual(line.source, '@anyvm')
+        self.assertEqual(line.target, '@adminvm')
+        self.assertIsNone(line.action.target)
+        self.assertIsNone(line.action.user)
+        self.assertEqual(line.action.default_target, '@adminvm')
 
     def test_030_line_invalid(self):
         invalid_lines = [
@@ -251,345 +709,21 @@ class TC_00_PolicyRule(qubes.tests.QubesTestCase):
         for line in invalid_lines:
             with self.subTest(line):
                 with self.assertRaises(exc.PolicySyntaxError):
-                    parser.PolicyRule(line, 'filename', 12)
+                    parser.Rule.from_line_service(None,
+                        'test.Service', '+argument', line,
+                        filepath='filename', lineno=12)
 
-    def test_040_match_single(self):
-        is_match_single = parser.PolicyRule.is_match_single
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@anyvm', 'test-vm1'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@anyvm', '@default'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@default', '@default'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@tag:tag1', 'test-vm1'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@type:AppVM', 'test-vm1'))
-        self.assertTrue(is_match_single(SYSTEM_INFO,
-            '@type:TemplateVM', 'test-template'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@anyvm', '@dispvm'))
-        self.assertTrue(is_match_single(SYSTEM_INFO,
-            '@anyvm', '@dispvm:default-dvm'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@dispvm', '@dispvm'))
-        self.assertTrue(is_match_single(SYSTEM_INFO,
-            '@dispvm:@tag:tag3', '@dispvm:test-vm3'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@adminvm', '@adminvm'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@adminvm', 'dom0'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, 'dom0', '@adminvm'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, 'dom0', 'dom0'))
-        self.assertTrue(is_match_single(SYSTEM_INFO,
-            '@dispvm:default-dvm', '@dispvm:default-dvm'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@anyvm', '@dispvm'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@anyvm', 'test-vm1'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@anyvm', 'test-vm1'))
-        self.assertTrue(is_match_single(SYSTEM_INFO, '@anyvm', 'test-vm1'))
-
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@default', 'test-vm1'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@tag:tag1', 'test-vm3'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', 'no-such-vm'))
-        # test-vm1.template_for_dispvms=False
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@anyvm', '@dispvm:test-vm1'))
-        # test-vm1.template_for_dispvms=False
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@dispvm:test-vm1', '@dispvm:test-vm1'))
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@dispvm:@tag:tag1', '@dispvm:test-vm1'))
-        # test-vm3 has not tag1
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@dispvm:@tag:tag1', '@dispvm:test-vm3'))
-        # default-dvm has no tag3
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@dispvm:@tag:tag3', '@dispvm:default-dvm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', 'dom0'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', '@adminvm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@tag:dom0-tag', '@adminvm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@type:AdminVM', '@adminvm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@tag:dom0-tag', 'dom0'))
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@type:AdminVM', 'dom0'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@tag:tag1', 'dom0'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', '@tag:tag1'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', '@type:AppVM'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', '@invalid'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@invalid', '@invalid'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', 'no-such-vm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            'no-such-vm', 'no-such-vm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@dispvm', 'test-vm1'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@dispvm', 'default-dvm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO,
-            '@dispvm:default-dvm', 'default-dvm'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', 'test-vm1\n'))
-        self.assertFalse(is_match_single(SYSTEM_INFO, '@anyvm', 'test-vm1  '))
-
-    def test_050_match(self):
-        line = parser.PolicyRule('@anyvm @anyvm allow')
-        self.assertTrue(line.is_match(SYSTEM_INFO, 'test-vm1', 'test-vm2'))
-        line = parser.PolicyRule('@anyvm @anyvm allow')
-        self.assertFalse(line.is_match(SYSTEM_INFO, 'no-such-vm', 'test-vm2'))
-        line = parser.PolicyRule('@anyvm @anyvm allow')
-        self.assertFalse(line.is_match(SYSTEM_INFO, 'test-vm1', 'no-such-vm'))
-        line = parser.PolicyRule('@anyvm @dispvm allow')
-        self.assertTrue(line.is_match(SYSTEM_INFO, 'test-vm1', '@dispvm'))
-        line = parser.PolicyRule('@anyvm @dispvm allow')
-        self.assertFalse(line.is_match(SYSTEM_INFO,
-            'test-vm1', '@dispvm:default-dvm'))
-        line = parser.PolicyRule('@anyvm @dispvm:default-dvm allow')
-        self.assertTrue(line.is_match(SYSTEM_INFO, 'test-vm1', '@dispvm'))
-        line = parser.PolicyRule('@anyvm @dispvm:default-dvm allow')
-        self.assertTrue(line.is_match(SYSTEM_INFO,
-            'test-vm1', '@dispvm:default-dvm'))
-        line = parser.PolicyRule('@anyvm @dispvm:@tag:tag3 allow')
-        self.assertTrue(line.is_match(SYSTEM_INFO,
-            'test-vm1', '@dispvm:test-vm3'))
-
-    def test_060_expand_target(self):
-        lines = {
-            '@anyvm @anyvm allow': ['test-vm1', 'test-vm2', 'test-vm3',
-                '@dispvm:test-vm3',
-                'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
-                'test-no-dvm', 'test-template', 'test-standalone', '@dispvm'],
-            '@anyvm @dispvm allow': ['@dispvm'],
-            '@anyvm @dispvm:default-dvm allow': ['@dispvm:default-dvm'],
-            # no DispVM from test-vm1 allowed
-            '@anyvm @dispvm:test-vm1 allow': [],
-            '@anyvm @dispvm:test-vm3 allow': ['@dispvm:test-vm3'],
-            '@anyvm @dispvm:@tag:tag1 allow': [],
-            '@anyvm @dispvm:@tag:tag3 allow': ['@dispvm:test-vm3'],
-            '@anyvm test-vm1 allow': ['test-vm1'],
-            '@anyvm @type:AppVM allow': ['test-vm1', 'test-vm2', 'test-vm3',
-                'default-dvm', 'test-invalid-dvm', 'test-no-dvm'],
-            '@anyvm @type:TemplateVM allow': ['test-template'],
-            '@anyvm @tag:tag1 allow': ['test-vm1', 'test-invalid-dvm',
-                'test-template', 'test-standalone', 'test-no-dvm'],
-            '@anyvm @tag:tag2 allow': ['test-vm1', 'test-vm2',
-                'test-invalid-dvm', 'test-template', 'test-standalone',
-                'test-no-dvm'],
-            '@anyvm @tag:no-such-tag allow': [],
-        }
-        for line in lines:
-            with self.subTest(line):
-                policy_line = parser.PolicyRule(line)
-                self.assertCountEqual(list(policy_line.expand_target(SYSTEM_INFO)),
-                    lines[line])
-
-    def test_070_expand_override_target(self):
-        line = parser.PolicyRule(
-            '@anyvm @anyvm allow,target=test-vm2')
-        self.assertEqual(
-            line.expand_override_target(SYSTEM_INFO, 'test-vm1'),
-            'test-vm2')
-
-    def test_071_expand_override_target_dispvm(self):
-        line = parser.PolicyRule(
-            '@anyvm @anyvm allow,target=@dispvm')
-        self.assertEqual(
-            line.expand_override_target(SYSTEM_INFO, 'test-vm1'),
-            '@dispvm:default-dvm')
-
-    def test_072_expand_override_target_dispvm_specific(self):
-        line = parser.PolicyRule(
-            '@anyvm @anyvm allow,target=@dispvm:test-vm3')
-        self.assertEqual(
-            line.expand_override_target(SYSTEM_INFO, 'test-vm1'),
-            '@dispvm:test-vm3')
-
-    def test_073_expand_override_target_dispvm_none(self):
-        line = parser.PolicyRule(
-            '@anyvm @anyvm allow,target=@dispvm')
-        self.assertEqual(
-            line.expand_override_target(SYSTEM_INFO, 'test-no-dvm'),
-            None)
-
-    def test_074_expand_override_target_dom0(self):
-        line = parser.PolicyRule(
-            '@anyvm @anyvm allow,target=dom0')
-        self.assertEqual(
-            line.expand_override_target(SYSTEM_INFO, 'test-no-dvm'),
-            'dom0')
-
-    def test_075_expand_override_target_dom0(self):
-        line = parser.PolicyRule(
-            '@anyvm @anyvm allow,target=@adminvm')
-        self.assertEqual(
-            line.expand_override_target(SYSTEM_INFO, 'test-no-dvm'),
-            '@adminvm')
-
-
-class TC_10_PolicyAction(qubes.tests.QubesTestCase):
-    def test_000_init(self):
-        rule = parser.PolicyRule('@anyvm @anyvm deny')
-        with self.assertRaises(exc.AccessDenied):
-            parser.PolicyAction('test.service', 'test-vm1', 'test-vm2',
-                rule, 'test-vm2')
-
-    def test_001_init(self):
-        rule = parser.PolicyRule('@anyvm @anyvm ask')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        self.assertEqual(action.service, 'test.service')
-        self.assertEqual(action.source, 'test-vm1')
-        self.assertIsNone(action.target)
-        self.assertEqual(action.original_target, 'test-vm2')
-        self.assertEqual(action.targets_for_ask, ['test-vm2', 'test-vm3'])
-        self.assertEqual(action.rule, rule)
-        self.assertEqual(action.action, parser.Action.ask)
-
-    def test_002_init_invalid(self):
-        rule_ask = parser.PolicyRule('@anyvm @anyvm ask')
-        rule_allow = parser.PolicyRule('@anyvm @anyvm allow')
-        with self.assertRaises(AssertionError):
-            parser.PolicyAction('test.service', 'test-vm1',
-            None, rule_allow, 'test-vm2', None)
-        with self.assertRaises(AssertionError):
-            parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule_allow, 'test-vm2', ['test-vm2', 'test-vm3'])
-
-        with self.assertRaises(AssertionError):
-            parser.PolicyAction('test.service', 'test-vm1',
-            None, rule_ask, 'test-vm2', None)
-
-    def test_003_init_default_target(self):
-        rule_ask = parser.PolicyRule('@anyvm @anyvm ask')
-
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm1', rule_ask, 'test-vm2', ['test-vm2'])
-        self.assertIsNone(action.target)
-
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule_ask, 'test-vm2', ['test-vm2'])
-        self.assertEqual(action.target, 'test-vm2')
-
-    def test_010_handle_user_response(self):
-        rule = parser.PolicyRule('@anyvm @anyvm ask')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        action.handle_user_response(True, 'test-vm2')
-        self.assertEqual(action.action, parser.Action.allow)
-        self.assertEqual(action.target, 'test-vm2')
-
-    def test_011_handle_user_response(self):
-        rule = parser.PolicyRule('@anyvm @anyvm ask')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        with self.assertRaises(AssertionError):
-            action.handle_user_response(True, 'test-no-dvm')
-
-    def test_012_handle_user_response(self):
-        rule = parser.PolicyRule('@anyvm @anyvm ask')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        with self.assertRaises(exc.AccessDenied):
-            action.handle_user_response(False, None)
-        self.assertEqual(action.action, parser.Action.deny)
-
-    def test_013_handle_user_response_with_default_target(self):
-        rule = parser.PolicyRule(
-            '@anyvm @anyvm ask,default_target=test-vm2')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        action.handle_user_response(True, 'test-vm2')
-        self.assertEqual(action.action, parser.Action.allow)
-        self.assertEqual(action.target, 'test-vm2')
-
-    @unittest.mock.patch('utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_020_execute(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.PolicyRule('@anyvm @anyvm allow')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule, 'test-vm2')
-        action.execute('some-ident')
-        self.assertEqual(mock_qubesd_call.mock_calls,
-            [unittest.mock.call('test-vm2', 'admin.vm.Start')])
-        self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
-             '-c', 'some-ident', 'DEFAULT:QUBESRPC test.service test-vm1'])])
-
-    @unittest.mock.patch('utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_021_execute_dom0(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.PolicyRule('@anyvm dom0 allow')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'dom0', rule, 'dom0')
-        action.execute('some-ident')
-        self.assertEqual(mock_qubesd_call.mock_calls, [])
-        self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
-             '-c', 'some-ident',
-             'QUBESRPC test.service test-vm1 name dom0'])])
-
-    @unittest.mock.patch('utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_021_execute_dom0_keyword(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.PolicyRule('@anyvm dom0 allow')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'dom0', rule, '@adminvm')
-        action.execute('some-ident')
-        self.assertEqual(mock_qubesd_call.mock_calls, [])
-        self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
-             '-c', 'some-ident',
-             'QUBESRPC test.service test-vm1 keyword adminvm'])])
-
-    @unittest.mock.patch('utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_022_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.PolicyRule('@anyvm @dispvm:default-dvm allow')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            '@dispvm:default-dvm', rule, '@dispvm:default-dvm')
-        mock_qubesd_call.side_effect = (lambda target, call:
-            b'dispvm-name' if call == 'admin.vm.CreateDisposable' else
-            unittest.mock.DEFAULT)
-        action.execute('some-ident')
-        self.assertEqual(mock_qubesd_call.mock_calls,
-            [unittest.mock.call('default-dvm', 'admin.vm.CreateDisposable'),
-             unittest.mock.call('dispvm-name', 'admin.vm.Start'),
-             unittest.mock.call('dispvm-name', 'admin.vm.Kill')])
-        self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dispvm-name',
-             '-c', 'some-ident', '-W',
-             'DEFAULT:QUBESRPC test.service test-vm1'])])
-
-    @unittest.mock.patch('utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_023_execute_already_running(self, mock_subprocess,
-            mock_qubesd_call):
-        rule = parser.PolicyRule('@anyvm @anyvm allow')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule, 'test-vm2')
-        mock_qubesd_call.side_effect = \
-            exc.QubesMgmtException('QubesVMNotHaltedError')
-        action.execute('some-ident')
-        self.assertEqual(mock_qubesd_call.mock_calls,
-            [unittest.mock.call('test-vm2', 'admin.vm.Start')])
-        self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
-             '-c', 'some-ident', 'DEFAULT:QUBESRPC test.service test-vm1'])])
-
-    @unittest.mock.patch('utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_024_execute_startup_error(self, mock_subprocess,
-            mock_qubesd_call):
-        rule = parser.PolicyRule('@anyvm @anyvm allow')
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule, 'test-vm2')
-        mock_qubesd_call.side_effect = \
-            exc.QubesMgmtException('QubesVMError')
-        with self.assertRaises(exc.QubesMgmtException):
-            action.execute('some-ident')
-        self.assertEqual(mock_qubesd_call.mock_calls,
-            [unittest.mock.call('test-vm2', 'admin.vm.Start')])
-        self.assertEqual(mock_subprocess.mock_calls, [])
-
-class TC_20_Policy(qubes.tests.QubesTestCase):
-
+#class TC_20_Policy(qubes.tests.QubesTestCase):
+@unittest.skip('rewrite')
+class TC_20_Policy(unittest.TestCase):
     def setUp(self):
-        super(TC_20_Policy, self).setUp()
+        super().setUp()
         if not os.path.exists(TMP_POLICY_DIR):
             os.mkdir(TMP_POLICY_DIR)
 
     def tearDown(self):
         shutil.rmtree(TMP_POLICY_DIR)
-        super(TC_20_Policy, self).tearDown()
+        super().tearDown()
 
     def test_000_load(self):
         with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
@@ -599,7 +733,7 @@ class TC_20_Policy(qubes.tests.QubesTestCase):
             f.write('test-vm2 test-vm3 ask\n')
             f.write('   # comment  \n')
             f.write('@anyvm @anyvm ask\n')
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
+#       policy = parser.Policy(TMP_POLICY_DIR).load_
         self.assertEqual(policy.service, 'test.service')
         self.assertEqual(len(policy.policy_rules), 3)
         self.assertEqual(policy.policy_rules[0].source, 'test-vm1')
@@ -844,8 +978,239 @@ class TC_20_Policy(qubes.tests.QubesTestCase):
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(SYSTEM_INFO, 'test-vm3', '@default')
 
+#class TC_10_PolicyAction(qubes.tests.QubesTestCase):
+class TC_30_Resolution(unittest.TestCase):
+    def setUp(self):
+        self.request = parser.Request('test.Service', '+argument',
+            'test-vm1', 'test-vm2', system_info=SYSTEM_INFO)
 
-class TC_30_Misc(qubes.tests.QubesTestCase):
+    #
+    # deny
+    #
+
+    def test_190_deny_evaulate(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm deny',
+            filepath='filename', lineno=12)
+        with self.assertRaises(exc.AccessDenied):
+            rule.action.evaluate(self.request)
+
+
+    #
+    # allow
+    #
+
+    def test_200_allow_init(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        resolution = parser.AllowResolution(rule, self.request,
+            user=None, actual_target='test-vm2')
+        self.assertIs(resolution.rule, rule)
+        self.assertIs(resolution.request, self.request)
+        self.assertIs(resolution.user, None)
+        self.assertIs(resolution.actual_target, 'test-vm2')
+
+    def test_290_allow_evaluate(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        resolution = rule.action.evaluate(self.request)
+
+    #
+    # ask
+    #
+
+    def test_300_ask_init(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        resolution = parser.AskResolution(rule, self.request,
+            user=None, targets_for_ask=['test-vm2'], default_target='test-vm2')
+
+        with self.assertRaises(AttributeError):
+            resolution.actual_target
+
+        self.assertIs(resolution.rule, rule)
+        self.assertIs(resolution.request, self.request)
+        self.assertIs(resolution.user, None)
+        self.assertCountEqual(resolution.targets_for_ask, ['test-vm2'])
+
+    def test_301_ask_init(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        resolution = parser.AskResolution(rule, self.request,
+            user=None, targets_for_ask=['test-vm2', 'test-vm3'],
+            default_target='test-vm2')
+
+        self.assertIs(resolution.rule, rule)
+        self.assertIs(resolution.request, self.request)
+        self.assertEqual(resolution.request.target, 'test-vm2')
+        self.assertCountEqual(resolution.targets_for_ask,
+            ['test-vm2', 'test-vm3'])
+        self.assertIs(resolution.default_target, 'test-vm2')
+
+    def test_303_ask_default_target_None(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        resolution = parser.AskResolution(rule, self.request,
+            user=None, targets_for_ask=['test-vm2', 'test-vm3'],
+            default_target=None)
+
+        self.assertIsNone(resolution.default_target)
+
+    def test_390_ask_evaluate(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        resolution = rule.action.evaluate(self.request)
+        raise NotImplementedError()
+
+    #
+    # unsorted
+    #
+
+    @unittest.skip('rewrite')
+    def test_010_handle_user_response(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
+        action.handle_user_response(True, 'test-vm2')
+        self.assertEqual(action.action, parser.Action.allow)
+        self.assertEqual(action.target, 'test-vm2')
+
+    @unittest.skip('rewrite')
+    def test_011_handle_user_response(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
+        with self.assertRaises(AssertionError):
+            action.handle_user_response(True, 'test-no-dvm')
+
+    @unittest.skip('rewrite')
+    def test_012_handle_user_response(self):
+        rule = parser.Rule.from_line('* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
+        with self.assertRaises(exc.AccessDenied):
+            action.handle_user_response(False, None)
+        self.assertEqual(action.action, parser.Action.deny)
+
+    @unittest.skip('rewrite')
+    def test_013_handle_user_response_with_default_target(self):
+        rule = parser.Rule.from_line(
+            '* * @anyvm @anyvm ask default_target=test-vm2',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
+        action.handle_user_response(True, 'test-vm2')
+        self.assertEqual(action.action, parser.Action.allow)
+        self.assertEqual(action.target, 'test-vm2')
+
+    @unittest.skip('rewrite')
+    @unittest.mock.patch('qrexec.utils.qubesd_call')
+    @unittest.mock.patch('subprocess.call')
+    def test_020_execute(self, mock_subprocess, mock_qubesd_call):
+        rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            'test-vm2', rule, 'test-vm2')
+        action.execute('some-ident')
+        self.assertEqual(mock_qubesd_call.mock_calls,
+            [unittest.mock.call('test-vm2', 'admin.vm.Start')])
+        self.assertEqual(mock_subprocess.mock_calls,
+            [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
+             '-c', 'some-ident', 'DEFAULT:QUBESRPC test.service test-vm1'])])
+
+    @unittest.skip('rewrite')
+    @unittest.mock.patch('qrexec.utils.qubesd_call')
+    @unittest.mock.patch('subprocess.call')
+    def test_021_execute_dom0(self, mock_subprocess, mock_qubesd_call):
+        rule = parser.Rule.from_line('* * @anyvm dom0 allow',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            'dom0', rule, 'dom0')
+        action.execute('some-ident')
+        self.assertEqual(mock_qubesd_call.mock_calls, [])
+        self.assertEqual(mock_subprocess.mock_calls,
+            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
+             '-c', 'some-ident',
+             'QUBESRPC test.service test-vm1 name dom0'])])
+
+    @unittest.skip('rewrite')
+    @unittest.mock.patch('qrexec.utils.qubesd_call')
+    @unittest.mock.patch('subprocess.call')
+    def test_021_execute_dom0_keyword(self, mock_subprocess, mock_qubesd_call):
+        rule = parser.Rule.from_line('* * @anyvm dom0 allow',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            'dom0', rule, '@adminvm')
+        action.execute('some-ident')
+        self.assertEqual(mock_qubesd_call.mock_calls, [])
+        self.assertEqual(mock_subprocess.mock_calls,
+            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
+             '-c', 'some-ident',
+             'QUBESRPC test.service test-vm1 keyword adminvm'])])
+
+    @unittest.skip('rewrite')
+    @unittest.mock.patch('qrexec.utils.qubesd_call')
+    @unittest.mock.patch('subprocess.call')
+    def test_022_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
+        rule = parser.Rule.from_line('* * @anyvm @dispvm:default-dvm allow',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            '@dispvm:default-dvm', rule, '@dispvm:default-dvm')
+        mock_qubesd_call.side_effect = (lambda target, call:
+            b'dispvm-name' if call == 'admin.vm.CreateDisposable' else
+            unittest.mock.DEFAULT)
+        action.execute('some-ident')
+        self.assertEqual(mock_qubesd_call.mock_calls,
+            [unittest.mock.call('default-dvm', 'admin.vm.CreateDisposable'),
+             unittest.mock.call('dispvm-name', 'admin.vm.Start'),
+             unittest.mock.call('dispvm-name', 'admin.vm.Kill')])
+        self.assertEqual(mock_subprocess.mock_calls,
+            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dispvm-name',
+             '-c', 'some-ident', '-W',
+             'DEFAULT:QUBESRPC test.service test-vm1'])])
+
+    @unittest.skip('rewrite')
+    @unittest.mock.patch('qrexec.utils.qubesd_call')
+    @unittest.mock.patch('subprocess.call')
+    def test_023_execute_already_running(self, mock_subprocess,
+            mock_qubesd_call):
+        rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            'test-vm2', rule, 'test-vm2')
+        mock_qubesd_call.side_effect = \
+            exc.QubesMgmtException('QubesVMNotHaltedError')
+        action.execute('some-ident')
+        self.assertEqual(mock_qubesd_call.mock_calls,
+            [unittest.mock.call('test-vm2', 'admin.vm.Start')])
+        self.assertEqual(mock_subprocess.mock_calls,
+            [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
+             '-c', 'some-ident', 'DEFAULT:QUBESRPC test.service test-vm1'])])
+
+    @unittest.skip('rewrite')
+    @unittest.mock.patch('qrexec.utils.qubesd_call')
+    @unittest.mock.patch('subprocess.call')
+    def test_024_execute_startup_error(self, mock_subprocess,
+            mock_qubesd_call):
+        rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        action = parser.PolicyAction('test.service', 'test-vm1',
+            'test-vm2', rule, 'test-vm2')
+        mock_qubesd_call.side_effect = \
+            exc.QubesMgmtException('QubesVMError')
+        with self.assertRaises(exc.QubesMgmtException):
+            action.execute('some-ident')
+        self.assertEqual(mock_qubesd_call.mock_calls,
+            [unittest.mock.call('test-vm2', 'admin.vm.Start')])
+        self.assertEqual(mock_subprocess.mock_calls, [])
+
+
+
+
+#class TC_30_Misc(qubes.tests.QubesTestCase):
+class TC_40_Misc(unittest.TestCase):
     @unittest.mock.patch('socket.socket')
     def test_000_qubesd_call(self, mock_socket):
         mock_config = {
