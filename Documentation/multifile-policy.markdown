@@ -17,8 +17,8 @@ qrexec.Service  *           @anyvm      @adminvm    {allow|deny|ask} [PARAM=VALU
 
 `ARGUMENT` may be empty. A single `+` means just empty argument.
 
-Comment lines are as before, lines starting with `\s*#`, empty, or containing
-only whitespace. Inline comments are not allowed.
+Comments are lines starting with `#` (possibly preceded by whitespace) and empty
+lines (or containing only whitespace). Inline comments are not allowed.
 
 Parameters should be separated by whitespace, separation by comma is no longer
 supported. Rationale: simplicity.
@@ -31,7 +31,7 @@ Supported params for actions other than `deny` (*NO CHANGE*):
 Service may be specified as `*` (a single asterisk) which means "any service".
 For that case, argument also has to be `*`.
 
-## Qube specification
+### Qube specification
 
 | token                 | SRCQUBE   | DSTQUBE   | target=   | orig. target |
 | --------------------- | --------- | --------- | --------- | --------- |
@@ -74,6 +74,12 @@ At least `pl_PL.UTF-8`, `de_DE.UTF-8` and `en_GB.UTF-8` have those problems
 (the letters are ordered "aAbBcC...", cf. C locale "ABC...abc..."). There are
 other locales with more severe problems, like `eesti` which has the letter `Z`
 sorted differently, but those are not worked around here.
+
+As to `.` as first character, there are two reasons. First reason is, `ls`
+without `-a` or `-A` won't list them. Second reason is, several editors (notably
+Vim) keep swap files together with edited files. Typically they won't parse
+correctly, so they would cause errors. Effectively this would break any qrexec
+calls while the policy file is opened for editing.
 
 ## New include syntax
 ```
