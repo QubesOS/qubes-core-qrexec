@@ -40,11 +40,38 @@ from ..exc import (
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + '_.-')
 
 def verify_filename(filepath):
+    '''Check if the file should be considered by policy.
+
+    The file should contain only allowed characters (latin lowercase, digits,
+    underscore, full stop and dash). It should not start with the dot.
+
+    Only the file name is considered, not the directories on path that leads to
+    it.
+
+    Args:
+        filepath (pathlib.Path): the file path
+    Returns:
+        bool: If the file is approved.
+    '''
     filepath = pathlib.Path(filepath)
     return (set(filepath.name).issubset(FILENAME_ALLOWED_CHARSET)
         and not filepath.name.startswith('.'))
 
 def validate_service_and_argument(service, argument, *, filepath, lineno):
+    '''Check service and argument
+
+    Args:
+        service (str): the service as appeared in policy file
+        argument (str): the argument as appeared in policy file
+        filepath (pathlib.Path): the file path
+        lineno (int): the line in the file
+
+    Returns:
+        (str or None, str or None): service and argument
+
+    Raises:
+        qrexec.exc.PolicySyntaxError: for a number of forbidden cases
+    '''
     # TODO maybe validate charset?
 
     if service == '*':
@@ -84,14 +111,17 @@ class VMToken(str, metaclass=VMTokenMeta):
     has its own dedicated class.
 
     There are 4 such contexts:
-        - :py:class:`Source` for whatever was specified in policy in 3rd column
-        - :py:class:`Target` 4th column in policy
-        - :py:class:`Redirect` ``target=`` parameter to :py:class:`Allow` and
+        - :py:class:`Source`: for whatever was specified in policy in 3rd column
+        - :py:class:`Target`: 4th column in policy
+        - :py:class:`Redirect`: ``target=`` parameter to :py:class:`Allow` and
           :py:class:`Ask`
-        - :py:class:`IntendedTarget` for what **user** invoked the call for
+        - :py:class:`IntendedTarget`: for what **user** invoked the call for
 
     Not all ``@tokens`` can be used everywhere. Where they can be used is
     specified by inheritance.
+
+    All tokens are also instances of :py:class:`str` and can be compared to
+    other strings.
     '''
     def __new__(cls, token, *, filepath=None, lineno=None):
         # first, adjust some aliases
@@ -148,6 +178,7 @@ class VMToken(str, metaclass=VMTokenMeta):
 
     # This replaces is_match() and is_match_single().
     def match(self, other, *, system_info, source=None):
+        '''Check if this token matches opposite token'''
         return self == other
 
     def is_special_value(self):
@@ -157,6 +188,10 @@ class VMToken(str, metaclass=VMTokenMeta):
 
     @property
     def type(self):
+        '''Type of the token
+
+        ``'keyword'`` for special values, ``'name'`` for qube name
+        '''
         return 'keyword' if self.is_special_value() else 'name'
 
 class Source(VMToken):
@@ -184,9 +219,16 @@ class IntendedTarget(VMToken):
 
         This function check if given value is not only syntactically correct,
         but also if names valid service call target (existing domain, or valid
-        @dispvm like keyword)
+        ``'@dispvm'`` like keyword)
 
-        :param system_info: information about the system
+        Args:
+            system_info: information about the system
+
+        Returns:
+            VMToken: for successful verification
+
+        Raises:
+            qrexec.exc.AccessDenied: for failed verification
         '''
         # for subclass it has to be overloaded
         # pylint: disable=unidiomatic-typecheck
@@ -203,8 +245,6 @@ class IntendedTarget(VMToken):
 class AdminVM(Target, Redirect, IntendedTarget):
     # no Source: for calls originating from AdminVM policy is not evaluated
     EXACT = '@adminvm'
-#   def match(self, other, *, system_info, source=None):
-#       return self == other
     def expand(self, *, system_info):
         yield self
     def verify(self, *, system_info):
@@ -224,8 +264,6 @@ class AnyVM(Source, Target):
 
 class DefaultVM(Target, IntendedTarget):
     EXACT = '@default'
-#   def match(self, other, *, system_info, source=None):
-#       return self == other
     def expand(self, *, system_info):
         yield from ()
     def verify(self, *, system_info):
@@ -259,7 +297,9 @@ class DispVM(Target, Redirect, IntendedTarget):
         yield self
     def verify(self, *, system_info):
         return self
+
     def get_dispvm_template(self, source, *, system_info):
+        '''Given source, get appropriate template for DispVM. Maybe None.'''
         if (source not in system_info['domains']
                 or system_info['domains'][source]['default_dispvm'] is None):
             return None
@@ -329,17 +369,25 @@ class AbstractResolution(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def execute(self, caller_ident, *, system_info):
+        '''
+        Execute the action. For allow, this runs the qrexec. For ask, it asks
+        user and then (depending on verdict) runs the call.
+
+        Args:
+            caller_ident (str): Service caller ident
+                (``process_ident,source_name, source_id``)
+        '''
         raise NotImplementedError()
 
 class AllowResolution(AbstractResolution):
     def __init__(self, *args, actual_target, **kwds):
         super().__init__(*args, **kwds)
-        #: target domain the service should be connected to, None if
-        # not chosen yet
+        #: target domain the service should be connected to
         self.actual_target = actual_target
 
     @classmethod
     def from_ask_resolution(cls, ask_resolution, *, actual_target):
+        '''This happens after user manually approved the call'''
         return cls(
             ask_resolution.rule,
             ask_resolution.request,
@@ -347,11 +395,7 @@ class AllowResolution(AbstractResolution):
             actual_target=actual_target)
 
     def execute(self, caller_ident, *, system_info):
-        '''Execute allowed service call
-
-        :param caller_ident: Service caller ident
-            (`process_ident,source_name, source_id`)
-        '''
+        '''Execute the allowed action'''
         assert self.actual_target is not None
 
         target = self.actual_target
@@ -383,8 +427,10 @@ class AllowResolution(AbstractResolution):
     def spawn_dispvm(self):
         '''
         Create and start Disposable VM based on AppVM specified in
-        :py:attr:`target`
-        :return: name of new Disposable VM
+        :py:attr:`target`.
+
+        Returns:
+            str: name of new Disposable VM
         '''
         assert isinstance(self.actual_target, DispVMTemplate)
         base_appvm = self.actual_target.value
@@ -397,7 +443,8 @@ class AllowResolution(AbstractResolution):
         '''
         Start domain if not running already
 
-        :return: None
+        Returns:
+            None
         '''
         if self.actual_target == '@adminvm':
             return
@@ -414,8 +461,11 @@ class AllowResolution(AbstractResolution):
         '''
         Kill and remove Disposable VM
 
-        :param dispvm: name of Disposable VM
-        :return: None
+        Args:
+            dispvm (str): name of Disposable VM
+
+        Returns:
+            None
         '''
         utils.qubesd_call(dispvm, 'admin.vm.Kill')
 
@@ -430,11 +480,19 @@ class AskResolution(AbstractResolution):
 
     def handle_user_response(self, response, target):
         '''
-        Handle user response for the 'ask' action
+        Handle user response for the 'ask' action. Children class'
+        :py:meth:`execute` is supposed to call this method to report the
+        user's verdict.
 
-        :param response: whether the call was allowed or denied (bool)
-        :param target: target chosen by the user (if reponse==True)
-        :return: None
+        Args:
+            response (bool): whether the call was allowed or denied
+            target (str): target chosen by the user (if reponse==True)
+
+        Returns:
+            None
+
+        Raises:
+            qrexec.exc.AccessDenied: for negative answer
         '''
         # pylint: disable=redefined-variable-type
         if not response:
@@ -446,6 +504,14 @@ class AskResolution(AbstractResolution):
             actual_target=target)
 
     def execute(self, caller_ident, *, system_info):
+        '''Ask the user for permission.
+
+        This method should be overloaded in children classes. This
+        implementation always denies the request.
+
+        Raises:
+            qrexec.exc.AccessDenied: always
+        '''
         raise AccessDenied('denied for non-interactive ask')
 
 #
@@ -453,6 +519,20 @@ class AskResolution(AbstractResolution):
 #
 
 class Request:
+    '''Qrexec request
+
+    A request object keeps what is searched for in the policy. It keeps the
+    principal quadruple: service, argument, source and target that are
+    parameters of the qrexec call. There is also `system_info`, which represents
+    current state of the system, incl. the list of all domains in the system and
+    their respective properties that are relevant to policy.
+
+    Args:
+        service (str or None): Service name, or :py:obj:`None` if ``*``.
+        argument (str or None): The argument. Must either be :py:obj:`None` or
+            start with ``'+'``.
+    '''
+
     def __init__(self, service, argument, source, target, *, system_info,
             allow_resolution_type=AllowResolution,
             ask_resolution_type=AskResolution):
@@ -461,13 +541,20 @@ class Request:
             target = '@default'
         assert argument and argument[0] == '+'
 
+        #: the service that is being requested
         self.service = service
+        #: argument for the service
         self.argument = argument
+        #: source qube name
         self.source = source
+        #: target (qube or token) as requested by source qube
         self.target = IntendedTarget(target).verify(system_info=system_info)
 
+        #: system info
         self.system_info = system_info
+        #: factory for allow resolution
         self.allow_resolution_type = allow_resolution_type
+        #: factory for ask resolution
         self.ask_resolution_type = ask_resolution_type
 
 #
@@ -476,10 +563,25 @@ class Request:
 
 class ActionType(metaclass=abc.ABCMeta):
     def __init__(self, rule):
+        #: the rule that holds this action
         self.rule = rule
 
     @abc.abstractmethod
     def evaluate(self, request):
+        '''Evaluate the request.
+
+        Depending on action and possibly user's decision either return
+        a resolution or raise exception.
+
+        Args:
+            request (Request): the request that was matched to the rule
+
+        Returns:
+            AbstractResolution: for successful requests
+
+        Raises:
+            qrexec.exc.AccessDenied: for denied requests
+        '''
         raise NotImplementedError()
 
 class Deny(ActionType):
@@ -487,6 +589,10 @@ class Deny(ActionType):
         return '<{}>'.format(type(self).__name__)
 
     def evaluate(self, request):
+        '''
+        Raises:
+            qrexec.exc.AccessDenied:
+        '''
         raise AccessDenied('denied by policy {}:{}'.format(
             self.rule.filepath, self.rule.lineno))
 
@@ -506,6 +612,13 @@ class Allow(ActionType):
         return self.target or intended_target
 
     def evaluate(self, request):
+        '''
+        Returns:
+            AllowResolution: for successful requests
+
+        Raises:
+            qrexec.exc.AccessDenied: for invalid requests
+        '''
         target = self.actual_target(request.target).verify(
             system_info=request.system_info)
         if target == '@default':
@@ -540,6 +653,13 @@ class Ask(ActionType):
             type(self).__name__, self.target, self.default_target, self.user)
 
     def evaluate(self, request):
+        '''
+        Returns:
+            AskResolution
+
+        Raises:
+            qrexec.exc.AccessDenied: for invalid requests
+        '''
         assert self.rule.is_match(request)
 
         if self.rule.action.target is not None:
@@ -566,17 +686,17 @@ class Action(enum.Enum):
     ask = Ask
 
 class Rule(object):
-    '''A single line of policy file
-
-    Use
-    '''
+    '''A single line of policy file'''
     # pylint: disable=too-many-instance-attributes
 
     def __init__(self, service, argument, source, target, action, params,
             *, policy, filepath, lineno):
+        #: the parser that this rule belongs to
         self.policy = policy
-        self.lineno = lineno
+        #: the file path
         self.filepath = filepath
+        #: the line number
+        self.lineno = lineno
 
         service, argument = validate_service_and_argument(
             service, argument, filepath=filepath, lineno=lineno)
@@ -635,13 +755,15 @@ class Rule(object):
         Load a single line of qrexec policy and check its syntax.
         Do not verify existence of named objects.
 
-        :raise PolicySyntaxError: when syntax error is found
+        Args:
+            line: a single line of actual qrexec policy (not a comment, empty
+                line or ``@include``)
+            pathlib.Path filepath: Path of the file from which this line is
+                loaded
+            lineno: line number from which this line is loaded
 
-        :param line: a single line of actual qrexec policy (not a comment,
-        empty line or @include)
-        :param pathlib.Path filepath: Path of the file from which this line is
-            loaded
-        :param lineno: line number from which this line is loaded
+        Raises:
+            PolicySyntaxError: when syntax error is found
         '''
 
         try:
@@ -708,6 +830,8 @@ class Rule(object):
 
 class AbstractPolicyParser(metaclass=abc.ABCMeta):
     '''A minimal, pluggable, validating policy parser'''
+
+    #: default rule type
     rule_type = Rule
 
     @staticmethod
