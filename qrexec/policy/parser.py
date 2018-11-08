@@ -22,6 +22,7 @@
 
 import abc
 import collections
+import collections.abc
 import enum
 import inspect
 import io
@@ -197,7 +198,7 @@ class VMToken(str, metaclass=VMTokenMeta):
 class Source(VMToken):
     pass
 
-class Target(VMToken):
+class _BaseTarget(VMToken):
     def expand(self, *, system_info):
         '''An iterator over all valid domain names that this token would match
 
@@ -206,7 +207,10 @@ class Target(VMToken):
         if self in system_info['domains']:
             yield IntendedTarget(self)
 
-class Redirect(VMToken):
+class Target(_BaseTarget):
+    pass
+
+class Redirect(_BaseTarget):
     def __new__(cls, value, *, filepath=None, lineno=None):
         if value is None:
             return value
@@ -380,25 +384,25 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
 class AllowResolution(AbstractResolution):
-    def __init__(self, *args, actual_target, **kwds):
+    def __init__(self, *args, target, **kwds):
         super().__init__(*args, **kwds)
         #: target domain the service should be connected to
-        self.actual_target = actual_target
+        self.target = target
 
     @classmethod
-    def from_ask_resolution(cls, ask_resolution, *, actual_target):
+    def from_ask_resolution(cls, ask_resolution, *, target):
         '''This happens after user manually approved the call'''
         return cls(
             ask_resolution.rule,
             ask_resolution.request,
             user=ask_resolution.user,
-            actual_target=actual_target)
+            target=target)
 
     def execute(self, caller_ident, *, system_info):
         '''Execute the allowed action'''
-        assert self.actual_target is not None
+        assert self.target is not None
 
-        target = self.actual_target
+        target = self.target
 
         if target == '@adminvm':
             cmd = ('QUBESRPC {request.service} {request.source} '
@@ -432,8 +436,8 @@ class AllowResolution(AbstractResolution):
         Returns:
             str: name of new Disposable VM
         '''
-        assert isinstance(self.actual_target, DispVMTemplate)
-        base_appvm = self.actual_target.value
+        assert isinstance(self.target, DispVMTemplate)
+        base_appvm = self.target.value
         dispvm_name = utils.qubesd_call(base_appvm, 'admin.vm.CreateDisposable')
         dispvm_name = dispvm_name.decode('ascii')
         utils.qubesd_call(dispvm_name, 'admin.vm.Start')
@@ -446,10 +450,10 @@ class AllowResolution(AbstractResolution):
         Returns:
             None
         '''
-        if self.actual_target == '@adminvm':
+        if self.target == '@adminvm':
             return
         try:
-            utils.qubesd_call(self.actual_target, 'admin.vm.Start')
+            utils.qubesd_call(self.target, 'admin.vm.Start')
         except QubesMgmtException as err:
             if err.exc_type == 'QubesVMNotHaltedError':
                 pass
@@ -501,7 +505,7 @@ class AskResolution(AbstractResolution):
 
         assert target in self.targets_for_ask
         return self.request.allow_resolution_type.from_ask_resolution(self,
-            actual_target=target)
+            target=target)
 
     def execute(self, caller_ident, *, system_info):
         '''Ask the user for permission.
@@ -608,8 +612,16 @@ class Allow(ActionType):
             type(self).__name__, self.target, self.user)
 
     def actual_target(self, intended_target):
-        '''If action has redirect, it is it. Otherwise, the rule's own target'''
-        return self.target or intended_target
+        '''If action has redirect, it is it. Otherwise, the rule's own target
+
+        Args:
+            intended_target (IntendedTarget): :py:attr:`Request.target`
+
+        Returns:
+            IntendedTarget: either :py:attr:`target`, if not None, or
+                *intended_target_
+        '''
+        return IntendedTarget(self.target or intended_target)
 
     def evaluate(self, request):
         '''
@@ -627,7 +639,7 @@ class Allow(ActionType):
                 'specified by caller or policy'.format(
                     self.rule.filepath, self.rule.lineno))
         if target == '@dispvm':
-            target = self.rule.actual_target.get_dispvm_template(
+            target = target.get_dispvm_template(
                 self.rule.source, system_info=request.system_info)
             if target is None:
                 raise AccessDenied(
@@ -636,7 +648,7 @@ class Allow(ActionType):
                         self.rule.filepath, self.rule.lineno))
 
         return request.allow_resolution_type(self.rule, request,
-            user=self.user, actual_target=target)
+            user=self.user, target=target)
 
 class Ask(ActionType):
     def __init__(self, *args, target=None, default_target=None, user=None,
@@ -840,6 +852,8 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
             if isinstance(file, (str, pathlib.Path)):
                 filepath = pathlib.Path(file)
                 file = filepath.open()
+            elif isinstance(file, io.IOBase):
+                filepath = '<buffer>'
             else:
                 try:
                     filepath = pathlib.Path(file.name)
@@ -897,8 +911,11 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
             if not line or line[0] == '#':
                 continue
 
+            # compatibility substitutions, some may be unspecified and may be
+            # removed in a future version
             line = line.replace('$include:', '!include ')
             line = line.replace('$', '@')
+            line = line.replace(',', ' ')
 
             if line.startswith('!'):
                 directive, *params = line.split()
@@ -916,6 +933,27 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
                 filepath=filepath, lineno=lineno)
 
         return self
+
+    def load_policy_dir(self, dirpath):
+        '''Load all files in the directory (``!include-dir``)
+
+        Args:
+            dirpath (pathlib.Path): the directory to load
+
+        Raises:
+            OSError: for problems in opening files or directories
+        '''
+        # check for invalid filenames first, then iterate
+        paths = [path for path in dirpath.iterdir()
+            if path.is_file() and not path.name.startswith('.')]
+        for path in paths:
+            if not verify_filename(path):
+                raise exc.AccessDenied('invalid filename: {}'.format(path))
+
+        paths.sort()
+
+        for path in paths:
+            self.load_policy_file(path)
 
     @abc.abstractmethod
     def handle_include(self, included_path, *, filepath, lineno):
@@ -953,40 +991,17 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
         '''
         raise NotImplementedError()
 
-class AbstractFilePolicy(AbstractPolicyParser):
-    # pylint: disable=abstract-method
+class AbstractPolicy(AbstractPolicyParser):
+    '''This class is a parser that accumulates the rules to form policy.'''
+
     def __init__(self, *args, **kwds):
         super().__init__(*args, **kwds)
         #: list of Rule objects
-        self.policy_rules = []
-
-    def handle_include(self, included_path, *, filepath, lineno):
-        # pylint: disable=unused-argument
-        assert filepath is not None
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_file():
-            raise exc.PolicySyntaxError(filepath, lineno,
-                'not a file: {}'.format(included_path))
-        self.load_policy_file(included_path)
-
-    def handle_include_service(self, service, argument, included_path, *,
-            filepath, lineno):
-        service, argument = validate_service_and_argument(
-            service, argument, filepath=filepath, lineno=lineno)
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        self.load_policy_file_service(service, argument, included_path)
+        self.rules = []
 
     def handle_rule(self, rule, *, filepath, lineno):
         # pylint: disable=unused-argument
-        self.policy_rules.append(rule)
-
-    def find_matching_rule(self, request):
-        '''Find the first rule matching given arguments'''
-
-        for rule in self.policy_rules:
-            if rule.is_match(request):
-                return rule
-        raise AccessDenied('no matching rule found')
+        self.rules.append(rule)
 
     def evaluate(self, request):
         '''Evaluate policy
@@ -1000,6 +1015,14 @@ class AbstractFilePolicy(AbstractPolicyParser):
         rule = self.find_matching_rule(request)
         return rule.action.evaluate(request)
 
+    def find_matching_rule(self, request):
+        '''Find the first rule matching given request'''
+
+        for rule in self.rules:
+            if rule.is_match(request):
+                return rule
+        raise AccessDenied('no matching rule found')
+
     def collect_targets_for_ask(self, request):
         '''Collect targets the user can choose from in 'ask' action
 
@@ -1010,12 +1033,16 @@ class AbstractFilePolicy(AbstractPolicyParser):
 
         # iterate over rules in reversed order to easier handle 'deny'
         # actions - simply remove matching domains from allowed set
-        for rule in reversed(self.policy_rules):
+        for rule in reversed(self.rules):
             if rule.is_match_but_target(request):
-                expansion = set((rule.action.target or rule.target).expand(
-                    system_info=request.system_info))
+                # getattr() is for Deny, which doesn't have this attribute
+                rule_target = (
+                    getattr(rule.action, 'target', None) or rule.target)
+                expansion = set(
+                    rule_target.expand(system_info=request.system_info))
+
                 if isinstance(rule.action, Action.deny.value):
-                    targets -= expansion
+                    targets.difference_update(expansion)
                 else:
                     targets.update(expansion)
 
@@ -1034,7 +1061,34 @@ class AbstractFilePolicy(AbstractPolicyParser):
 
         return targets
 
-class FilePolicy(AbstractFilePolicy):
+
+class AbstractFileParser(AbstractPolicyParser):
+    def handle_include(self, included_path, *, filepath, lineno):
+        # pylint: disable=unused-argument
+        assert filepath is not None
+        included_path = (filepath.resolve().parent / included_path).resolve()
+        if not included_path.is_file():
+            raise exc.PolicySyntaxError(filepath, lineno,
+                'not a file: {}'.format(included_path))
+        self.load_policy_file(included_path)
+
+    def handle_include_service(self, service, argument, included_path, *,
+            filepath, lineno):
+        service, argument = validate_service_and_argument(
+            service, argument, filepath=filepath, lineno=lineno)
+        included_path = (filepath.resolve().parent / included_path).resolve()
+        self.load_policy_file_service(service, argument, included_path)
+
+    def handle_include_dir(self, included_path, *, filepath, lineno):
+        # pylint: disable=unused-argument
+        assert filepath is not None
+        included_path = (filepath.resolve().parent / included_path).resolve()
+        if not included_path.is_dir():
+            raise exc.PolicySyntaxError(filepath, lineno,
+                'not a directory: {}'.format(included_path))
+        self.load_policy_dir(included_path)
+
+class FilePolicy(AbstractFileParser, AbstractPolicy):
     '''Full policy for a given service
 
     Usage:
@@ -1057,34 +1111,50 @@ class FilePolicy(AbstractFilePolicy):
             raise AccessDenied(
                 'failed to load {} file: {!s}'.format(err.filename, err))
 
-    def handle_include_dir(self, included_path, *, filepath, lineno):
-        # pylint: disable=unused-argument
-        assert filepath is not None
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_dir():
-            raise exc.PolicySyntaxError(filepath, lineno,
-                'not a directory: {}'.format(included_path))
-        self.load_policy_dir(included_path)
 
-    def load_policy_dir(self, dirpath):
-        # check for invalid filenames first, then iterate
-        paths = [path for path in dirpath.iterdir()
-            if path.is_file() and not path.name.startswith('.')]
-        for path in paths:
-            if not verify_filename(path):
-                raise exc.AccessDenied('invalid filename: {}'.format(path))
+class TestPolicy(AbstractPolicy):
+    '''An in-memory policy used for tests
 
-        paths.sort()
-
-        for path in paths:
-            self.load_policy_file(path)
-
-class TestPolicy(AbstractPolicyParser):
+    Args:
+        policy (dict or str): policy dictionary. The keys are filenames to be
+            included. It should contain ``'__main__'`` key which is loaded. If
+            the argument is :py:class:`str`, it behaves as it was dict's
+            ``'__main__'``.
+    '''
     def __init__(self, *args, policy, **kwds):
         super().__init__(*args, **kwds)
+
+        # This gets line and file of our caller, not the actual definition of
+        # the policy dict. Our test suite uses it this way, so we can get away
+        # with this.
         caller = inspect.stack()[1]
-        self.load_policy_file(io.StringIO(policy),
-            filepath='{}+{}'.format(caller.filename, caller.lineno))
+        self.filepath_suffix = '({}+{})'.format(caller.filename, caller.lineno)
+
+        if not isinstance(policy, collections.abc.Mapping):
+            policy = {'__main__': policy}
+        self.policy = policy
+
+        self.load_policy_file('__main__')
+
+    def resolve_file_and_filepath(self, file, filepath):
+        if isinstance(file, pathlib.PurePath):
+            file = file.name
+        if isinstance(file, str):
+            if filepath is None:
+                filepath = file + self.filepath_suffix
+            file = io.StringIO(self.policy[file])
+        else:
+            raise ValueError('file should be either str or Path')
+        return super().resolve_file_and_filepath(file, filepath)
+
+    def handle_include(self, included_path, *, filepath, lineno):
+        # pylint: disable=unused-argument
+        self.load_policy_file(included_path)
+
+    def handle_include_service(self, service, argument, included_path, *,
+            filepath, lineno):
+        # pylint: disable=unused-argument
+        self.load_policy_file_service(service, argument, included_path)
 
     def handle_include_dir(self, included_path, *, filepath, lineno):
         raise NotImplementedError(
@@ -1140,7 +1210,7 @@ class CheckIfNotIncludedParser(AbstractPolicyParser):
     def handle_rule(self, rule, *, filepath, lineno):
         pass
 
-class ToposortParser(AbstractFilePolicy):
+class ToposortParser(AbstractFileParser):
     '''A helper for topological sorting the policy files'''
 
     def __init__(self, *args, **kwds):

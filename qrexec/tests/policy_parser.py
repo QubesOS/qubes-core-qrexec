@@ -18,19 +18,18 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
+
+import functools
 import os
+import shutil
 import socket
 import unittest.mock
-
-import shutil
 
 #import qubes.tests
 
 from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
 from ..policy import parser
-
-TMP_POLICY_DIR = '/tmp/policy'
 
 SYSTEM_INFO = {
     'domains': {
@@ -90,6 +89,10 @@ SYSTEM_INFO = {
         },
     }
 }
+
+# a generic request helper
+_req = functools.partial(parser.Request, 'test.Service', '+argument',
+    system_info=SYSTEM_INFO)
 
 
 class TC_00_VMToken(unittest.TestCase):
@@ -714,325 +717,200 @@ class TC_11_Rule_service(unittest.TestCase):
                         filepath='filename', lineno=12)
 
 #class TC_20_Policy(qubes.tests.QubesTestCase):
-@unittest.skip('rewrite')
 class TC_20_Policy(unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        if not os.path.exists(TMP_POLICY_DIR):
-            os.mkdir(TMP_POLICY_DIR)
-
-    def tearDown(self):
-        shutil.rmtree(TMP_POLICY_DIR)
-        super().tearDown()
-
     def test_000_load(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-            f.write('\n')
-            f.write('# comment\n')
-            f.write('test-vm2 test-vm3 ask\n')
-            f.write('   # comment  \n')
-            f.write('@anyvm @anyvm ask\n')
-#       policy = parser.Policy(TMP_POLICY_DIR).load_
-        self.assertEqual(policy.service, 'test.service')
-        self.assertEqual(len(policy.policy_rules), 3)
-        self.assertEqual(policy.policy_rules[0].source, 'test-vm1')
-        self.assertEqual(policy.policy_rules[0].target, 'test-vm2')
-        self.assertEqual(policy.policy_rules[0].action,
-            parser.Action.allow)
+        policy = parser.TestPolicy(policy='''\
+* * test-vm1 test-vm2 allow
 
-    def test_001_not_existent(self):
-        with self.assertRaises(exc.AccessDenied):
-            parser.Policy('no-such.service', TMP_POLICY_DIR)
+# comment
+* * test-vm2 test-vm3 ask
+    # comment with trailing whitespace:    
+* * @anyvm @anyvm ask
+''')
+
+        self.assertEqual(len(policy.rules), 3)
+        self.assertEqual(policy.rules[0].source, 'test-vm1')
+        self.assertEqual(policy.rules[0].target, 'test-vm2')
+        self.assertIsInstance(policy.rules[0].action, parser.Action.allow.value)
 
     def test_002_include(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-            f.write('@include:test.service2\n')
-            f.write('@anyvm @anyvm deny\n')
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service2'), 'w') as f:
-            f.write('test-vm3 @default allow,target=test-vm2\n')
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        self.assertEqual(policy.service, 'test.service')
-        self.assertEqual(len(policy.policy_rules), 3)
-        self.assertEqual(policy.policy_rules[0].source, 'test-vm1')
-        self.assertEqual(policy.policy_rules[0].target, 'test-vm2')
-        self.assertEqual(policy.policy_rules[0].action,
-            parser.Action.allow)
-        self.assertEqual(policy.policy_rules[0].filename,
-            TMP_POLICY_DIR + '/test.service')
-        self.assertEqual(policy.policy_rules[0].lineno, 1)
-        self.assertEqual(policy.policy_rules[1].source, 'test-vm3')
-        self.assertEqual(policy.policy_rules[1].target, '@default')
-        self.assertEqual(policy.policy_rules[1].action,
-            parser.Action.allow)
-        self.assertEqual(policy.policy_rules[1].filename,
-            TMP_POLICY_DIR + '/test.service2')
-        self.assertEqual(policy.policy_rules[1].lineno, 1)
-        self.assertEqual(policy.policy_rules[2].source, '@anyvm')
-        self.assertEqual(policy.policy_rules[2].target, '@anyvm')
-        self.assertEqual(policy.policy_rules[2].action,
-            parser.Action.deny)
-        self.assertEqual(policy.policy_rules[2].filename,
-            TMP_POLICY_DIR + '/test.service')
-        self.assertEqual(policy.policy_rules[2].lineno, 3)
+        policy = parser.TestPolicy(policy={
+            '__main__': '''\
+                * * test-vm1 test-vm2 allow
+                !include file2
+                * * @anyvm @anyvm deny
+            ''',
+            'file2': '''\
+                * * test-vm3 @default allow target=test-vm2
+            ''',
+        })
 
-    def test_003_load_convert(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm2 test-vm3 ask\n')
-            f.write('   # comment  \n')
-            f.write('$anyvm $dispvm ask,default_target=$dispvm\n')
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        self.assertEqual(policy.service, 'test.service')
-        self.assertEqual(len(policy.policy_rules), 2)
-        self.assertEqual(policy.policy_rules[1].source, '@anyvm')
-        self.assertEqual(policy.policy_rules[1].target, '@dispvm')
-        self.assertEqual(policy.policy_rules[1].action,
-            parser.Action.ask)
-        self.assertEqual(policy.policy_rules[1].default_target,
+        self.assertEqual(len(policy.rules), 3)
+        self.assertEqual(policy.rules[0].source, 'test-vm1')
+        self.assertEqual(policy.rules[0].target, 'test-vm2')
+        self.assertIsInstance(policy.rules[0].action, parser.Action.allow.value)
+#       self.assertEqual(policy.rules[0].filename,
+#           TMP_POLICY_DIR + '/test.service')
+        self.assertEqual(policy.rules[0].lineno, 1)
+        self.assertEqual(policy.rules[1].source, 'test-vm3')
+        self.assertEqual(policy.rules[1].target, '@default')
+        self.assertIsInstance(policy.rules[1].action, parser.Action.allow.value)
+#       self.assertEqual(policy.rules[1].filename,
+#           TMP_POLICY_DIR + '/test.service2')
+        self.assertEqual(policy.rules[1].lineno, 1)
+        self.assertEqual(policy.rules[2].source, '@anyvm')
+        self.assertEqual(policy.rules[2].target, '@anyvm')
+        self.assertIsInstance(policy.rules[2].action, parser.Action.deny.value)
+#       self.assertEqual(policy.rules[2].filename,
+#           TMP_POLICY_DIR + '/test.service')
+        self.assertEqual(policy.rules[2].lineno, 3)
+
+    def test_003_include_service(self):
+        policy = parser.TestPolicy(policy={
+            '__main__': '''\
+                !include-service * * new-syntax
+                !include-service * * old-syntax
+            ''',
+            'new-syntax': '''\
+                test-vm2 test-vm3 ask
+                # comment with whitespace  
+                @anyvm @dispvm ask default_target=@dispvm
+            ''',
+            'old-syntax': '''\
+                test-vm2 test-vm3 ask
+                # comment with whitespace  
+                $anyvm $dispvm ask,default_target=$dispvm
+            ''',
+            })
+        self.assertEqual(len(policy.rules), 4)
+        self.assertEqual(policy.rules[1].source, '@anyvm')
+        self.assertEqual(policy.rules[1].target, '@dispvm')
+        self.assertIsInstance(policy.rules[1].action,
+            parser.Action.ask.value)
+        self.assertEqual(policy.rules[1].action.default_target,
+            '@dispvm')
+        self.assertEqual(policy.rules[3].source, '@anyvm')
+        self.assertEqual(policy.rules[3].target, '@dispvm')
+        self.assertIsInstance(policy.rules[3].action,
+            parser.Action.ask.value)
+        self.assertEqual(policy.rules[3].action.default_target,
             '@dispvm')
 
     def test_010_find_rule(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-            f.write('test-vm1 @anyvm ask\n')
-            f.write('test-vm2 @tag:tag1 deny\n')
-            f.write('test-vm2 @tag:tag2 allow\n')
-            f.write('test-vm2 @dispvm:@tag:tag3 allow\n')
-            f.write('test-vm2 @dispvm:@tag:tag2 allow\n')
-            f.write('test-vm2 @dispvm:default-dvm allow\n')
-            f.write('@type:AppVM @default allow,target=test-vm3\n')
-            f.write('@tag:tag1 @type:AppVM allow\n')
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm1', 'test-vm2'), policy.policy_rules[0])
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm1', 'test-vm3'), policy.policy_rules[1])
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm2', 'test-vm2'), policy.policy_rules[3])
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm2', 'test-no-dvm'), policy.policy_rules[2])
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm1 test-vm2 allow
+            * * test-vm1 @anyvm ask
+            * * test-vm2 @tag:tag1 deny
+            * * test-vm2 @tag:tag2 allow
+            * * test-vm2 @dispvm:@tag:tag3 allow
+            * * test-vm2 @dispvm:@tag:tag2 allow
+            * * test-vm2 @dispvm:default-dvm allow
+            * * @type:AppVM @default allow target=test-vm3
+            * * @tag:tag1 @type:AppVM allow
+        ''')
+        self.assertEqual(policy.rules[0],
+            policy.find_matching_rule(_req('test-vm1', 'test-vm2')))
+        self.assertEqual(policy.rules[1],
+            policy.find_matching_rule(_req('test-vm1', 'test-vm3')))
+        self.assertEqual(policy.rules[3],
+            policy.find_matching_rule(_req('test-vm2', 'test-vm2')))
+        self.assertEqual(policy.rules[2],
+            policy.find_matching_rule(_req('test-vm2', 'test-no-dvm')))
         # @anyvm matches @default too
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm1', '@default'), policy.policy_rules[1])
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm2', '@default'), policy.policy_rules[7])
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-no-dvm', 'test-vm3'), policy.policy_rules[8])
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm2', '@dispvm:test-vm3'),
-            policy.policy_rules[4])
-        self.assertEqual(policy.find_matching_rule(
-            SYSTEM_INFO, 'test-vm2', '@dispvm'),
-            policy.policy_rules[6])
+        self.assertEqual(policy.rules[1],
+            policy.find_matching_rule(_req('test-vm1', '@default')))
+        self.assertEqual(policy.rules[7],
+            policy.find_matching_rule(_req('test-vm2', '@default')))
+        self.assertEqual(policy.rules[8],
+            policy.find_matching_rule(_req('test-no-dvm', 'test-vm3')))
+        self.assertEqual(policy.rules[4],
+            policy.find_matching_rule(_req('test-vm2', '@dispvm:test-vm3')))
+        self.assertEqual(policy.rules[6],
+            policy.find_matching_rule(_req('test-vm2', '@dispvm')))
+
         with self.assertRaises(exc.AccessDenied):
-            policy.find_matching_rule(
-                SYSTEM_INFO, 'test-no-dvm', 'test-standalone')
+            policy.find_matching_rule(_req('test-no-dvm', 'test-standalone'))
         with self.assertRaises(exc.AccessDenied):
-            policy.find_matching_rule(SYSTEM_INFO, 'test-no-dvm', '@dispvm')
+            policy.find_matching_rule(_req('test-no-dvm', '@dispvm'))
         with self.assertRaises(exc.AccessDenied):
-            policy.find_matching_rule(
-                SYSTEM_INFO, 'test-standalone', '@default')
+            policy.find_matching_rule(_req('test-standalone', '@default'))
 
     def test_020_collect_targets_for_ask(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-            f.write('test-vm1 @anyvm ask\n')
-            f.write('test-vm2 @tag:tag1 deny\n')
-            f.write('test-vm2 @tag:tag2 allow\n')
-            f.write('test-no-dvm @type:AppVM deny\n')
-            f.write('@type:AppVM @default allow,target=test-vm3\n')
-            f.write('@tag:tag1 @type:AppVM allow\n')
-            f.write('test-no-dvm @dispvm allow\n')
-            f.write('test-standalone @dispvm allow\n')
-            f.write('test-standalone @adminvm allow\n')
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        self.assertCountEqual(policy.collect_targets_for_ask(SYSTEM_INFO,
-            'test-vm1'), ['test-vm1', 'test-vm2', 'test-vm3',
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm1 test-vm2 allow
+            * * test-vm1 @anyvm ask
+            * * test-vm2 @tag:tag1 deny
+            * * test-vm2 @tag:tag2 allow
+            * * test-no-dvm @type:AppVM deny
+            * * @type:AppVM @default allow target=test-vm3
+            * * @tag:tag1 @type:AppVM allow
+            * * test-no-dvm @dispvm allow
+            * * test-standalone @dispvm allow
+            * * test-standalone @adminvm allow
+        ''')
+
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(_req('test-vm1', '@default')),
+            ['test-vm1', 'test-vm2', 'test-vm3',
                 '@dispvm:test-vm3',
                 'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
                 'test-no-dvm', 'test-template', 'test-standalone'])
-        self.assertCountEqual(policy.collect_targets_for_ask(SYSTEM_INFO,
-            'test-vm2'), ['test-vm2', 'test-vm3'])
-        self.assertCountEqual(policy.collect_targets_for_ask(SYSTEM_INFO,
-            'test-vm3'), ['test-vm3'])
-        self.assertCountEqual(policy.collect_targets_for_ask(SYSTEM_INFO,
-            'test-standalone'), ['test-vm1', 'test-vm2', 'test-vm3',
-            'default-dvm', 'test-no-dvm', 'test-invalid-dvm',
-            '@dispvm:default-dvm', 'dom0'])
-        self.assertCountEqual(policy.collect_targets_for_ask(SYSTEM_INFO,
-            'test-no-dvm'), [])
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(_req('test-vm2', '@default')),
+            ['test-vm2', 'test-vm3'])
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(_req('test-vm3', '@default')),
+            ['test-vm3'])
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(_req('test-standalone', '@default')),
+            ['test-vm1', 'test-vm2', 'test-vm3',
+                'default-dvm', 'test-no-dvm', 'test-invalid-dvm',
+                '@dispvm:default-dvm', 'dom0'])
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(_req('test-no-dvm', '@default')),
+            [])
 
-    def test_030_eval_simple(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        action = policy.evaluate(SYSTEM_INFO, 'test-vm1', 'test-vm2')
-        self.assertEqual(action.rule, policy.policy_rules[0])
-        self.assertEqual(action.action, parser.Action.allow)
-        self.assertEqual(action.target, 'test-vm2')
-        self.assertEqual(action.original_target, 'test-vm2')
-        self.assertEqual(action.service, 'test.service')
-        self.assertIsNone(action.targets_for_ask)
-        with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(SYSTEM_INFO, 'test-vm2', '@default')
-
-    def test_031_eval_default(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-            f.write('test-vm1 @default allow,target=test-vm2\n')
-            f.write('@tag:tag1 test-vm2 ask\n')
-            f.write('@tag:tag2 @anyvm allow\n')
-            f.write('test-vm3 @anyvm deny\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        action = policy.evaluate(SYSTEM_INFO, 'test-vm1', '@default')
-        self.assertEqual(action.rule, policy.policy_rules[1])
-        self.assertEqual(action.action, parser.Action.allow)
-        self.assertEqual(action.target, 'test-vm2')
-        self.assertEqual(action.original_target, '@default')
-        self.assertEqual(action.service, 'test.service')
-        self.assertIsNone(action.targets_for_ask)
-        with self.assertRaises(exc.AccessDenied):
-            # action allow should hit, but no target specified (either by
-            # caller or policy)
-            policy.evaluate(SYSTEM_INFO, 'test-standalone', '@default')
-
-    def test_032_eval_ask(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-            f.write('test-vm1 @default allow,target=test-vm2\n')
-            f.write('@tag:tag1 test-vm2 ask\n')
-            f.write('@tag:tag1 test-vm3 ask,default_target=test-vm3\n')
-            f.write('@tag:tag2 @anyvm allow\n')
-            f.write('test-vm3 @anyvm deny\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        action = policy.evaluate(SYSTEM_INFO, 'test-standalone', 'test-vm2')
-        self.assertEqual(action.rule, policy.policy_rules[2])
-        self.assertEqual(action.action, parser.Action.ask)
-        self.assertIsNone(action.target)
-        self.assertEqual(action.original_target, 'test-vm2')
-        self.assertEqual(action.service, 'test.service')
-        self.assertCountEqual(action.targets_for_ask,
-            ['test-vm1', 'test-vm2', 'test-vm3', '@dispvm:test-vm3',
-                'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
-                'test-no-dvm', 'test-template', 'test-standalone'])
-
-    def test_033_eval_ask(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm1 test-vm2 allow\n')
-            f.write('test-vm1 @default allow,target=test-vm2\n')
-            f.write('@tag:tag1 test-vm2 ask\n')
-            f.write('@tag:tag1 test-vm3 ask,default_target=test-vm3\n')
-            f.write('@tag:tag2 @anyvm allow\n')
-            f.write('test-vm3 @anyvm deny\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        action = policy.evaluate(SYSTEM_INFO, 'test-standalone', 'test-vm3')
-        self.assertEqual(action.rule, policy.policy_rules[3])
-        self.assertEqual(action.action, parser.Action.ask)
-        self.assertEqual(action.target, 'test-vm3')
-        self.assertEqual(action.original_target, 'test-vm3')
-        self.assertEqual(action.service, 'test.service')
-        self.assertCountEqual(action.targets_for_ask,
-            ['test-vm1', 'test-vm2', 'test-vm3', '@dispvm:test-vm3',
-                'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
-                'test-no-dvm', 'test-template', 'test-standalone'])
-
-    def test_034_eval_resolve_dispvm(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm3 @dispvm allow\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        action = policy.evaluate(SYSTEM_INFO, 'test-vm3', '@dispvm')
-        self.assertEqual(action.rule, policy.policy_rules[0])
-        self.assertEqual(action.action, parser.Action.allow)
-        self.assertEqual(action.target, '@dispvm:default-dvm')
-        self.assertEqual(action.original_target, '@dispvm')
-        self.assertEqual(action.service, 'test.service')
-        self.assertIsNone(action.targets_for_ask)
-
-    def test_035_eval_resolve_dispvm_fail(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-no-dvm @dispvm allow\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(SYSTEM_INFO, 'test-no-dvm', '@dispvm')
-
-    def test_036_eval_invalid_override_target(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm3 @anyvm allow,target=no-such-vm\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(SYSTEM_INFO, 'test-vm3', '@default')
-
-    def test_037_eval_ask_no_targets(self):
-        with open(os.path.join(TMP_POLICY_DIR, 'test.service'), 'w') as f:
-            f.write('test-vm3 @default ask\n')
-
-        policy = parser.Policy('test.service', TMP_POLICY_DIR)
-        with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(SYSTEM_INFO, 'test-vm3', '@default')
 
 #class TC_10_PolicyAction(qubes.tests.QubesTestCase):
 class TC_30_Resolution(unittest.TestCase):
     def setUp(self):
-        self.request = parser.Request('test.Service', '+argument',
-            'test-vm1', 'test-vm2', system_info=SYSTEM_INFO)
-
-    #
-    # deny
-    #
-
-    def test_190_deny_evaulate(self):
-        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm deny',
-            filepath='filename', lineno=12)
-        with self.assertRaises(exc.AccessDenied):
-            rule.action.evaluate(self.request)
-
+        self.request = parser.Request(
+            'test.Service', '+argument', 'test-vm1', 'test-vm2',
+            system_info=SYSTEM_INFO)
 
     #
     # allow
     #
 
-    def test_200_allow_init(self):
+    def test_000_allow_init(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
         resolution = parser.AllowResolution(rule, self.request,
-            user=None, actual_target='test-vm2')
+            user=None, target='test-vm2')
         self.assertIs(resolution.rule, rule)
         self.assertIs(resolution.request, self.request)
         self.assertIs(resolution.user, None)
-        self.assertIs(resolution.actual_target, 'test-vm2')
-
-    def test_290_allow_evaluate(self):
-        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm allow',
-            filepath='filename', lineno=12)
-        resolution = rule.action.evaluate(self.request)
+        self.assertIs(resolution.target, 'test-vm2')
 
     #
     # ask
     #
 
-    def test_300_ask_init(self):
+    def test_100_ask_init(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         resolution = parser.AskResolution(rule, self.request,
             user=None, targets_for_ask=['test-vm2'], default_target='test-vm2')
 
         with self.assertRaises(AttributeError):
-            resolution.actual_target
+            resolution.target
 
         self.assertIs(resolution.rule, rule)
         self.assertIs(resolution.request, self.request)
         self.assertIs(resolution.user, None)
         self.assertCountEqual(resolution.targets_for_ask, ['test-vm2'])
 
-    def test_301_ask_init(self):
+    def test_101_ask_init(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         resolution = parser.AskResolution(rule, self.request,
@@ -1046,7 +924,7 @@ class TC_30_Resolution(unittest.TestCase):
             ['test-vm2', 'test-vm3'])
         self.assertIs(resolution.default_target, 'test-vm2')
 
-    def test_303_ask_default_target_None(self):
+    def test_103_ask_default_target_None(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         resolution = parser.AskResolution(rule, self.request,
@@ -1055,18 +933,104 @@ class TC_30_Resolution(unittest.TestCase):
 
         self.assertIsNone(resolution.default_target)
 
-    def test_390_ask_evaluate(self):
-        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
-            filepath='filename', lineno=12)
-        resolution = rule.action.evaluate(self.request)
-        raise NotImplementedError()
+class TC_40_evaluate(unittest.TestCase):
+    def setUp(self):
+        self.policy = parser.TestPolicy(policy='''\
+            * * test-vm1 test-vm2 allow
+            * * test-vm1 @default allow target=test-vm2
+            * * @tag:tag1 test-vm2 ask
+            * * @tag:tag1 test-vm3 ask default_target=test-vm3
+            * * @tag:tag2 @anyvm allow
+            * * test-vm3 @anyvm deny''')
 
-    #
-    # unsorted
-    #
+    def test_000_deny(self):
+        policy = parser.TestPolicy(policy='''\
+            * * @anyvm @anyvm deny''')
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(_req('test-vm1', 'test-vm2'))
+
+    def test_030_eval_simple(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm1 test-vm2 allow''')
+
+        request = _req('test-vm1', 'test-vm2')
+        resolution = policy.evaluate(request)
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertIs(resolution.request, request)
+        self.assertIs(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, 'test-vm2')
+
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(_req('test-vm2', '@default'))
+
+    def test_031_eval_default(self):
+        resolution = self.policy.evaluate(_req('test-vm1', '@default'))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, self.policy.rules[1])
+        self.assertEqual(resolution.target, 'test-vm2')
+        self.assertEqual(resolution.request.target, '@default')
+
+        with self.assertRaises(exc.AccessDenied):
+            # action allow should hit, but no target specified (either by
+            # caller or policy)
+            self.policy.evaluate(_req('test-standalone', '@default'))
+
+    def test_032_eval_ask(self):
+        resolution = self.policy.evaluate(_req('test-standalone', 'test-vm2'))
+
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertEqual(resolution.rule, self.policy.rules[2])
+        self.assertEqual(resolution.request.target, 'test-vm2')
+        self.assertCountEqual(resolution.targets_for_ask,
+            ['test-vm1', 'test-vm2', 'test-vm3', '@dispvm:test-vm3',
+                'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
+                'test-no-dvm', 'test-template', 'test-standalone'])
+
+    def test_033_eval_ask(self):
+        resolution = self.policy.evaluate(_req('test-standalone', 'test-vm3'))
+
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertEqual(resolution.rule, self.policy.rules[3])
+        self.assertEqual(resolution.default_target, 'test-vm3')
+        self.assertEqual(resolution.request.target, 'test-vm3')
+        self.assertCountEqual(resolution.targets_for_ask,
+            ['test-vm1', 'test-vm2', 'test-vm3', '@dispvm:test-vm3',
+                'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
+                'test-no-dvm', 'test-template', 'test-standalone'])
+
+    def test_034_eval_resolve_dispvm(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 @dispvm allow''')
+        resolution = policy.evaluate(_req('test-vm3', '@dispvm'))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, '@dispvm:default-dvm')
+        self.assertEqual(resolution.request.target, '@dispvm')
+
+    def test_035_eval_resolve_dispvm_fail(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-no-dvm @dispvm allow''')
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(_req('test-no-dvm', '@dispvm'))
+
+    def test_036_eval_invalid_override_target(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 @anyvm allow target=no-such-vm''')
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(_req('test-vm3', '@default'))
+
+    def test_037_eval_ask_no_targets(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 @default ask''')
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(_req('test-vm3', '@default'))
+
 
     @unittest.skip('rewrite')
-    def test_010_handle_user_response(self):
+    def test_110_handle_user_response(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         action = parser.PolicyAction('test.service', 'test-vm1',
@@ -1076,7 +1040,7 @@ class TC_30_Resolution(unittest.TestCase):
         self.assertEqual(action.target, 'test-vm2')
 
     @unittest.skip('rewrite')
-    def test_011_handle_user_response(self):
+    def test_111_handle_user_response(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         action = parser.PolicyAction('test.service', 'test-vm1',
@@ -1085,7 +1049,7 @@ class TC_30_Resolution(unittest.TestCase):
             action.handle_user_response(True, 'test-no-dvm')
 
     @unittest.skip('rewrite')
-    def test_012_handle_user_response(self):
+    def test_112_handle_user_response(self):
         rule = parser.Rule.from_line('* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         action = parser.PolicyAction('test.service', 'test-vm1',
@@ -1095,7 +1059,7 @@ class TC_30_Resolution(unittest.TestCase):
         self.assertEqual(action.action, parser.Action.deny)
 
     @unittest.skip('rewrite')
-    def test_013_handle_user_response_with_default_target(self):
+    def test_113_handle_user_response_with_default_target(self):
         rule = parser.Rule.from_line(
             '* * @anyvm @anyvm ask default_target=test-vm2',
             filepath='filename', lineno=12)
@@ -1108,7 +1072,7 @@ class TC_30_Resolution(unittest.TestCase):
     @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
-    def test_020_execute(self, mock_subprocess, mock_qubesd_call):
+    def test_120_execute(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
         action = parser.PolicyAction('test.service', 'test-vm1',
@@ -1123,7 +1087,7 @@ class TC_30_Resolution(unittest.TestCase):
     @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
-    def test_021_execute_dom0(self, mock_subprocess, mock_qubesd_call):
+    def test_121_execute_dom0(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line('* * @anyvm dom0 allow',
             filepath='filename', lineno=12)
         action = parser.PolicyAction('test.service', 'test-vm1',
@@ -1138,7 +1102,7 @@ class TC_30_Resolution(unittest.TestCase):
     @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
-    def test_021_execute_dom0_keyword(self, mock_subprocess, mock_qubesd_call):
+    def test_121_execute_dom0_keyword(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line('* * @anyvm dom0 allow',
             filepath='filename', lineno=12)
         action = parser.PolicyAction('test.service', 'test-vm1',
@@ -1153,7 +1117,7 @@ class TC_30_Resolution(unittest.TestCase):
     @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
-    def test_022_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
+    def test_122_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line('* * @anyvm @dispvm:default-dvm allow',
             filepath='filename', lineno=12)
         action = parser.PolicyAction('test.service', 'test-vm1',
@@ -1174,7 +1138,7 @@ class TC_30_Resolution(unittest.TestCase):
     @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
-    def test_023_execute_already_running(self, mock_subprocess,
+    def test_123_execute_already_running(self, mock_subprocess,
             mock_qubesd_call):
         rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
@@ -1192,7 +1156,7 @@ class TC_30_Resolution(unittest.TestCase):
     @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
-    def test_024_execute_startup_error(self, mock_subprocess,
+    def test_124_execute_startup_error(self, mock_subprocess,
             mock_qubesd_call):
         rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
@@ -1210,7 +1174,7 @@ class TC_30_Resolution(unittest.TestCase):
 
 
 #class TC_30_Misc(qubes.tests.QubesTestCase):
-class TC_40_Misc(unittest.TestCase):
+class TC_50_Misc(unittest.TestCase):
     @unittest.mock.patch('socket.socket')
     def test_000_qubesd_call(self, mock_socket):
         mock_config = {
