@@ -34,35 +34,35 @@ def create_default_policy(service_name):
         policy.write(DEFAULT_POLICY)
 
 class JustEvaluateAllowResolution(parser.AllowResolution):
-    def execute(self, caller_ident, *, system_info):
+    def execute(self, caller_ident):
         sys.exit(0)
 
 class JustEvaluateAskResolution(parser.AskResolution):
-    def execute(self, caller_ident, *, system_info):
+    def execute(self, caller_ident):
         sys.exit(1)
 
 class AssumeYesForAskResolution(parser.AskResolution):
-    def execute(self, caller_ident, *, system_info):
+    def execute(self, caller_ident):
         return self.handle_user_response(True, self.request.target).execute(
-            caller_ident, system_info=system_info)
+            caller_ident)
 
 class DBusAskResolution(parser.AskResolution):
-    def execute(self, caller_ident, *, system_info):
+    def execute(self, caller_ident):
         import pydbus
         bus = pydbus.SystemBus()
         proxy = bus.get('org.qubesos.PolicyAgent',
             '/org/qubesos/PolicyAgent')
 
         # prepare icons
-        icons = {name: system_info['domains'][name]['icon']
-            for name in system_info['domains'].keys()}
-        for dispvm_base in system_info['domains']:
-            if not (system_info['domains'][dispvm_base]
+        icons = {name: self.request.system_info['domains'][name]['icon']
+            for name in self.request.system_info['domains'].keys()}
+        for dispvm_base in self.request.system_info['domains']:
+            if not (self.request.system_info['domains'][dispvm_base]
                     ['template_for_dispvms']):
                 continue
             dispvm_api_name = '@dispvm:' + dispvm_base
             icons[dispvm_api_name] = \
-                system_info['domains'][dispvm_base]['icon']
+                self.request.system_info['domains'][dispvm_base]['icon']
             icons[dispvm_api_name] = \
                 icons[dispvm_api_name].replace('app', 'disp')
 
@@ -71,7 +71,7 @@ class DBusAskResolution(parser.AskResolution):
 
         if response:
             return self.handle_user_response(True, response).execute(
-                caller_ident, system_info=system_info)
+                caller_ident)
         else:
             return self.handle_user_response(False, None)
 
@@ -141,7 +141,7 @@ def main(args=None):
                 just_evaluate=args.just_evaluate,
                 assume_yes_for_ask=args.assume_yes_for_ask))
         resolution = policy.evaluate(request)
-        result = resolution.execute(caller_ident, system_info=system_info)
+        result = resolution.execute(caller_ident)
         log.info(log_prefix + 'allowed to {}'.format(resolution.target))
 
     except exc.PolicySyntaxError as err:

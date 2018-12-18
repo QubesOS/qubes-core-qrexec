@@ -32,34 +32,56 @@ import pathlib
 import string
 import subprocess
 
-from .. import QREXEC_CLIENT, POLICYPATH
+from typing import (
+    Iterable,
+    List,
+    TextIO,
+    Tuple,
+)
+
+from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET
 from .. import exc
 from .. import utils
 from ..exc import (
-    AccessDenied, PolicySyntaxError, PolicyNotFound, QubesMgmtException)
+    AccessDenied, PolicySyntaxError, QubesMgmtException)
 
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + '_.-')
 
-def verify_filename(filepath):
-    '''Check if the file should be considered by policy.
+def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
+    '''Check if files should be considered by policy.
 
-    The file should contain only allowed characters (latin lowercase, digits,
-    underscore, full stop and dash). It should not start with the dot.
+    The file name should contain only allowed characters (latin lowercase,
+    digits, underscore, full stop and dash). It should not start with the dot.
 
     Only the file name is considered, not the directories on path that leads to
     it.
 
     Args:
-        filepath (pathlib.Path): the file path
+        filepaths: the file paths
     Returns:
-        bool: If the file is approved.
+        list of pathlib.Path: sorted list of paths, without ignored ones
+    Raises:
+        qrexec.exc.AccessDenied: for invalid path which is not ignored
     '''
-    filepath = pathlib.Path(filepath)
-    return (set(filepath.name).issubset(FILENAME_ALLOWED_CHARSET)
-        and not filepath.name.startswith('.'))
+    filepaths = [path for path in filepaths
+        if path.is_file() and not path.name.startswith('.')]
+
+    # check for invalid filenames first, then return all or nothing
+    for path in filepaths:
+        if not set(path.name).issubset(FILENAME_ALLOWED_CHARSET):
+            raise exc.AccessDenied('invalid filename: {}'.format(path))
+
+    filepaths.sort()
+
+    return filepaths
 
 def validate_service_and_argument(service, argument, *, filepath, lineno):
-    '''Check service and argument
+    '''Check service name and argument
+
+    This is intended as policy syntax checker to discard obviously invalid
+    service names and arguments. There are some cases for which this function
+    will not signal a problem, but the call still would be invalid. One of those
+    cases is too long total call name.
 
     Args:
         service (str): the service as appeared in policy file
@@ -73,14 +95,29 @@ def validate_service_and_argument(service, argument, *, filepath, lineno):
     Raises:
         qrexec.exc.PolicySyntaxError: for a number of forbidden cases
     '''
-    # TODO maybe validate charset?
 
     if service == '*':
         service = None
 
+    if service is not None:
+        invalid_chars = tuple(sorted(set(c for c in service
+            if c not in RPCNAME_ALLOWED_CHARSET.difference('+'))))
+        if invalid_chars:
+            raise PolicySyntaxError(filepath, lineno,
+                'service {!r} contains invalid characters: {!r}'.format(
+                    service, invalid_chars))
+
     if argument == '*':
         argument = None
-    else:
+
+    if argument is not None:
+        invalid_chars = tuple(sorted(set(c for c in argument
+            if c not in RPCNAME_ALLOWED_CHARSET)))
+        if invalid_chars:
+            raise PolicySyntaxError(filepath, lineno,
+                'argument {!r} contains invalid characters: {!r}'.format(
+                    argument, invalid_chars))
+
         if not argument.startswith('+'):
             raise PolicySyntaxError(filepath, lineno,
                 'argument {!r} does not start with +'.format(argument))
@@ -372,7 +409,7 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         self.user = user
 
     @abc.abstractmethod
-    def execute(self, caller_ident, *, system_info):
+    def execute(self, caller_ident):
         '''
         Execute the action. For allow, this runs the qrexec. For ask, it asks
         user and then (depending on verdict) runs the call.
@@ -398,7 +435,7 @@ class AllowResolution(AbstractResolution):
             user=ask_resolution.user,
             target=target)
 
-    def execute(self, caller_ident, *, system_info):
+    def execute(self, caller_ident):
         '''Execute the allowed action'''
         assert self.target is not None
 
@@ -503,11 +540,14 @@ class AskResolution(AbstractResolution):
             raise AccessDenied('denied by the user {}:{}'.format(
                 self.rule.filepath, self.rule.lineno))
 
-        assert target in self.targets_for_ask
+        if target not in self.targets_for_ask:
+            raise AccessDenied(
+                'target {} is not a valid choice'.format(target))
+
         return self.request.allow_resolution_type.from_ask_resolution(self,
             target=target)
 
-    def execute(self, caller_ident, *, system_info):
+    def execute(self, caller_ident):
         '''Ask the user for permission.
 
         This method should be overloaded in children classes. This
@@ -588,6 +628,18 @@ class ActionType(metaclass=abc.ABCMeta):
         '''
         raise NotImplementedError()
 
+    def actual_target(self, intended_target):
+        '''If action has redirect, it is it. Otherwise, the rule's own target
+
+        Args:
+            intended_target (IntendedTarget): :py:attr:`Request.target`
+
+        Returns:
+            IntendedTarget: either :py:attr:`target`, if not None, or
+                *intended_target*
+        '''
+        return IntendedTarget(self.target or intended_target)
+
 class Deny(ActionType):
     def __repr__(self):
         return '<{}>'.format(type(self).__name__)
@@ -600,6 +652,12 @@ class Deny(ActionType):
         raise AccessDenied('denied by policy {}:{}'.format(
             self.rule.filepath, self.rule.lineno))
 
+    def actual_target(self, intended_target):
+        '''''' # not documented in HTML
+        # pylint: disable=empty-docstring
+        raise AccessDenied('programmer error')
+
+
 class Allow(ActionType):
     def __init__(self, *args, target=None, user=None, **kwds):
         super().__init__(*args, **kwds)
@@ -610,18 +668,6 @@ class Allow(ActionType):
     def __repr__(self):
         return '<{} target={!r} user={!r}>'.format(
             type(self).__name__, self.target, self.user)
-
-    def actual_target(self, intended_target):
-        '''If action has redirect, it is it. Otherwise, the rule's own target
-
-        Args:
-            intended_target (IntendedTarget): :py:attr:`Request.target`
-
-        Returns:
-            IntendedTarget: either :py:attr:`target`, if not None, or
-                *intended_target_
-        '''
-        return IntendedTarget(self.target or intended_target)
 
     def evaluate(self, request):
         '''
@@ -840,32 +886,25 @@ class Rule(object):
                     system_info=request.system_info))
 
 
-class AbstractPolicyParser(metaclass=abc.ABCMeta):
+class AbstractParser(metaclass=abc.ABCMeta):
     '''A minimal, pluggable, validating policy parser'''
 
     #: default rule type
     rule_type = Rule
 
     @staticmethod
-    def resolve_file_and_filepath(file, filepath):
+    def _fix_filepath(file, filepath):
         if filepath is None:
-            if isinstance(file, (str, pathlib.Path)):
-                filepath = pathlib.Path(file)
-                file = filepath.open()
-            elif isinstance(file, io.IOBase):
-                filepath = '<buffer>'
-            else:
-                try:
-                    filepath = pathlib.Path(file.name)
-                except AttributeError:
-                    pass
-        else:
-            filepath = pathlib.Path(filepath)
+            try:
+                filepath = pathlib.Path(file.name)
+            except AttributeError:
+                if isinstance(file, io.IOBase):
+                    filepath = '<buffer>'
         return file, filepath
 
-    def load_policy_file(self, file, filepath=None):
+    def load_policy_file(self, file, filepath):
         '''Parse a policy file'''
-        file, filepath = self.resolve_file_and_filepath(file, filepath)
+        file, filepath = self._fix_filepath(file, filepath)
 
         for lineno, line in enumerate(file, start=1):
             line = line.strip()
@@ -878,15 +917,32 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
                 directive, *params = line.split()
 
                 if directive == '!include':
-                    self.handle_include(*params,
+                    try:
+                        included_path, = params
+                    except ValueError:
+                        raise PolicySyntaxError(filepath, lineno,
+                            'invalid number of params')
+                    self.handle_include(pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
                     continue
                 if directive == '!include-dir':
-                    self.handle_include_dir(*params,
+                    try:
+                        included_path, = params
+                    except ValueError:
+                        raise PolicySyntaxError(filepath, lineno,
+                            'invalid number of params')
+                    self.handle_include_dir(
+                        pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
                     continue
                 if directive == '!include-service':
-                    self.handle_include_service(*params,
+                    try:
+                        service, argument, included_path = params
+                    except ValueError:
+                        raise PolicySyntaxError(filepath, lineno,
+                            'invalid number of params')
+                    self.handle_include_service(service, argument,
+                        pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
                     continue
 
@@ -899,10 +955,9 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
 
         return self
 
-    def load_policy_file_service(self, service, argument, file,
-            filepath=None):
+    def load_policy_file_service(self, service, argument, file, filepath):
         '''Parse a policy file from ``!include-service``'''
-        file, filepath = self.resolve_file_and_filepath(file, filepath)
+        file, filepath = self._fix_filepath(file, filepath)
 
         for lineno, line in enumerate(file, start=1):
             line = line.strip()
@@ -921,7 +976,13 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
                 directive, *params = line.split()
 
                 if directive == '!include':
-                    self.handle_include_service(service, argument, *params,
+                    try:
+                        included_path, = params
+                    except ValueError:
+                        raise PolicySyntaxError(filepath, lineno,
+                            'invalid number of params')
+                    self.handle_include_service(service, argument,
+                        pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
                     continue
 
@@ -934,29 +995,9 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
 
         return self
 
-    def load_policy_dir(self, dirpath):
-        '''Load all files in the directory (``!include-dir``)
-
-        Args:
-            dirpath (pathlib.Path): the directory to load
-
-        Raises:
-            OSError: for problems in opening files or directories
-        '''
-        # check for invalid filenames first, then iterate
-        paths = [path for path in dirpath.iterdir()
-            if path.is_file() and not path.name.startswith('.')]
-        for path in paths:
-            if not verify_filename(path):
-                raise exc.AccessDenied('invalid filename: {}'.format(path))
-
-        paths.sort()
-
-        for path in paths:
-            self.load_policy_file(path)
-
     @abc.abstractmethod
-    def handle_include(self, included_path, *, filepath, lineno):
+    def handle_include(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno):
         '''Handle ``!include`` line when encountered in
         :meth:`policy_load_file`.
 
@@ -965,7 +1006,8 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def handle_include_dir(self, included_path, *, filepath, lineno):
+    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno):
         '''Handle ``!include-dir`` line when encountered in
         :meth:`policy_load_file`.
 
@@ -974,8 +1016,8 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def handle_include_service(self, service, argument, included_path, *,
-            filepath, lineno):
+    def handle_include_service(self, service, argument,
+            included_path: pathlib.PurePosixPath, *, filepath, lineno):
         '''Handle ``!include-service`` line when encountered in
         :meth:`policy_load_file`.
 
@@ -991,7 +1033,7 @@ class AbstractPolicyParser(metaclass=abc.ABCMeta):
         '''
         raise NotImplementedError()
 
-class AbstractPolicy(AbstractPolicyParser):
+class AbstractPolicy(AbstractParser):
     '''This class is a parser that accumulates the rules to form policy.'''
 
     def __init__(self, *args, **kwds):
@@ -1062,47 +1104,97 @@ class AbstractPolicy(AbstractPolicyParser):
         return targets
 
 
-class AbstractFileParser(AbstractPolicyParser):
-    def handle_include(self, included_path, *, filepath, lineno):
-        # pylint: disable=unused-argument
-        assert filepath is not None
-        included_path = (filepath.resolve().parent / included_path).resolve()
+class AbstractFileLoader(AbstractParser):
+    '''Parser that loads next files on ``!include[-service]`` directives
+
+    This class uses regular files as accessed by :py:class:`pathlib.Path`, but
+    it is possible to overload those functions and use file-like objects.
+    '''
+
+    def resolve_path(self, included_path: pathlib.PurePosixPath
+            ) -> pathlib.Path:
+        '''Resolve path from ``!include*`` to :py:class:`pathlib.Path`'''
+        raise NotImplementedError()
+
+    def resolve_filepath(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno) -> Tuple[TextIO, pathlib.PurePath]:
+        '''Resolve ``!include[-service]`` to open file and filepath
+
+        Raises:
+            qrexec.exc.PolicySyntaxError: when the path does not point to a file
+        '''
+        included_path = self.resolve_path(included_path)
         if not included_path.is_file():
             raise exc.PolicySyntaxError(filepath, lineno,
                 'not a file: {}'.format(included_path))
-        self.load_policy_file(included_path)
+        return open(str(filepath)), included_path
 
-    def handle_include_service(self, service, argument, included_path, *,
+    def handle_include(self, included_path: pathlib.PurePosixPath, *,
             filepath, lineno):
+        file, included_path = self.resolve_filepath(included_path,
+            filepath=filepath, lineno=lineno)
+        with file:
+            self.load_policy_file(file, pathlib.PurePosixPath(included_path))
+
+    def handle_include_service(self, service, argument,
+            included_path: pathlib.PurePosixPath, *, filepath, lineno):
         service, argument = validate_service_and_argument(
             service, argument, filepath=filepath, lineno=lineno)
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        self.load_policy_file_service(service, argument, included_path)
+        file, included_path = self.resolve_filepath(included_path,
+            filepath=filepath, lineno=lineno)
+        with file:
+            self.load_policy_file_service(
+                service, argument, file, pathlib.PurePosixPath(included_path))
 
-    def handle_include_dir(self, included_path, *, filepath, lineno):
-        # pylint: disable=unused-argument
-        assert filepath is not None
-        included_path = (filepath.resolve().parent / included_path).resolve()
+
+class AbstractDirectoryLoader(AbstractFileLoader):
+    '''Parser that loads next files on ``!include-dir`` directives'''
+
+    def resolve_dirpath(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno) -> pathlib.Path:
+        '''Resolve ``!include-dir`` to directory path
+
+        Returns:
+            pathlib.Path:
+        Raises:
+            qrexec.exc.PolicySyntaxError: when the path does not point to
+                a directory
+        '''
+        included_path = self.resolve_path(included_path)
         if not included_path.is_dir():
             raise exc.PolicySyntaxError(filepath, lineno,
                 'not a directory: {}'.format(included_path))
+        return included_path
+
+    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno):
+        included_path = self.resolve_dirpath(included_path,
+            filepath=filepath, lineno=lineno)
         self.load_policy_dir(included_path)
 
-class FilePolicy(AbstractFileParser, AbstractPolicy):
-    '''Full policy for a given service
+    def load_policy_dir(self, dirpath):
+        '''Load all files in the directory (``!include-dir``)
 
-    Usage:
-    >>> system_info = get_system_info()
-    >>> policy = Policy()
-    >>> action = policy.evaluate(system_info, 'source-name', 'target-name')
-    >>> if action.action == Action.ask:
-    >>>     # ... ask the user, see action.targets_for_ask ...
-    >>>     action.handle_user_response(response, target_chosen_by_user)
-    >>> action.execute('process-ident')
+        Args:
+            dirpath (pathlib.Path): the directory to load
+
+        Raises:
+            OSError: for problems in opening files or directories
+        '''
+        for path in filter_filepaths(dirpath.iterdir()):
+            with path.open() as file:
+                self.load_policy_file(file, path)
+
+
+class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
+    '''This class is used when policy is stored as regular files in a directory.
+
+    Args:
+        policy_path (pathlib.Path): Load this directory. Paths given to
+            ``!include`` etc. directives are interpreted relative to this path.
     '''
-
-    def __init__(self, *, policy_path=POLICYPATH):
-        super().__init__()
+    def __init__(self, *, policy_path=POLICYPATH, **kwds):
+        super().__init__(**kwds)
         self.policy_path = pathlib.Path(policy_path)
 
         try:
@@ -1111,8 +1203,184 @@ class FilePolicy(AbstractFileParser, AbstractPolicy):
             raise AccessDenied(
                 'failed to load {} file: {!s}'.format(err.filename, err))
 
+    def resolve_path(self, included_path):
+        return (self.policy_path / included_path).resolve()
 
-class TestPolicy(AbstractPolicy):
+class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
+    '''Full policy loaded from files.
+
+    Usage:
+    >>> policy = qrexec.policy.parser.FilePolicy()
+    >>> request = Request(
+    ...     'qrexec.Service', '+argument', 'source-name', 'target-name',
+    ...     system_info=qrexec.utils.get_system_info())
+    >>> resolution = policy.evaluate(request)
+    >>> resolution.execute('process-ident')
+    '''
+    pass
+
+class ValidateIncludesParser(AbstractParser):
+    '''A parser that checks if included file does indeed exist.
+
+    The included file is not read, because if it exists, it is assumed it
+    already passed syntax check.
+    '''
+    def handle_include(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno):
+        # TODO disallow anything other that @include:[include/]<file>
+        included_path = (filepath.resolve().parent / included_path).resolve()
+        if not included_path.is_file():
+            raise PolicySyntaxError(filepath, lineno,
+                'included path {!s} does not exist'.format(included_path))
+
+    def handle_include_service(self, service, argument,
+            included_path: pathlib.PurePosixPath, *, filepath, lineno):
+        # TODO disallow anything other that @include:[include/]<file>
+        included_path = (filepath.resolve().parent / included_path).resolve()
+        if not included_path.is_file():
+            raise PolicySyntaxError(filepath, lineno,
+                'included path {!s} does not exist'.format(included_path))
+
+    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno):
+        included_path = (filepath.resolve().parent / included_path).resolve()
+        if not included_path.is_dir():
+            raise PolicySyntaxError(filepath, lineno,
+                'included path {!s} does not exist'.format(included_path))
+
+    def handle_rule(self, rule, *, filepath, lineno):
+        pass
+
+class CheckIfNotIncludedParser(FilePolicy):
+    '''A parser that checks if a particular file is *not* included.
+
+    This is used while removing a particular file, to check that it is not used
+    anywhere else.
+    '''
+    def __init__(self, *args, to_be_removed, **kwds):
+        self.to_be_removed = self.policy_path / to_be_removed
+        super().__init__(*args, **kwds)
+
+    def resolve_path(self, included_path):
+        included_path = super().resolve_path(included_path)
+        if included_path.samefile(self.to_be_removed):
+            raise ValueError(
+                'included path {!s}'.format(included_path))
+        return included_path
+
+    def handle_rule(self, rule, *, filepath, lineno):
+        pass
+
+class ToposortMixIn:
+    '''A helper for topological sorting the policy files'''
+
+    @enum.unique
+    class State(enum.Enum):
+        '''State of topological sort algorithm'''
+        ON_PATH, IN_ORDER = object(), object()
+
+    def __init__(self, **kwds):
+        self.included_paths = collections.defaultdict(set)
+        super().__init__(**kwds)
+
+        # keys and values are paths to files
+        self.state = {}
+        self.order = []
+
+        self.queue = None
+
+    def _path_to_key(self, path):
+        assert isinstance(path, pathlib.PurePosixPath)
+        try:
+            path = path.relative_to(self.policy_path)
+        except AttributeError:
+            # no self.policy_path
+            pass
+        except ValueError:
+            # not in self.policy_path
+            pass
+        return str(path)
+
+    def toposort(self):
+        '''Yield (file, filename) in order suitable for mass-uploading.
+
+        A file does not include anything from any file that follows in the
+        sequence.
+
+        *file* is an open()'d file for reading.
+        '''
+        if not self.order:
+            self.queue = set(self.included_paths.keys())
+            self.queue.update(itertools.chain(self.included_paths.values()))
+            while self.queue:
+                self.dfs(self.queue.pop())
+
+        for path in self.order:
+            yield self.resolve_filepath(path, filepath=None, lineno=None)
+
+    def dfs(self, node):
+        '''Perform one batch of topological sort'''
+        self.state[node] = self.State.ON_PATH
+
+        for nextnode in self.included_paths[node]:
+            if self.state[nextnode] == self.State.ON_PATH:
+                raise ValueError('circular include; {} → {}'.format(
+                    node.filepath, nextnode.filepath))
+            if self.state[nextnode] == self.State.IN_ORDER:
+                continue
+
+            self.queue.discard(nextnode)
+            self.dfs(nextnode)
+
+        self.order.append(node)
+        self.state[node] = self.State.IN_ORDER
+
+    def save_included_path(self, included_path, *, filepath, lineno):
+        '''Store the vertex in the dependency graph.
+
+        Only paths inside :py:attr:`policy_path` and ``include`` directory
+        (as supported by Policy API) are considered.
+        '''
+
+        key = self._path_to_key(included_path)
+
+        if '/' in key and (
+                not key.startswith('include/')
+                or key.count('/') > 1):
+            # TODO make this an error, since we shouldn't accept this anyway
+            logging.warning('ignoring path %r included in %s on line %d; '
+                'expect problems with import order',
+                included_path, filepath, lineno)
+            return
+
+        self.included_paths[key].add(included_path)
+
+    def handle_include(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno):
+        # pylint: disable=missing-docstring
+        logging.debug(
+            'Toposorter.handle_include(included_path=%r, filepath=%r)',
+            included_path, filepath)
+        self.save_included_path(included_path, filepath=filepath, lineno=lineno)
+        super().handle_include(included_path, filepath=filepath, lineno=lineno)
+
+    def handle_include_service(self, service, argument,
+            included_path: pathlib.PurePosixPath, *, filepath, lineno):
+        # pylint: disable=missing-docstring
+        logging.debug(
+            'Toposorter.handle_include_service(included_path=%r, filepath=%r)',
+            included_path, filepath)
+        self.save_included_path(included_path, filepath=filepath, lineno=lineno)
+        super().handle_include_service(service, argument, included_path,
+            filepath=filepath, lineno=lineno)
+
+    def load_policy_file(self, file, filepath):
+        # pylint: disable=missing-docstring,expression-not-assigned
+        # add filepath as seen
+        self.included_paths[self._path_to_key(filepath)]
+        super().load_policy_file(file, filepath)
+
+class TestPolicy(ToposortMixIn, AbstractFileLoader, AbstractPolicy):
     '''An in-memory policy used for tests
 
     Args:
@@ -1134,189 +1402,25 @@ class TestPolicy(AbstractPolicy):
             policy = {'__main__': policy}
         self.policy = policy
 
-        self.load_policy_file('__main__')
+        file, filepath = self.resolve_filepath('__main__',
+            filepath=caller.filename, lineno=caller.lineno)
+        with file:
+            self.load_policy_file(file, filepath)
 
-    def resolve_file_and_filepath(self, file, filepath):
-        if isinstance(file, pathlib.PurePath):
-            file = file.name
-        if isinstance(file, str):
-            if filepath is None:
-                filepath = file + self.filepath_suffix
-            file = io.StringIO(self.policy[file])
-        else:
-            raise ValueError('file should be either str or Path')
-        return super().resolve_file_and_filepath(file, filepath)
+    def resolve_filepath(self, included_path, *, filepath, lineno):
+        '''
+        Raises:
+            qrexec.exc.PolicySyntaxError: when wrong path is included
+        '''
+        included_path = str(included_path)
+        try:
+            file = io.StringIO(self.policy[included_path])
+        except KeyError:
+            raise exc.PolicySyntaxError(filepath, lineno,
+                'no such policy file: {!r}'.format(included_path))
+        return file, pathlib.PurePosixPath(included_path + self.filepath_suffix)
 
-    def handle_include(self, included_path, *, filepath, lineno):
-        # pylint: disable=unused-argument
-        self.load_policy_file(included_path)
-
-    def handle_include_service(self, service, argument, included_path, *,
+    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
             filepath, lineno):
-        # pylint: disable=unused-argument
-        self.load_policy_file_service(service, argument, included_path)
-
-    def handle_include_dir(self, included_path, *, filepath, lineno):
         raise NotImplementedError(
             '!include-dir is unsupported in {}'.format(type(self).__name__))
-
-
-class ValidateIncludesParser(AbstractPolicyParser):
-    '''A parser that checks if included file does indeed exist.
-
-    The included file is not read, because if it exists, it is assumed it
-    already passed syntax check.
-    '''
-    def handle_include(self, included_path, *, filepath, lineno):
-        # TODO disallow anything other that @include:[include/]<file>
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_file():
-            raise PolicySyntaxError(filepath, lineno,
-                'included path {!s} does not exist'.format(included_path))
-
-    def handle_include_service(self, service, argument, included_path, *,
-            filepath, lineno):
-        # TODO disallow anything other that @include:[include/]<file>
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_file():
-            raise PolicySyntaxError(filepath, lineno,
-                'included path {!s} does not exist'.format(included_path))
-
-    def handle_include_dir(self, included_path, *, filepath, lineno):
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_dir():
-            raise PolicySyntaxError(filepath, lineno,
-                'included path {!s} does not exist'.format(included_path))
-
-    def handle_rule(self, rule, *, filepath, lineno):
-        pass
-
-class CheckIfNotIncludedParser(AbstractPolicyParser):
-    '''A parser that checks if a particular file is *not* included.
-
-    This is used while removing a particular file, to check that it is not used
-    anywhere else.
-    '''
-    def __init__(self, *args, to_be_removed, **kwds):
-        self.to_be_removed = self.policy_path / to_be_removed
-        super().__init__(*args, **kwds)
-
-    def handle_include(self, included_path, *, filepath, lineno):
-        included_path = self.policy_path / included_path
-        if included_path.samefile(self.to_be_removed):
-            raise PolicySyntaxError(filepath, lineno,
-                'included path {!s}'.format(included_path))
-
-    def handle_rule(self, rule, *, filepath, lineno):
-        pass
-
-class ToposortParser(AbstractFileParser):
-    '''A helper for topological sorting the policy files'''
-
-    def __init__(self, *args, **kwds):
-        super().__init__(*args, **kwds)
-        self.included_paths = set()
-        self.state = None
-
-    def handle_include(self, included_path, filepath, lineno):
-        logging.debug('ToposortParser(filepath=%r).handle_include(included_path=%r)',
-            self.filepath, included_path)
-        if '/' in included_path and (
-                not included_path.startswith('include/')
-                or included_path.count('/') > 1):
-            # TODO make this an error, since we shouldn't accept this anyway
-            logging.warning('ignoring path %r included in %s on line %d; '
-                'expect problems with import order',
-                included_path, filepath, lineno)
-            return
-        self.included_paths.add(included_path)
-
-    def handle_rule(self, rule, filepath, lineno):
-        pass
-
-    def walk_files(self, *, path=None, in_include=False):
-        if path is None:
-            path = self.policy_path
-        for filepath in path.iterdir():
-            if filepath.is_dir():
-                if in_include or filepath.name != 'include':
-                    raise PolicyDirectoryLoadingError(
-                        'found unexpected directory {}'.format(filepath))
-                yield from self.walk_files(path=filepath, in_include=True)
-                continue
-            if not filepath.is_file():
-                raise PolicyDirectoryLoadingError(
-                    'found {} which is not a file'.format(filepath))
-            yield filepath
-
-
-# TODO this should inherit from common policy exception
-class PolicyDirectoryLoadingError(Exception):
-    pass
-
-class AbstractPolicyDirectoryLoader:
-    def __init__(self, policy_path):
-        logging.debug('AbstractPolicyDirectoryLoader(policy_path=%r)',
-            policy_path)
-        if not policy_path.is_dir():
-            raise ValueError('path is not a directory')
-        self.policy_path = policy_path
-
-        for filepath in self.walk_files():
-            self.handle_file(filepath)
-
-    def handle_file(self, filepath):
-        raise NotImplementedError()
-
-class Toposorter(AbstractPolicyDirectoryLoader):
-    @enum.unique
-    class State(enum.Enum):
-        ON_PATH, IN_ORDER = object(), object()
-
-    def __init__(self, *args, **kwds):
-        self.parsers = {}
-        super().__init__(*args, **kwds)
-
-        self.order = []
-        self.queue = set(self.parsers.values())
-        while self.queue:
-            self.dfs(self.queue.pop())
-
-        del self.parsers
-
-    def handle_file(self, filepath):
-        logging.debug('Toposorter.handle_file(filepath=%r)', filepath)
-        self.parsers[str(filepath.relative_to(self.policy_path))] = ToposortParser(
-            filepath=filepath,
-            policy_path=self.policy_path)
-
-    def dfs(self, node):
-        node.state = self.State.ON_PATH
-
-        for path in node.included_paths:
-            nextnode = self.parsers[path]
-            if nextnode.state == self.State.ON_PATH:
-                raise ValueError('circular include; {} → {}'.format(
-                    node.filepath, nextnode.filepath))
-            if nextnode.state == self.State.IN_ORDER:
-                continue
-
-            self.queue.discard(nextnode)
-            self.dfs(nextnode)
-
-        self.order.append(node)
-        node.state = self.State.IN_ORDER
-
-def toposort(path):
-    '''Given path to a directory, yield (file, filename) in order suitable for
-    mass-uploading.
-
-    A file does not include anything from any file that follows in the
-    sequence.
-
-    *file* is an open()'d file for reading, *filename* is relative to *path*
-    '''
-    # TODO allow for different loader, like from backup, zipfile or whatever
-    path = path.resolve()
-    for parser in Toposorter(path).order:
-        yield (parser.file, str(parser.filepath.relative_to(path)))
