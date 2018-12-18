@@ -130,6 +130,7 @@ def validate_service_and_argument(service, argument, *, filepath, lineno):
 
 
 class VMTokenMeta(abc.ABCMeta):
+    # pylint: disable=missing-docstring
     exacts = collections.OrderedDict()
     prefixes = collections.OrderedDict()
     def __init__(cls, name, bases, dict_):
@@ -152,7 +153,7 @@ class VMToken(str, metaclass=VMTokenMeta):
         - :py:class:`Source`: for whatever was specified in policy in 3rd column
         - :py:class:`Target`: 4th column in policy
         - :py:class:`Redirect`: ``target=`` parameter to :py:class:`Allow` and
-          :py:class:`Ask`
+          :py:class:`Ask`, and ``default_target=`` for the latter
         - :py:class:`IntendedTarget`: for what **user** invoked the call for
 
     Not all ``@tokens`` can be used everywhere. Where they can be used is
@@ -200,6 +201,7 @@ class VMToken(str, metaclass=VMTokenMeta):
             'invalid {} token: {!r}'.format(cls.__name__.lower(), token))
 
     def __init__(self, token, *, filepath=None, lineno=None):
+        # pylint: disable=unused-argument
         super().__init__()
         self.filepath = filepath
         self.lineno = lineno
@@ -217,6 +219,7 @@ class VMToken(str, metaclass=VMTokenMeta):
     # This replaces is_match() and is_match_single().
     def match(self, other, *, system_info, source=None):
         '''Check if this token matches opposite token'''
+        # pylint: disable=unused-argument
         return self == other
 
     def is_special_value(self):
@@ -233,9 +236,11 @@ class VMToken(str, metaclass=VMTokenMeta):
         return 'keyword' if self.is_special_value() else 'name'
 
 class Source(VMToken):
+    # pylint: disable=missing-docstring
     pass
 
 class _BaseTarget(VMToken):
+    # pylint: disable=missing-docstring
     def expand(self, *, system_info):
         '''An iterator over all valid domain names that this token would match
 
@@ -245,9 +250,11 @@ class _BaseTarget(VMToken):
             yield IntendedTarget(self)
 
 class Target(_BaseTarget):
+    # pylint: disable=missing-docstring
     pass
 
 class Redirect(_BaseTarget):
+    # pylint: disable=missing-docstring
     def __new__(cls, value, *, filepath=None, lineno=None):
         if value is None:
             return value
@@ -255,6 +262,7 @@ class Redirect(_BaseTarget):
 
 # this method (with overloads in subclasses) was verify_target_value
 class IntendedTarget(VMToken):
+    # pylint: disable=missing-docstring
     def verify(self, *, system_info):
         '''Check if given value names valid target
 
@@ -284,7 +292,8 @@ class IntendedTarget(VMToken):
 # And the tokens. Inheritance defines, where the token can be used.
 
 class AdminVM(Target, Redirect, IntendedTarget):
-    # no Source: for calls originating from AdminVM policy is not evaluated
+    # no Source, for calls originating from AdminVM policy is not evaluated
+    # pylint: disable=missing-docstring,unused-argument
     EXACT = '@adminvm'
     def expand(self, *, system_info):
         yield self
@@ -292,18 +301,20 @@ class AdminVM(Target, Redirect, IntendedTarget):
         return self
 
 class AnyVM(Source, Target):
+    # pylint: disable=missing-docstring,unused-argument
     EXACT = '@anyvm'
     def match(self, other, *, system_info, source=None):
         return other != '@adminvm'
     def expand(self, *, system_info):
         for name, domain in system_info['domains'].items():
-            if name != 'dom0':
+            if domain['type'] != 'AdminVM':
                 yield IntendedTarget(name)
             if domain['template_for_dispvms']:
                 yield DispVMTemplate('@dispvm:' + name)
         yield DispVM('@dispvm')
 
 class DefaultVM(Target, IntendedTarget):
+    # pylint: disable=missing-docstring,unused-argument
     EXACT = '@default'
     def expand(self, *, system_info):
         yield from ()
@@ -311,6 +322,7 @@ class DefaultVM(Target, IntendedTarget):
         return self
 
 class TypeVM(Source, Target):
+    # pylint: disable=missing-docstring,unused-argument
     PREFIX = '@type:'
     def match(self, other, *, system_info, source=None):
         return (other in system_info['domains']
@@ -321,6 +333,7 @@ class TypeVM(Source, Target):
                 yield IntendedTarget(name)
 
 class TagVM(Source, Target):
+    # pylint: disable=missing-docstring,unused-argument
     PREFIX = '@tag:'
     def match(self, other, *, system_info, source=None):
         return (other in system_info['domains']
@@ -331,6 +344,7 @@ class TagVM(Source, Target):
                 yield IntendedTarget(name)
 
 class DispVM(Target, Redirect, IntendedTarget):
+    # pylint: disable=missing-docstring,unused-argument
     EXACT = '@dispvm'
     def match(self, other, *, system_info, source=None):
         return self == other
@@ -348,6 +362,7 @@ class DispVM(Target, Redirect, IntendedTarget):
             '@dispvm:' + system_info['domains'][source]['default_dispvm'])
 
 class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
+    # pylint: disable=missing-docstring,unused-argument
     PREFIX = '@dispvm:'
     def match(self, other, *, system_info, source=None):
         if isinstance(other, DispVM):
@@ -368,6 +383,7 @@ class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
         return self
 
 class DispVMTag(Source, Target):
+    # pylint: disable=missing-docstring,unused-argument
     PREFIX = '@dispvm:@tag:'
     def match(self, other, *, system_info, source=None):
         if isinstance(other, DispVM):
@@ -421,6 +437,7 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
 class AllowResolution(AbstractResolution):
+    '''Resolution returned for :py:class:`Rule` with :py:class:`Allow`.'''
     def __init__(self, *args, target, **kwds):
         super().__init__(*args, **kwds)
         #: target domain the service should be connected to
@@ -511,12 +528,27 @@ class AllowResolution(AbstractResolution):
         utils.qubesd_call(dispvm, 'admin.vm.Kill')
 
 class AskResolution(AbstractResolution):
+    '''Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
+
+    This base class is a dummy implementation which behaves as if user always
+    denied the call. The programmer is expected to inherit from this class and
+    overload :py:meth:`execute` to display the question to the user by
+    appropriate means. User should have choice among :py:attr:`targets_for_ask`.
+    If :py:attr:`default_target` is not :py:obj:`None`, that should be the
+    default. Otherwise there should be no default. After querying the user,
+    :py:meth:`handle_user_response` should be called. For negative answers,
+    raising :py:class:`qrexec.exc.AccessDenied` is also enough.
+
+    The child class should be supplied as part of :py:class:`Request`.
+    '''
     def __init__(self, *args, targets_for_ask, default_target, **kwds):
         super().__init__(*args, **kwds)
         assert default_target is None or default_target in targets_for_ask
 
         #: targets for the user to choose from
         self.targets_for_ask = targets_for_ask
+
+        #: default target, or None
         self.default_target = default_target
 
     def handle_user_response(self, response, target):
@@ -530,7 +562,7 @@ class AskResolution(AbstractResolution):
             target (str): target chosen by the user (if reponse==True)
 
         Returns:
-            None
+            AllowResolution: for positive answer
 
         Raises:
             qrexec.exc.AccessDenied: for negative answer
@@ -572,9 +604,14 @@ class Request:
     their respective properties that are relevant to policy.
 
     Args:
-        service (str or None): Service name, or :py:obj:`None` if ``*``.
-        argument (str or None): The argument. Must either be :py:obj:`None` or
-            start with ``'+'``.
+        service (str or None): Service name.
+        argument (str or None): The argument. Must start with ``'+'``.
+        source (str): name of source qube
+        target (str): target designation
+        system_info (dict): as returned from
+            :py:func:`qrexec.utils.system_info()`
+        allow_resolution_type (type): a child of :py:class:`AllowResolution`
+        ask_resolution_type (type): a child of :py:class:`AskResolution`
     '''
 
     def __init__(self, service, argument, source, target, *, system_info,
@@ -606,9 +643,20 @@ class Request:
 #
 
 class ActionType(metaclass=abc.ABCMeta):
+    '''Base class for actions
+
+    Children of this class are types of objects representing action in policy
+    rule (:py:attr:`Rule.action`). Not to be confused with
+    :py:class:`AbstractResolution`, which happens when particular rule is
+    matched to a :py:class:`Request`.
+
+    Keyword arguments to __init__ are taken from parsing params in the rule, so
+    this defines, what params are valid for which action.
+    '''
     def __init__(self, rule):
         #: the rule that holds this action
         self.rule = rule
+        self.target = None
 
     @abc.abstractmethod
     def evaluate(self, request):
@@ -641,6 +689,7 @@ class ActionType(metaclass=abc.ABCMeta):
         return IntendedTarget(self.target or intended_target)
 
 class Deny(ActionType):
+    # pylint: disable=missing-docstring
     def __repr__(self):
         return '<{}>'.format(type(self).__name__)
 
@@ -659,6 +708,7 @@ class Deny(ActionType):
 
 
 class Allow(ActionType):
+    # pylint: disable=missing-docstring
     def __init__(self, *args, target=None, user=None, **kwds):
         super().__init__(*args, **kwds)
         self.target = Redirect(target,
@@ -685,7 +735,7 @@ class Allow(ActionType):
                 'specified by caller or policy'.format(
                     self.rule.filepath, self.rule.lineno))
         if target == '@dispvm':
-            target = target.get_dispvm_template(
+            target = target.get_dispvm_template(  # pylint: disable=no-member
                 self.rule.source, system_info=request.system_info)
             if target is None:
                 raise AccessDenied(
@@ -697,6 +747,7 @@ class Allow(ActionType):
             user=self.user, target=target)
 
 class Ask(ActionType):
+    # pylint: disable=missing-docstring
     def __init__(self, *args, target=None, default_target=None, user=None,
             **kwds):
         super().__init__(*args, **kwds)
@@ -744,11 +795,17 @@ class Action(enum.Enum):
     ask = Ask
 
 class Rule(object):
-    '''A single line of policy file'''
+    '''A single line of policy file
+
+    Avoid instantiating manually, use either :py:meth:`from_line()` or
+    :py:meth:`from_line_service()`.
+    '''
     # pylint: disable=too-many-instance-attributes
 
     def __init__(self, service, argument, source, target, action, params,
             *, policy, filepath, lineno):
+        # pylint: disable=too-many-arguments
+
         #: the parser that this rule belongs to
         self.policy = policy
         #: the file path
@@ -780,7 +837,7 @@ class Rule(object):
                 key, value = param.split('=', maxsplit=1)
             except ValueError:
                 raise PolicySyntaxError(filepath, lineno,
-                    'invalid action parameter syntax: {}'.format(param))
+                    'invalid action parameter syntax: {!r}'.format(param))
             if key in kwds:
                 raise PolicySyntaxError(filepath, lineno,
                     'parameter given twice: {!r}'.format(key))
@@ -800,7 +857,6 @@ class Rule(object):
             raise PolicySyntaxError(filepath, lineno,
                 'allow action for @default rule must specify target= option')
 
-
     def __repr__(self):
         return ('<{} service={!r} argument={!r}'
                 ' source={!r} target={!r} action={!r}>'.format(
@@ -816,7 +872,7 @@ class Rule(object):
         Args:
             line: a single line of actual qrexec policy (not a comment, empty
                 line or ``@include``)
-            pathlib.Path filepath: Path of the file from which this line is
+            filepath (pathlib.Path): Path of the file from which this line is
                 loaded
             lineno: line number from which this line is loaded
 
@@ -835,7 +891,18 @@ class Rule(object):
     @classmethod
     def from_line_service(cls, policy, service, argument, line, *,
             filepath, lineno):
+        '''Load a single line in old format.
 
+        Args:
+            service: the service for which this line applies
+            argument: argument for the service
+            line (str): the line to be parsed
+            filepath (pathlib.Path): the file from which this line was taken
+            lineno (int): the line number
+
+        Raises:
+            PolicySyntaxError: when syntax error is found
+        '''
         try:
             source, target, action, *params = line.split()
         except ValueError:
@@ -1048,10 +1115,11 @@ class AbstractPolicy(AbstractParser):
     def evaluate(self, request):
         '''Evaluate policy
 
-        :raise AccessDenied: when action should be denied unconditionally
+        Returns:
+            AbstractResolution: For allow or ask resolutions.
 
-        :return tuple(rule, considered_targets) - where considered targets is a
-        list of possible targets for 'ask' action (rule.action == Action.ask)
+        Raises:
+            AccessDenied: when action should be denied unconditionally
         '''
 
         rule = self.find_matching_rule(request)

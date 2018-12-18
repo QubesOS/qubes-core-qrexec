@@ -127,12 +127,29 @@ Parsers
    :members:
    :member-order: bysource
 
-.. autoclass:: AbstractPolicyParser
+.. autoclass:: AbstractParser
    :members:
+   :member-order: bysource
+
+.. autoclass:: AbstractPolicy
+   :members:
+   :member-order: bysource
+
+.. autoclass:: AbstractFileParser
+   :members:
+   :member-order: bysource
+
+.. autoclass:: AbstractDirectoryLoader
+   :members:
+   :member-order: bysource
+
+.. autoclass:: FilePolicy
+   :members:
+   :member-order: bysource
 
 Helper functions
 ----------------
 
 .. autofunction:: validate_service_and_argument
-.. autofunction:: verify_filename
+.. autofunction:: filter_filepaths
 .. .. autofunction:: toposort

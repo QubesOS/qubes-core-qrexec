@@ -65,7 +65,11 @@ confidence=
 # --enable=similarities". If you want to run only the classes checker, but have
 # no Warning level messages displayed, use"--disable=all --enable=classes
 # --disable=W"
+#
+
+# abstract-method: https://stackoverflow.com/questions/30884804/pylint-for-half-implemented-abstract-classes
 disable=
+ abstract-method,
  bad-continuation,
  bad-option-value,
  locally-disabled,
@@ -76,7 +80,7 @@ disable=
 # Set the output format. Available formats are text, parseable, colorized, msvs
 # (visual studio) and html. You can also give a reporter class, eg
 # mypackage.mymodule.MyReporterClass.
-output-format=text
+output-format=colorized
 
 # Put messages in a separate file for each module / package specified on the
 # command line instead of printing them on stdout. Reports (if any) will be
@@ -341,7 +345,7 @@ max-branches=12
 max-statements=50
 
 # Maximum number of parents for a class (see R0901).
-max-parents=7
+max-parents=10
 
 # Maximum number of attributes for a class (see R0902).
 max-attributes=7
