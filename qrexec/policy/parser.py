@@ -727,6 +727,8 @@ class Allow(ActionType):
         Raises:
             qrexec.exc.AccessDenied: for invalid requests
         '''
+        assert self.rule.is_match(request)
+
         target = self.actual_target(request.target).verify(
             system_info=request.system_info)
         if target == '@default':
@@ -771,8 +773,8 @@ class Ask(ActionType):
         '''
         assert self.rule.is_match(request)
 
-        if self.rule.action.target is not None:
-            targets_for_ask = [request.target]
+        if self.target is not None:
+            targets_for_ask = [self.target]
         else:
             targets_for_ask = list(self.rule.policy.collect_targets_for_ask(
                 request))
@@ -785,7 +787,7 @@ class Ask(ActionType):
 
         return request.ask_resolution_type(self.rule, request,
             user=self.user, targets_for_ask=targets_for_ask,
-            default_target=self.default_target or request.target)
+            default_target=self.default_target)
 
 @enum.unique
 class Action(enum.Enum):
