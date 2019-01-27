@@ -45,6 +45,7 @@
 #define NOGUI_CMD_PREFIX "nogui:"
 #define NOGUI_CMD_PREFIX_LEN (sizeof(NOGUI_CMD_PREFIX)-1)
 #define VCHAN_BASE_PORT 512
+#define MAX_QREXEC_CMD_LEN 65535UL
 
 /* protocol version */
 enum {

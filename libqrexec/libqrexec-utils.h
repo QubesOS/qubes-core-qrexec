@@ -23,6 +23,7 @@
 #ifndef _LIBQREXEC_UTILS_H
 #define _LIBQREXEC_UTILS_H
 #include <sys/select.h>
+#include <stdbool.h>
 #include <libvchan.h>
 #include <qrexec.h>
 
@@ -36,7 +37,7 @@ struct buffer {
 #define WRITE_STDIN_BUFFERED  1 /* something still in the buffer */
 #define WRITE_STDIN_ERROR     2 /* write error, errno set */
 
-typedef void (do_exec_t)(char *);
+typedef void (do_exec_t)(char *cmdline, const char *user);
 void register_exec_func(do_exec_t *func);
 /*
  * exec() qubes-rpc-multiplexer if *prog* starts with magic "QUBESRPC" keyword,
@@ -56,9 +57,25 @@ int flush_client_data(int fd, struct buffer *buffer);
 int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
 int fork_and_flush_stdin(int fd, struct buffer *buffer);
 
-void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
-        int *stderr_fd);
-void wait_for_vchan_or_argfd(libvchan_t *vchan, int max, fd_set * rdset, fd_set * wrset);
+/**
+ * @param cmdline Null-terminated command to execute.
+ * @param pid On return, holds the PID of the child process.
+ * @param stdin_fd On return, holds a file descriptor connected to the child's
+ * stdin.
+ * @param stdout_fd On return, holds a file descriptor connected to the child's
+ * stdout.
+ * @param stderr_fd On return, holds a file descriptor connected to the child's
+ * stderr.
+ * @param strip_username True if the username needs to be stripped from the
+ * command.  Only the fork server should set this to false.
+ * @return 0 if it spawned (or might have spawned) an external process,
+ * a (positive) errno value otherwise.
+ */
+int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd,
+                              int *stdout_fd, int *stderr_fd,
+                              bool strip_username);
+void wait_for_vchan_or_argfd(libvchan_t *vchan, int max, fd_set *rdset,
+                             fd_set *wrset);
 int read_vchan_all(libvchan_t *vchan, void *data, size_t size);
 int write_vchan_all(libvchan_t *vchan, const void *data, size_t size);
 int read_all(int fd, void *buf, int size);
@@ -78,4 +95,5 @@ static inline size_t max_data_chunk_size(int protocol_version) {
     else
         return MAX_DATA_CHUNK_V3;
 }
+#define ARRAY_SIZE(s) (sizeof(s)/sizeof(s[0]))
 #endif /* _LIBQREXEC_UTILS_H */

@@ -68,6 +68,41 @@ static void set_remote_domain(const char *src_domain_name) {
     }
 }
 
+static void close_stdin_fd(void) {
+    if (local_stdin_fd < 0)
+        return;
+    if (shutdown(local_stdin_fd, SHUT_WR) && errno != ENOTSOCK) {
+        fputs("Cannot shutdown socket\n", stderr);
+        abort();
+    }
+    if (local_stdin_fd != local_stdout_fd) {
+        /* restore flags, as we may have not the only copy of this file descriptor */
+        set_block(local_stdin_fd);
+        if (close(local_stdin_fd)) {
+            fputs("Cannot close socket\n", stderr);
+            abort();
+        }
+    }
+    local_stdin_fd = -1;
+}
+
+static void close_stdout_fd(void) {
+    if (local_stdout_fd < 0)
+        return;
+    if (shutdown(local_stdout_fd, SHUT_RD) && errno != ENOTSOCK) {
+        fputs("Cannot shutdown socket\n", stderr);
+        abort();
+    }
+    if (local_stdout_fd != local_stdin_fd) {
+        set_block(local_stdout_fd);
+        if (close(local_stdout_fd)) {
+            fputs("Cannot close socket\n", stderr);
+            abort();
+        }
+    }
+    local_stdout_fd = -1;
+}
+
 /* initialize data_protocol_version */
 static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
 {
@@ -189,7 +224,7 @@ static void sigchld_handler(int x __attribute__((__unused__)))
 }
 
 /* called from do_fork_exec */
-_Noreturn void do_exec(char *prog)
+static _Noreturn void do_exec(char *prog, const char *username __attribute__((unused)))
 {
     /* avoid calling qubes-rpc-multiplexer through shell */
     exec_qubes_rpc_if_requested(prog, environ);
@@ -203,12 +238,8 @@ _Noreturn void do_exec(char *prog)
 static void do_exit(int code)
 {
     int status;
-    /* restore flags, as we may have not the only copy of this file descriptor
-     */
-    if (local_stdin_fd != -1)
-        set_block(local_stdin_fd);
-    close(local_stdin_fd);
-    close(local_stdout_fd);
+    close_stdin_fd();
+    close_stdout_fd();
     // sever communication lines; wait for child, if any
     // so that qrexec-daemon can count (recursively) spawned processes correctly
     waitpid(-1, &status, 0);
@@ -224,8 +255,8 @@ static void prepare_local_fds(char *cmdline)
         return;
     }
     signal(SIGCHLD, sigchld_handler);
-    do_fork_exec(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
-            NULL);
+    execute_qubes_rpc_command(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
+            NULL, false);
 }
 
 /* ask the daemon to allocate vchan port */
@@ -338,8 +369,7 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
         do_exit(1);
     }
     if (ret == 0) {
-        close(local_stdout_fd);
-        local_stdout_fd = -1;
+        close_stdout_fd();
         if (local_stdin_fd == -1) {
             // if not a remote end of service call, wait for exit status
             if (is_service) {
@@ -360,8 +390,7 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
             //
             // since vchan socket is buffered it doesn't mean all data was
             // received from the agent
-            close(local_stdout_fd);
-            local_stdout_fd = -1;
+            close_stdout_fd();
             if (local_stdin_fd == -1) {
                 // since child does no longer accept data on its stdin, doesn't
                 // make sense to process the data from the daemon
@@ -405,8 +434,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
         switch(flush_client_data(local_stdin_fd, stdin_buf)) {
             case WRITE_STDIN_ERROR:
                 perror("write stdin");
-                close(local_stdin_fd);
-                local_stdin_fd = -1;
+                close_stdin_fd();
                 break;
             case WRITE_STDIN_BUFFERED:
                 return WRITE_STDIN_BUFFERED;
@@ -443,12 +471,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
             if (replace_chars_stdout)
                 do_replace_chars(buf, hdr.len);
             if (hdr.len == 0) {
-                /* restore flags, as we may have not the only copy of this file descriptor
-                */
-                if (local_stdin_fd != -1)
-                    set_block(local_stdin_fd);
-                close(local_stdin_fd);
-                local_stdin_fd = -1;
+                close_stdin_fd();
             } else {
                 switch (write_stdin(local_stdin_fd, buf, hdr.len, stdin_buf)) {
                     case WRITE_STDIN_BUFFERED:
@@ -458,8 +481,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
                         if (errno == EPIPE) {
                             // local process have closed its stdin, handle data in oposite
                             // direction (if any) before exit
-                            close(local_stdin_fd);
-                            local_stdin_fd = -1;
+                            close_stdin_fd();
                         } else {
                             perror("write local stdout");
                             do_exit(1);
@@ -706,6 +728,16 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
     }
 }
 
+static size_t compute_service_length(const char *const remote_cmdline, const char *const prog_name) {
+    const size_t service_length = strlen(remote_cmdline) + 1;
+    if (service_length < 2 || service_length > MAX_QREXEC_CMD_LEN) {
+        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
+        fprintf(stderr, "Bad command: command line too long or empty: length %zu\n", service_length);
+        usage(prog_name);
+    }
+    return service_length;
+}
+
 int main(int argc, char **argv)
 {
     int opt;
@@ -789,7 +821,7 @@ int main(int argc, char **argv)
                 0, /* dom0 */
                 msg_type,
                 connect_existing ? (void*)&svc_params : (void*)remote_cmdline,
-                connect_existing ? sizeof(svc_params) : strlen(remote_cmdline) + 1,
+                connect_existing ? sizeof(svc_params) : compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
                 &data_port);
 
@@ -824,7 +856,7 @@ int main(int argc, char **argv)
                 src_domain_id,
                 msg_type,
                 remote_cmdline,
-                strlen(remote_cmdline) + 1,
+                compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
                 &data_port);
         if (wait_connection_end && connect_existing)

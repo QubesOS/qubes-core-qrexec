@@ -19,22 +19,29 @@
  *
  */
 
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <unistd.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <string.h>
+#include <stddef.h>
+#include <assert.h>
+#include <stdbool.h>
+
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <fcntl.h>
 #include <libvchan.h>
-#include <assert.h>
-#include <limits.h>
 
 #include "qrexec.h"
 #include "libqrexec-utils.h"
@@ -146,6 +153,12 @@ static int handle_just_exec(char *cmdline)
 {
     int fdn, pid;
 
+    char *end_username = strchr(cmdline, ':');
+    if (!end_username) {
+        fprintf(stderr, "No colon in command from dom0\n");
+        return -1;
+    }
+    *end_username++ = '\0';
     switch (pid = fork()) {
         case -1:
             perror("fork");
@@ -153,7 +166,7 @@ static int handle_just_exec(char *cmdline)
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
-            do_exec(cmdline);
+            do_exec(end_username, cmdline);
         default:;
     }
     fprintf(stderr, "executed (nowait) %s pid %d\n", cmdline, pid);
@@ -354,7 +367,7 @@ static int process_child_io(libvchan_t *data_vchan,
     fd_set rdset, wrset;
     int vchan_fd;
     sigset_t selectmask;
-    int child_process_status = child_process_pid ? -1 : 0;
+    int child_process_status = child_process_pid > 0 ? -1 : 0;
     int remote_process_status = -1;
     int ret, max_fd;
     struct timespec zero_timeout = { 0, 0 };
@@ -378,7 +391,7 @@ static int process_child_io(libvchan_t *data_vchan,
     while (1) {
         if (child_exited) {
             int status;
-            if (child_process_pid &&
+            if (child_process_pid > 0 &&
                     waitpid(child_process_pid, &status, WNOHANG) > 0) {
                 if (WIFSIGNALED(status))
                     child_process_status = 128 + WTERMSIG(status);
@@ -590,11 +603,6 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
     pid_t pid;
     int data_protocol_version;
 
-    if (type != MSG_SERVICE_CONNECT) {
-        assert(cmdline != NULL);
-        cmdline[cmdline_len-1] = 0;
-    }
-
     if (buffer_size == 0)
         buffer_size = VCHAN_BUFFER_SIZE;
 
@@ -604,6 +612,18 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
         if (data_vchan)
             libvchan_wait(data_vchan);
     } else {
+        if (cmdline == NULL) {
+            fputs("internal qrexec error: NULL cmdline passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+            abort();
+        } else if (cmdline_len == 0) {
+            fputs("internal qrexec error: zero-length command line passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+            abort();
+        } else if (cmdline_len > MAX_QREXEC_CMD_LEN) {
+            /* This is arbitrary, but it helps reduce the risk of overflows in other code */
+            fprintf(stderr, "Bad command from dom0: command line too long: length %zu\n", cmdline_len);
+            abort();
+        }
+        cmdline[cmdline_len-1] = 0;
         data_vchan = libvchan_client_init(connect_domain, connect_port);
     }
     if (!data_vchan) {
@@ -620,7 +640,8 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
             send_exit_code(data_vchan, handle_just_exec(cmdline));
             break;
         case MSG_EXEC_CMDLINE:
-            do_fork_exec(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd);
+            if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd, !qrexec_is_fork_server) < 0)
+                fputs("failed to spawn process\n", stderr);
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
             child_process_pid = pid;
             exit_code = process_child_io(
@@ -664,8 +685,6 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
             -1, -1, -1, 0);
 
     exit(exit_code);
-    /* suppress warning */
-    return 0;
 }
 
 /* Returns exit code of remote process */
@@ -680,3 +699,10 @@ int handle_data_client(int type, int connect_domain, int connect_port,
             NULL, 0, stdin_fd, stdout_fd, stderr_fd, buffer_size);
     return exit_code;
 }
+
+/* Local Variables: */
+/* mode: c */
+/* indent-tabs-mode: nil */
+/* c-basic-offset: 4 */
+/* coding: utf-8-unix */
+/* End: */

@@ -26,8 +26,10 @@
 #include <sys/un.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <signal.h>
 #include <unistd.h>
+#include <stddef.h>
 #include <errno.h>
 #include <err.h>
 #include <sys/wait.h>
@@ -78,12 +80,7 @@ static int meminfo_write_started = 0;
 
 static void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline);
 
-static _Noreturn void no_colon_in_cmd(void)
-{
-    fprintf(stderr,
-            "cmdline is supposed to be in user:command form\n");
-    exit(1);
-}
+const bool qrexec_is_fork_server = false;
 
 #ifdef HAVE_PAM
 static int pam_conv_callback(int num_msg, const struct pam_message **msg,
@@ -118,7 +115,6 @@ static struct pam_conv conv = {
     NULL
 };
 #endif
-
 /* Start program requested by dom0 in already prepared process
  * (stdin/stdout/stderr already set, etc)
  * Called in two cases:
@@ -136,9 +132,8 @@ static struct pam_conv conv = {
  * If dom0 sends overly long cmd, it will probably crash qrexec-agent (unless
  * process can allocate up to 4GB on both stack and heap), sorry.
  */
-_Noreturn void do_exec(char *cmd)
+_Noreturn void do_exec(char *cmd, const char *user)
 {
-    char *realcmd = strchr(cmd, ':'), *user;
 #ifdef HAVE_PAM
     int retval, status;
     pam_handle_t *pamh=NULL;
@@ -151,14 +146,9 @@ _Noreturn void do_exec(char *cmd)
     char *shell_basename;
 #endif
 
-    if (!realcmd)
-        no_colon_in_cmd();
-    /* mark end of username and move to command */
-    user=strndup(cmd,(size_t)(realcmd-cmd));
-    realcmd++;
     /* ignore "nogui:" prefix in linux agent */
-    if (strncmp(realcmd, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) == 0)
-        realcmd += NOGUI_CMD_PREFIX_LEN;
+    if (strncmp(cmd, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) == 0)
+        cmd += NOGUI_CMD_PREFIX_LEN;
 
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
@@ -258,10 +248,10 @@ _Noreturn void do_exec(char *cmd)
                 warn("chdir(%s)", pw->pw_dir);
 
             /* call QUBESRPC if requested */
-            exec_qubes_rpc_if_requested(realcmd, env);
+            exec_qubes_rpc_if_requested(cmd, env);
 
             /* otherwise exec shell */
-            execle(pw->pw_shell, arg0, "-c", realcmd, (char*)NULL, env);
+            execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
             exit(127);
         default:
             /* parent */
@@ -296,10 +286,10 @@ error:
     exit(1);
 #else
     /* call QUBESRPC if requested */
-    exec_qubes_rpc_if_requested(realcmd, environ);
+    exec_qubes_rpc_if_requested(cmd, environ);
 
     /* otherwise exec shell */
-    execl("/bin/su", "su", "-", user, "-c", realcmd, NULL);
+    execl("/bin/su", "su", "-", user, "-c", cmd, NULL);
     perror("execl");
     exit(1);
 #endif
@@ -380,7 +370,7 @@ static void wake_meminfo_writer(void)
         /* wake meminfo-writer only once */
         return;
 
-    f = fopen(MEMINFO_WRITER_PIDFILE, "r");
+    f = fopen(MEMINFO_WRITER_PIDFILE, "re");
     if (f == NULL) {
         /* no meminfo-writer found, ignoring */
         return;
@@ -407,10 +397,10 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
         char *cmdline, size_t cmdline_len) {
     char *colon;
     char *fork_server_socket_path;
-    int s;
+    int s = -1;
     struct sockaddr_un remote;
     struct qrexec_cmd_info info;
-    if (cmdline_len > (1ULL << 20))
+    if (cmdline_len > MAX_QREXEC_CMD_LEN)
         return -1;
     char *username = malloc(cmdline_len);
     if (!username) {
@@ -420,16 +410,14 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
     memcpy(username, cmdline, cmdline_len);
     colon = strchr(username, ':');
     if (!colon)
-        return -1;
+        goto fail;
     *colon = '\0';
 
     if (asprintf(&fork_server_socket_path, QREXEC_FORK_SERVER_SOCKET, username) < 0) {
         fprintf(stderr, "Memory allocation failed\n");
-        free(username);
-        return -1;
+        goto fail;
     }
 
-    _Static_assert(sizeof(remote.sun_path) > 64, "bad size of sun_path");
     remote.sun_path[sizeof(remote.sun_path) - 1] = '\0';
     remote.sun_family = AF_UNIX;
     strncpy(remote.sun_path, fork_server_socket_path,
@@ -438,16 +426,13 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");
-        free(username);
-        return -1;
+        goto fail;
     }
     size_t len = strlen(remote.sun_path) + sizeof(remote.sun_family);
     if (connect(s, (struct sockaddr *) &remote, (socklen_t)len) == -1) {
         if (errno != ECONNREFUSED && errno != ENOENT)
             perror("connect");
-        close(s);
-        free(username);
-        return -1;
+        goto fail;
     }
 
     memset(&info, 0, sizeof info);
@@ -455,25 +440,25 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
     info.connect_domain = connect_domain;
     info.connect_port = connect_port;
     size_t username_len = strlen(username);
-    assert(username_len < SIZE_MAX);
     assert(cmdline_len <= INT_MAX);
     assert(cmdline_len > username_len);
     info.cmdline_len = (int)(cmdline_len - (username_len + 1));
     if (!write_all(s, &info, sizeof(info))) {
         perror("write");
-        close(s);
-        free(username);
-        return -1;
+        goto fail;
     }
-    free(username);
-    username = NULL;
     if (!write_all(s, colon+1, info.cmdline_len)) {
         perror("write");
-        close(s);
-        return -1;
+        goto fail;
     }
 
+    free(username);
     return s;
+fail:
+    if (s >= 0)
+        close(s);
+    free(username);
+    return -1;
 }
 
 

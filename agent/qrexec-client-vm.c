@@ -31,15 +31,17 @@
 #include "qrexec.h"
 #include "qrexec-agent.h"
 
+const bool qrexec_is_fork_server = false;
+
 _Noreturn void handle_vchan_error(const char *op)
 {
     fprintf(stderr, "Error while vchan %s, exiting\n", op);
     exit(1);
 }
 
-void do_exec(char *const cmd __attribute__((__unused__))) {
+_Noreturn void do_exec(char *cmd __attribute__((unused)), char const* user __attribute__((__unused__))) {
     fprintf(stderr, "BUG: do_exec function shouldn't be called!\n");
-    exit(1);
+    abort();
 }
 
 static int connect_unix_socket(char *path)

@@ -5,7 +5,7 @@ override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
    -D_GNU_SOURCE $(CFLAGS)
 override LDFLAGS += -pie -Wl,-z,relro,-z,now -shared
 
-override SO_VER=2
+override SO_VER=3
 override VCHANLIBS := $(shell pkg-config --libs vchan-$(BACKEND_VMM))
 LIBDIR ?= /usr/lib
 INCLUDEDIR ?= /usr/include
