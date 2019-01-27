@@ -19,6 +19,10 @@
  *
  */
 
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -30,8 +34,13 @@
 #include <sys/wait.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <stddef.h>
 #include <fcntl.h>
 #include <libvchan.h>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <limits.h>
 
@@ -126,7 +135,7 @@ static int handle_just_exec(char *cmdline)
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
-            do_exec(cmdline);
+            do_exec(cmdline, NULL);
         default:;
     }
     fprintf(stderr, "executed (nowait) %s pid %d\n", cmdline, pid);
@@ -500,6 +509,209 @@ static int process_child_io(libvchan_t *data_vchan,
     return child_process_status;
 }
 
+#define QUBES_MAX_SERVICE_NAME_LEN 32ULL
+#define QUBES_MAX_SERVICE_ARG_LEN 32ULL
+#define QUBES_MAX_SERVICE_DESCRIPTOR_LEN \
+    (QUBES_MAX_SERVICE_NAME_LEN + QUBES_MAX_SERVICE_ARG_LEN + 1ULL)
+#define QUBES_SOCKADDR_UN_MAX_PATH_LEN  \
+    (sizeof(struct sockaddr_un) - offsetof(struct sockaddr_un, sun_path))
+
+#define MAKE_STRUCT(x) \
+    x("/usr/local/etc/qubes-rpc/") \
+    x("/etc/qubes-rpc/")
+static const struct Q {
+    const char *const string;
+    size_t const length;
+} paths[] = {
+#define S(z) { .string = z, .length = sizeof(z) - 1 },
+    MAKE_STRUCT(S)
+#undef S
+};
+_Static_assert(sizeof("/etc/qubes-rpc/") == 16, "impossible");
+_Static_assert(sizeof("/usr/local/etc/qubes-rpc/") == 26, "impossible");
+_Static_assert(QUBES_MAX_SERVICE_DESCRIPTOR_LEN == 65,
+        "bad macro definition");
+#define S(z) \
+    _Static_assert(sizeof(z) + QUBES_MAX_SERVICE_DESCRIPTOR_LEN <= QUBES_SOCKADDR_UN_MAX_PATH_LEN, \
+            "Path too long: " #z);
+MAKE_STRUCT(S)
+#undef S
+#undef MAKE_STRUCT
+
+#if QUBES_MAX_SERVICE_DESCRIPTOR_LEN > PTRDIFF_MAX
+#error impossible
+#endif
+
+static char *parse_qrexec_argument_from_commandline(char *cmdline) {
+    if (strncmp(cmdline, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) != 0)
+        return NULL;
+    cmdline += RPC_REQUEST_COMMAND_LEN;
+    if (' ' != *cmdline)
+        abort();
+    return cmdline + 1;
+}
+
+
+static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd) {
+    fprintf(stderr, "%s\n", cmdline);
+    const char *realcmd = parse_qrexec_argument_from_commandline(cmdline);
+    fprintf(stderr, "%s\n", realcmd);
+    if (!realcmd) {
+#if 1
+        return do_fork_exec(cmdline, NULL, pid, stdin_fd, stdout_fd, stderr_fd);
+#else
+        abort();
+#endif
+    }
+    char *remote_domain = strchr(realcmd, ' ');
+    if (!remote_domain) {
+        fputs("Bad command from dom0: no remote domain\n", stderr);
+        abort();
+    }
+    *remote_domain++ = '\0';
+    if (0 && strcmp(remote_domain, "dom0")) {
+	fputs("Rejecting request from domain that is not dom0\n", stderr);
+	abort();
+    }
+    int s = -1;
+    struct sockaddr_un remote = { .sun_family = AF_UNIX };
+    static_assert(sizeof(remote.sun_path) == QUBES_SOCKADDR_UN_MAX_PATH_LEN,
+                   "I screwed up my math");
+    size_t path_length = strlen(realcmd);
+    if (path_length > QUBES_MAX_SERVICE_DESCRIPTOR_LEN) {
+        fputs("Absurdly long command\n", stderr);
+        return -1;
+    }
+    char const *const delimiter = memchr(realcmd, '+', path_length);
+    size_t const service_length = delimiter ?
+        (size_t)(delimiter - realcmd) : path_length;
+    size_t const argument_length = delimiter ?
+        path_length - service_length - 1 : (size_t)-1;
+#define FAIL(msg, err) do { \
+    fputs((msg "\n"), stderr); \
+    errno = (0 ? ((void)(msg), 0) : (err)); \
+    return -1; \
+} while (0)
+
+    if (argument_length + 1 > QUBES_MAX_SERVICE_ARG_LEN + 1) {
+        FAIL("Service argument too long", E2BIG);
+    } else if (0 == service_length) {
+        FAIL("Service path empty", EINVAL);
+    } else if (service_length > QUBES_MAX_SERVICE_NAME_LEN) {
+        FAIL("Service path too long", ENAMETOOLONG);
+    } else if (path_length > QUBES_MAX_SERVICE_DESCRIPTOR_LEN) {
+        assert(false && "impossible");
+        abort();
+    }
+#undef FAIL
+
+    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("socket");
+        return -1;
+    }
+
+    for (int index = 0; index < 2; ++index) {
+        for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); ++i) {
+            size_t const directory_length = paths[i].length;
+            assert(sizeof(remote.sun_path) - directory_length > path_length);
+
+            // The total size of the path (not including NUL terminator).
+            size_t const total_path_length = directory_length + (index ? service_length : path_length);
+            memcpy(remote.sun_path, paths[i].string, directory_length);
+            memcpy(remote.sun_path + directory_length, realcmd, path_length);
+            remote.sun_path[total_path_length] = '\0';
+
+            if (0 == connect(s, (struct sockaddr *) &remote,
+                        (socklen_t)(offsetof(struct sockaddr_un, sun_path) + total_path_length + 1))) {
+                *stdout_fd = *stdin_fd = s, *stderr_fd = -1, *pid = 0;
+                set_nonblock(s);
+                return 0;
+            }
+            switch (errno) {
+            // These cannot happen
+            case EFAULT:       // all of our parameters are in valid memory
+            case EINVAL:       // we passed valid parameters
+            case ENOTSOCK:     // ditto
+            case ENETUNREACH:  // cannot happen for AF_UNIX
+            case EADDRNOTAVAIL:// cannot happen for AF_UNIX
+            case EINPROGRESS:  // this socket is blocking
+            case EBADF:        // `s` was created by a call to `socket()`
+            case EAFNOSUPPORT: // the kernel supports AF_UNIX
+            case EALREADY:     // ditto
+                abort();
+            // These should not happen
+            case EAGAIN:       // ditto
+#if EAGAIN != EWOULDBLOCK
+            case EWOULDBLOCK:  // ditto
+#endif
+                // Probably a misbehaving FUSE filesystem
+                break;
+            case EINTR:
+                // Interrupted by a signal - retry
+                --i; // to retry loop iteration
+                continue;
+            case ENOENT:
+            case EISDIR:
+            case ENOTDIR:
+            case EIO:
+                // These errors could also happen with `execve()`
+                break;
+            case EPROTOTYPE:
+            case ETIMEDOUT:
+                // Socket server problem.  Fail the whole connection.
+                // (We do not want to fall back because the user may have overriden
+                // behavior for security reasons, and because fail-fast is much
+                // easier to debug).
+                goto fail;
+            case EACCES:
+            case EPERM:
+            case ECONNREFUSED: {
+	        if (access(remote.sun_path, X_OK) != 0) {
+                    fprintf(stderr, "cannot execute %s: no execute permission\n", remote.sun_path);
+                    break;
+                }
+                struct stat stat_buf;
+                if (stat(remote.sun_path, &stat_buf) != 0) {
+                    fprintf(stderr, "cannot execute %s: cannot stat\n", remote.sun_path);
+                    break;
+                }
+                if (!S_ISREG(stat_buf.st_mode)) {
+                    fprintf(stderr, "cannot execute %s: not a regular file\n", remote.sun_path);
+                    break;
+                }
+                if ((stat_buf.st_mode & 022)) {
+                    fprintf(stderr, "refusing to execute %s: group- or world- writable\n", remote.sun_path);
+                    break;
+                }
+                if ((stat_buf.st_uid && stat_buf.st_uid != getuid())) {
+                    fprintf(stderr, "refusing to execute %s: neither owned by root or myself\n", remote.sun_path);
+                    break;
+                }
+                // Indicates that this is a regular file
+                char *const arguments[4] __attribute__((unused)) = {
+                    remote.sun_path,
+                    remote.sun_path + directory_length,
+                    delimiter ? remote.sun_path + directory_length + service_length + 1 : NULL,
+                    NULL,
+                };
+                remote_domain[-1] = ' ';
+                fprintf(stderr, "Executing command as normal: '%s'\n", cmdline);
+                close(s);
+                return do_fork_exec(cmdline, NULL, pid, stdin_fd, stdout_fd, stderr_fd);
+            }
+            default:
+                /* Unexpected error */
+                break;
+            }
+        }
+    }
+fail:
+    if (s > 0)
+        close(s);
+    return -1;
+}
+
+
 /* Behaviour depends on type parameter:
  *  MSG_SERVICE_CONNECT - create vchan server, pass the data to/from given FDs
  *    (stdin_fd, stdout_fd, stderr_fd), then return remote process exit code
@@ -552,7 +764,8 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
             send_exit_code(data_vchan, handle_just_exec(cmdline));
             break;
         case MSG_EXEC_CMDLINE:
-            do_fork_exec(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd);
+            if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd) < 0)
+                fputs("failed to spawn process\n", stderr);
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
             child_process_pid = pid;
             exit_code = process_child_io(data_vchan, stdin_fd, stdout_fd, stderr_fd);
@@ -592,8 +805,6 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
             -1, -1, -1, 0);
 
     exit(exit_code);
-    /* suppress warning */
-    return 0;
 }
 
 /* Returns exit code of remote process */
@@ -608,3 +819,10 @@ int handle_data_client(int type, int connect_domain, int connect_port,
             NULL, 0, stdin_fd, stdout_fd, stderr_fd, buffer_size);
     return exit_code;
 }
+
+/* Local Variables: */
+/* mode: c */
+/* indent-tabs-mode: nil */
+/* c-basic-offset: 4 */
+/* coding: utf-8-unix */
+/* End: */

@@ -38,7 +38,7 @@ _Noreturn void handle_vchan_error(const char *op)
     exit(1);
 }
 
-void do_exec(char *const cmd __attribute__((__unused__))) {
+void do_exec(char *const cmd __attribute__((__unused__)), char *const *const argument __attribute__((unused))) {
     fprintf(stderr, "BUG: do_exec function shouldn't be called!\n");
     exit(1);
 }

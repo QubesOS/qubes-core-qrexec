@@ -27,8 +27,10 @@
 #include <sys/un.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <signal.h>
 #include <unistd.h>
+#include <stddef.h>
 #include <errno.h>
 #include <err.h>
 #include <sys/wait.h>
@@ -37,6 +39,9 @@
 #include <pwd.h>
 #include <grp.h>
 #include <sys/stat.h>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <limits.h>
 #ifdef HAVE_PAM
@@ -119,7 +124,6 @@ static struct pam_conv conv = {
     NULL
 };
 #endif
-
 /* Start program requested by dom0 in already prepared process
  * (stdin/stdout/stderr already set, etc)
  * Called in two cases:
@@ -137,7 +141,7 @@ static struct pam_conv conv = {
  * If dom0 sends overly long cmd, it will probably crash qrexec-agent (unless
  * process can allocate up to 4GB on both stack and heap), sorry.
  */
-_Noreturn void do_exec(char *cmd)
+_Noreturn void do_exec(char *cmd, char *const *arguments)
 {
     char *realcmd = strchr(cmd, ':'), *user;
 #ifdef HAVE_PAM
@@ -249,13 +253,9 @@ _Noreturn void do_exec(char *cmd)
         case 0:
             /* child */
 
-            if (setgid (pw->pw_gid))
-                exit(126);
-            if (setuid (pw->pw_uid))
-                exit(126);
             setsid();
             /* This is a copy but don't care to free as we exec later anyway.  */
-            env = pam_getenvlist (pamh);
+            env = pam_getenvlist(pamh);
 
             /* try to enter home dir, but don't abort if it fails */
             retval = chdir(pw->pw_dir);
@@ -263,7 +263,7 @@ _Noreturn void do_exec(char *cmd)
                 warn("chdir(%s)", pw->pw_dir);
 
             /* call QUBESRPC if requested */
-            exec_qubes_rpc_if_requested(realcmd, env);
+            exec_qubes_rpc_if_requested(realcmd, env, arguments);
 
             /* otherwise exec shell */
             execle(pw->pw_shell, arg0, "-c", realcmd, (char*)NULL, env);

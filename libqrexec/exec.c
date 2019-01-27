@@ -19,12 +19,17 @@
  *
  */
 
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
+#include <errno.h>
+
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 
@@ -33,26 +38,32 @@ void register_exec_func(do_exec_t *func) {
     exec_func = func;
 }
 
-void exec_qubes_rpc_if_requested(char *prog, char *const envp[]) {
+void exec_qubes_rpc_if_requested(char *prog, char *const envp[], char *const *const arguments) {
     /* avoid calling qubes-rpc-multiplexer through shell */
     if (strncmp(prog, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) == 0) {
-        char *tok;
+        char *tok, *saveptr;
         char *argv[16]; // right now 6 are used, but allow future extensions
         size_t i = 0;
-
-        tok=strtok(prog, " ");
+        if (arguments) {
+            assert(arguments[0]);
+            assert(arguments[1]);
+            execve(arguments[0], arguments + 1, envp);
+            goto fail;
+        }
+        tok=strtok_r(prog, " ", &saveptr);
         do {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
                 fprintf(stderr, "To many arguments to %s\n", RPC_REQUEST_COMMAND);
                 exit(1);
             }
             argv[i++] = tok;
-        } while ((tok=strtok(NULL, " ")));
+        } while ((tok=strtok_r(NULL, " ", &saveptr)));
         argv[i] = NULL;
         argv[0] = QUBES_RPC_MULTIPLEXER_PATH;
         execve(QUBES_RPC_MULTIPLEXER_PATH, argv, envp);
+fail:
         perror("exec qubes-rpc-multiplexer");
-        exit(1);
+        exit(126);
     }
 }
 
@@ -71,14 +82,21 @@ void fix_fds(int fdin, int fdout, int fderr)
         close(fderr);
 }
 
-void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
-        int *stderr_fd)
+int do_fork_exec(char *cmdline,
+                 char *const *argument,
+                 int *pid,
+                 int *stdin_fd,
+                 int *stdout_fd,
+                 int *stderr_fd)
 {
-    int inpipe[2], outpipe[2], errpipe[2];
-
+    int inpipe[2], outpipe[2], errpipe[2], statuspipe[2], retval;
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0
+#endif
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, inpipe) || 
             socketpair(AF_UNIX, SOCK_STREAM, 0, outpipe) || 
-            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe))) {
+            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe)) ||
+            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, statuspipe)) {
         perror("socketpair");
         exit(1);
     }
@@ -86,16 +104,36 @@ void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
         case -1:
             perror("fork");
             exit(-1);
-        case 0:
+        case 0: {
+            int status;
             if (stderr_fd) {
                 fix_fds(inpipe[0], outpipe[1], errpipe[1]);
             } else
                 fix_fds(inpipe[0], outpipe[1], 2);
 
+            close(statuspipe[0]);
+#if !SOCK_CLOEXEC
+            status = fcntl(statuspipe[1], F_GETFD);
+            fcntl(statuspipe[1], F_SETFD, status | FD_CLOEXEC);
+#endif
             if (exec_func != NULL)
-                exec_func((char*)cmdline);
+                exec_func(cmdline, argument);
+            else
+                abort();
+            status = errno;
+            while (write(statuspipe[1], &status, sizeof status) <= 0) {}
             exit(-1);
-        default:;
+        }
+        default: {
+            close(statuspipe[1]);
+            if (read(statuspipe[0], &retval, sizeof retval) == sizeof retval) {
+                siginfo_t siginfo;
+                memset(&siginfo, 0, sizeof siginfo);
+                waitid(P_PID, *pid, &siginfo, WEXITED); // discard result
+            } else {
+                retval = 0;
+            }
+        }
     }
     close(inpipe[0]);
     close(outpipe[1]);
@@ -105,4 +143,5 @@ void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
         close(errpipe[1]);
         *stderr_fd = errpipe[0];
     }
+    return retval;
 }

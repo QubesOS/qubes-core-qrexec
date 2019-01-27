@@ -36,7 +36,7 @@
 
 extern char **environ;
 
-void do_exec(char *cmd)
+void do_exec(char *cmd, char *const *const argument __attribute__((unused)))
 {
     char *shell;
 
@@ -44,7 +44,7 @@ void do_exec(char *cmd)
     signal(SIGPIPE, SIG_DFL);
 
     /* call QUBESRPC if requested */
-    exec_qubes_rpc_if_requested(cmd, environ);
+    exec_qubes_rpc_if_requested(cmd, environ, NULL);
 
     /* otherwise, pass it to shell */
     shell = getenv("SHELL");

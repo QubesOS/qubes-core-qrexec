@@ -20,6 +20,7 @@
  *
  */
 
+#include <stdbool.h>
 #include <sys/select.h>
 #include <libvchan.h>
 
@@ -33,14 +34,14 @@ struct buffer {
 #define WRITE_STDIN_BUFFERED  1 /* something still in the buffer */
 #define WRITE_STDIN_ERROR     2 /* write error, errno set */
 
-typedef void (do_exec_t)(char *);
+typedef void (do_exec_t)(char *, char *const *const);
 void register_exec_func(do_exec_t *func);
 /*
  * exec() qubes-rpc-multiplexer if *prog* starts with magic "QUBESRPC" keyword,
  * do not return in that case; pass *envp* to execve() as en environment
  * otherwise, return false without any action
  */
-void exec_qubes_rpc_if_requested(char *prog, char *const envp[]);
+void exec_qubes_rpc_if_requested(char *prog, char *const envp[], char *const *const arguments);
 
 void buffer_init(struct buffer *b);
 void buffer_free(struct buffer *b);
@@ -53,8 +54,21 @@ int flush_client_data(int fd, struct buffer *buffer);
 int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
 int fork_and_flush_stdin(int fd, struct buffer *buffer);
 
-void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
-        int *stderr_fd);
+/**
+ * @param cmdline Null-terminated command to execute.
+ * @param argument The argument to pass, or NULL for no argument.
+ * @param pid On return, holds the PID of the child process.
+ * @param stdin_fd On return, holds a file descriptor connected to the child's
+ * stdin.
+ * @param stdout_fd On return, holds a file descriptor connected to the child's
+ * stdout.
+ * @param stderr_fd On return, holds a file descriptor connected to the child's
+ * stderr.
+ * @return 0 if it spawned (or might have spawned) an external process,
+ * a (positive) errno value otherwise.
+ */
+int do_fork_exec(char *cmdline, char *const *argument, int *pid,
+        int *stdin_fd, int *stdout_fd, int *stderr_fd);
 void wait_for_vchan_or_argfd(libvchan_t *vchan, int max, fd_set * rdset, fd_set * wrset);
 int read_vchan_all(libvchan_t *vchan, void *data, size_t size);
 int write_vchan_all(libvchan_t *vchan, const void *data, size_t size);
