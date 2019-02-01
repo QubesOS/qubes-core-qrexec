@@ -360,26 +360,34 @@ void wake_meminfo_writer()
     meminfo_write_started = 1;
 }
 
-int try_fork_server(int type, int connect_domain, int connect_port,
-        char *cmdline, int cmdline_len) {
-    char username[cmdline_len];
+static int try_fork_server(int type, int connect_domain, int connect_port,
+        char *cmdline, size_t cmdline_len) {
     char *colon;
     char *fork_server_socket_path;
-    int s, len;
+    int s;
     struct sockaddr_un remote;
     struct qrexec_cmd_info info;
-
-    strncpy(username, cmdline, cmdline_len);
-    colon = index(username, ':');
+    if (cmdline_len > (1ULL << 20))
+        return -1;
+    char *username = malloc(cmdline_len);
+    if (!username) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return -1;
+    }
+    memcpy(username, cmdline, cmdline_len);
+    colon = strchr(username, ':');
     if (!colon)
         return -1;
     *colon = '\0';
 
     if (asprintf(&fork_server_socket_path, QREXEC_FORK_SERVER_SOCKET, username) < 0) {
         fprintf(stderr, "Memory allocation failed\n");
+        free(username);
         return -1;
     }
 
+    _Static_assert(sizeof(remote.sun_path) > 64, "bad size of sun_path");
+    remote.sun_path[sizeof(remote.sun_path) - 1] = '\0';
     remote.sun_family = AF_UNIX;
     strncpy(remote.sun_path, fork_server_socket_path,
             sizeof(remote.sun_path) - 1);
@@ -387,25 +395,35 @@ int try_fork_server(int type, int connect_domain, int connect_port,
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");
+        free(username);
         return -1;
     }
-    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
-    if (connect(s, (struct sockaddr *) &remote, len) == -1) {
+    size_t len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+    if (connect(s, (struct sockaddr *) &remote, (socklen_t)len) == -1) {
         if (errno != ECONNREFUSED && errno != ENOENT)
             perror("connect");
         close(s);
+        free(username);
         return -1;
     }
 
+    memset(&info, 0, sizeof info);
     info.type = type;
     info.connect_domain = connect_domain;
     info.connect_port = connect_port;
-    info.cmdline_len = cmdline_len-(strlen(username)+1);
+    size_t username_len = strlen(username);
+    assert(username_len < SIZE_MAX);
+    assert(cmdline_len <= INT_MAX);
+    assert(cmdline_len > username_len);
+    info.cmdline_len = (int)(cmdline_len - (username_len + 1));
     if (!write_all(s, &info, sizeof(info))) {
         perror("write");
         close(s);
+        free(username);
         return -1;
     }
+    free(username);
+    username = NULL;
     if (!write_all(s, colon+1, info.cmdline_len)) {
         perror("write");
         close(s);
@@ -416,7 +434,7 @@ int try_fork_server(int type, int connect_domain, int connect_port,
 }
 
 
-void register_vchan_connection(pid_t pid, int fd, int domain, int port)
+static void register_vchan_connection(pid_t pid, int fd, int domain, int port)
 {
     int i;
 
@@ -441,7 +459,7 @@ void register_vchan_connection(pid_t pid, int fd, int domain, int port)
  *  0  - config not found
  *  -1 - other error
  */
-int load_service_config(const char *service_name, int *wait_for_session) {
+static int load_service_config(const char *service_name, int *wait_for_session) {
     char filename[256];
     char config[MAX_CONFIG_SIZE];
     char *config_iter = config;
@@ -495,8 +513,8 @@ int load_service_config(const char *service_name, int *wait_for_session) {
  *  only after session is started)
  *  - 0 - waiting is not needed, caller may proceed with request immediately
  */
-int wait_for_session_maybe(char *cmdline) {
-    char *realcmd = index(cmdline, ':');
+static int wait_for_session_maybe(char *cmdline) {
+    char *realcmd = strchr(cmdline, ':');
     char *user, *service_name, *source_domain, *service_argument;
     int stdin_pipe[2];
     int wait_for_session = 0;
@@ -522,7 +540,7 @@ int wait_for_session_maybe(char *cmdline) {
     realcmd += RPC_REQUEST_COMMAND_LEN+1;
     /* now realcmd contains service name (possibly with argument after '+'
      * char) and source domain name, after space */
-    source_domain = index(realcmd, ' ');
+    source_domain = strchr(realcmd, ' ');
     if (!source_domain) {
         /* qrexec-rpc-multiplexer will properly report this */
         free(user);
@@ -535,7 +553,7 @@ int wait_for_session_maybe(char *cmdline) {
     switch (load_service_config(service_name, &wait_for_session)) {
         case 0:
             /* no config for specific argument, try for bare service name */
-            service_argument = index(service_name, '+');
+            service_argument = strchr(service_name, '+');
             if (!service_argument) {
                 /* there was no argument, so no config at all - do not wait for
                  * session */
@@ -609,13 +627,17 @@ int wait_for_session_maybe(char *cmdline) {
 
 
 /* hdr parameter is received from dom0, so it is trusted */
-void handle_server_exec_request_init(struct msg_header *hdr)
+static void handle_server_exec_request_init(struct msg_header *hdr)
 {
     struct exec_params params;
     int buf_len = hdr->len-sizeof(params);
-    char buf[buf_len];
+    char *buf = malloc(buf_len);
+    if (!buf) abort();
 
-    assert(hdr->len >= sizeof(params));
+#if defined buf || defined len || defined sizeof || !defined assert || defined params
+#error bug
+#endif
+    assert((hdr->len >= sizeof params));
 
     if (libvchan_recv(ctrl_vchan, &params, sizeof(params)) < 0)
         handle_vchan_error("read exec params");
@@ -646,10 +668,10 @@ void handle_server_exec_request_init(struct msg_header *hdr)
     handle_server_exec_request_do(hdr->type, params.connect_domain, params.connect_port, buf);
 }
 
-void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline) {
+static void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline) {
     int client_fd;
     pid_t child_agent;
-    int cmdline_len = strlen(cmdline) + 1; // size of cmdline, including \0 at the end
+    size_t cmdline_len = strlen(cmdline) + 1; // size of cmdline, including \0 at the end
     struct exec_params params = {
         .connect_domain = connect_domain,
         .connect_port = connect_port,
@@ -697,7 +719,7 @@ void handle_server_exec_request_do(int type, int connect_domain, int connect_por
             params.connect_domain, params.connect_port);
 }
 
-void handle_service_refused(struct msg_header *hdr)
+static void handle_service_refused(struct msg_header *hdr)
 {
     struct service_params params;
     int socket_fd;
@@ -716,7 +738,7 @@ void handle_service_refused(struct msg_header *hdr)
         fprintf(stderr, "Received REFUSED for unknown service request '%s'\n", params.ident);
 }
 
-void handle_server_cmd()
+static void handle_server_cmd(void)
 {
     struct msg_header s_hdr;
 
@@ -743,15 +765,15 @@ void handle_server_cmd()
     }
 }
 
-volatile int child_exited;
+static volatile sig_atomic_t child_exited;
 
-void sigchld_handler(int x __attribute__((__unused__)))
+static void sigchld_handler(int x __attribute__((__unused__)))
 {
     child_exited = 1;
     signal(SIGCHLD, sigchld_handler);
 }
 
-int find_connection(int pid)
+static int find_connection(int pid)
 {
     int i;
     for (i = 0; i < MAX_FDS; i++)
@@ -760,7 +782,7 @@ int find_connection(int pid)
     return -1;
 }
 
-void release_connection(int id) {
+static void release_connection(int id) {
     struct msg_header hdr;
     struct exec_params params;
 
@@ -775,7 +797,7 @@ void release_connection(int id) {
     connection_info[id].pid = 0;
 }
 
-void reap_children()
+static void reap_children(void)
 {
     int status;
     int pid;
@@ -804,7 +826,7 @@ void reap_children()
     child_exited = 0;
 }
 
-int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
+static int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
 {
     int max = -1;
     int i;
@@ -825,11 +847,11 @@ int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
     return max;
 }
 
-void handle_trigger_io()
+static void handle_trigger_io()
 {
     struct msg_header hdr;
     struct trigger_service_params params;
-    int ret;
+    ssize_t ret;
     int client_fd;
 
     client_fd = do_accept(trigger_fd);
@@ -852,8 +874,9 @@ void handle_trigger_io()
      * later (when dom0 accepts the request) */
 }
 
-void handle_terminated_fork_client(fd_set *rdset) {
-    int i, ret;
+static void handle_terminated_fork_client(fd_set *rdset) {
+    int i;
+    ssize_t ret;
     char buf[2];
 
     for (i = 0; i < MAX_FDS; i++) {
@@ -864,7 +887,7 @@ void handle_terminated_fork_client(fd_set *rdset) {
                 close(connection_info[i].fd);
                 release_connection(i);
             } else {
-                fprintf(stderr, "Unexpected read on fork-server connection: %d(%s)\n", ret, strerror(errno));
+                fprintf(stderr, "Unexpected read on fork-server connection: %zd(%s)\n", ret, strerror(errno));
                 close(connection_info[i].fd);
                 release_connection(i);
             }
@@ -872,7 +895,7 @@ void handle_terminated_fork_client(fd_set *rdset) {
     }
 }
 
-int main()
+int main(int _argc __attribute__((unused)), char **_argv __attribute__((unused)))
 {
     fd_set rdset, wrset;
     int max;
