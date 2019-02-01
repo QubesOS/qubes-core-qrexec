@@ -52,6 +52,22 @@ int child_exited = 0;
 
 extern char **environ;
 
+static char *xstrdup(const char *arg) {
+    char *retval = strdup(arg);
+    if (!retval) {
+        fputs("Out of memory in xstrdup()\n", stderr);
+        abort();
+    }
+    return retval;
+}
+
+static void set_remote_domain(const char *src_domain_name) {
+    if (setenv("QREXEC_REMOTE_DOMAIN", src_domain_name, 1)) {
+        fputs("Cannot set QREXEC_REMOTE_DOMAIN\n", stderr);
+        abort();
+    }
+}
+
 /* initialize data_protocol_version */
 static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
 {
@@ -584,7 +600,7 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
     }
 }
 
-static void usage(char *name)
+_Noreturn static void usage(const char *const name)
 {
     fprintf(stderr,
             "usage: %s [-w timeout] [-W] [-t] [-T] -d domain_name ["
@@ -627,12 +643,16 @@ static void parse_connect(char *str, char **request_id,
                 *src_domain_id = atoi(token);
                 break;
             default:
-                fprintf(stderr, "Invalid -c parameter (should be: \"-c request_id,src_domain_name,src_domain_id\")\n");
-                exit(1);
+                goto bad_c_param;
         }
         token = strtok(NULL, separators);
         i++;
     }
+    if (i == 3)
+        return;
+bad_c_param:
+    fprintf(stderr, "Invalid -c parameter (should be: \"-c request_id,src_domain_name,src_domain_id\")\n");
+    exit(1);
 }
 
 static void sigalrm_handler(int x __attribute__((__unused__)))
@@ -710,10 +730,10 @@ int main(int argc, char **argv)
     while ((opt = getopt(argc, argv, "d:l:ec:tTw:W")) != -1) {
         switch (opt) {
             case 'd':
-                domname = strdup(optarg);
+                domname = xstrdup(optarg);
                 break;
             case 'l':
-                local_cmdline = strdup(optarg);
+                local_cmdline = xstrdup(optarg);
                 break;
             case 'e':
                 just_exec = 1;
@@ -750,23 +770,20 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
-    if ((strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) &&
-            !connect_existing) {
-        fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
-        usage(argv[0]);
-    }
-
     if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
         if (connect_existing) {
             msg_type = MSG_SERVICE_CONNECT;
             strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
             svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
-        } else if (just_exec)
-            msg_type = MSG_JUST_EXEC;
-        else
-            msg_type = MSG_EXEC_CMDLINE;
-        assert(src_domain_name);
-        setenv("QREXEC_REMOTE_DOMAIN", src_domain_name, 1);
+        } else {
+            fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
+            usage(argv[0]);
+        }
+        if (src_domain_name == NULL) {
+            fputs("internal error: src_domain_name should not be NULL here\n", stderr);
+            abort();
+        }
+        set_remote_domain(src_domain_name);
         s = connect_unix_socket(src_domain_name);
         negotiate_connection_params(s,
                 0, /* dom0 */
@@ -801,10 +818,7 @@ int main(int argc, char **argv)
             do_exit(1);
         select_loop(data_vchan, data_protocol_version);
     } else {
-        if (just_exec)
-            msg_type = MSG_JUST_EXEC;
-        else
-            msg_type = MSG_EXEC_CMDLINE;
+        msg_type = just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE;
         s = connect_unix_socket(domname);
         negotiate_connection_params(s,
                 src_domain_id,
@@ -819,7 +833,7 @@ int main(int argc, char **argv)
             wait_connection_end = s;
         else
             close(s);
-        setenv("QREXEC_REMOTE_DOMAIN", domname, 1);
+        set_remote_domain(domname);
         prepare_local_fds(local_cmdline);
         if (connect_existing) {
             s = connect_unix_socket(src_domain_name);

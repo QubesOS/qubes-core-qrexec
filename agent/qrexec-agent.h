@@ -19,6 +19,9 @@
  *
  */
 
+#ifndef QREXEC_AGENT_H
+#define QREXEC_AGENT_H
+
 #define QREXEC_FORK_SERVER_SOCKET "/var/run/qubes/qrexec-server.%s.sock"
 
 // directory for services configuration (for example 'wait-for-session' flag)
@@ -28,9 +31,9 @@
 
 int handle_handshake(libvchan_t *ctrl);
 void handle_vchan_error(const char *op);
-void do_exec(char *cmd);
+_Noreturn void do_exec(char *cmd);
 /* call before fork() for service handling process (either end) */
-void prepare_child_env();
+void prepare_child_env(void);
 
 // whether qrexec-client should replace problematic bytes with _ before printing the output
 extern int replace_chars_stdout;
@@ -38,7 +41,7 @@ extern int replace_chars_stderr;
 
 pid_t handle_new_process(int type,
         int connect_domain, int connect_port,
-        char *cmdline, int cmdline_len);
+        char *cmdline, size_t cmdline_len);
 int handle_data_client(int type,
         int connect_domain, int connect_port,
         int stdin_fd, int stdout_fd, int stderr_fd,
@@ -50,5 +53,7 @@ struct qrexec_cmd_info {
 	int connect_domain;
 	int connect_port;
 	int cmdline_len;
-	char cmdline[0];
+	char cmdline[];
 };
+
+#endif // defined QREXEC_AGENT_H

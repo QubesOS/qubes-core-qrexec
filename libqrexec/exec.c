@@ -30,24 +30,26 @@
 
 static do_exec_t *exec_func = NULL;
 void register_exec_func(do_exec_t *func) {
+    if (exec_func != NULL)
+        abort();
     exec_func = func;
 }
 
 void exec_qubes_rpc_if_requested(char *prog, char *const envp[]) {
     /* avoid calling qubes-rpc-multiplexer through shell */
     if (strncmp(prog, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) == 0) {
-        char *tok;
+        char *tok, *savetok;
         char *argv[16]; // right now 6 are used, but allow future extensions
         size_t i = 0;
 
-        tok=strtok(prog, " ");
+        tok=strtok_r(prog, " ", &savetok);
         do {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
                 fprintf(stderr, "To many arguments to %s\n", RPC_REQUEST_COMMAND);
                 exit(1);
             }
             argv[i++] = tok;
-        } while ((tok=strtok(NULL, " ")));
+        } while ((tok=strtok_r(NULL, " ", &savetok)));
         argv[i] = NULL;
         argv[0] = QUBES_RPC_MULTIPLEXER_PATH;
         execve(QUBES_RPC_MULTIPLEXER_PATH, argv, envp);
@@ -106,3 +108,4 @@ void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
         *stderr_fd = errpipe[0];
     }
 }
+// vim: set sw=4 ts=4 sts=4 et:

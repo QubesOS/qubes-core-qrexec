@@ -35,6 +35,8 @@ void perror_wrapper(const char * msg)
 void set_nonblock(int fd)
 {
     int fl = fcntl(fd, F_GETFL, 0);
+    if (-1 == fl && EBADF == errno)
+        abort();
     if (fl & O_NONBLOCK)
         return;
     fcntl(fd, F_SETFL, fl | O_NONBLOCK);

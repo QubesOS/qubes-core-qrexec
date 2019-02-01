@@ -34,6 +34,8 @@
 #include <fcntl.h>
 #include <libvchan.h>
 #include <assert.h>
+#include <limits.h>
+
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 #include "qrexec-agent.h"
@@ -86,8 +88,10 @@ void prepare_child_env() {
 
     signal(SIGCHLD, sigchld_handler);
     signal(SIGUSR1, sigusr1_handler);
-    snprintf(pid_s, sizeof(pid_s), "%d", getpid());
-    setenv("QREXEC_AGENT_PID", pid_s, 1);
+    int res = snprintf(pid_s, sizeof(pid_s), "%d", getpid());
+    if (res < 0) abort();
+    if (res >= (int)sizeof(pid_s)) abort();
+    if (setenv("QREXEC_AGENT_PID", pid_s, 1)) abort();
 }
 
 int handle_handshake(libvchan_t *ctrl)
@@ -138,7 +142,7 @@ int handle_handshake(libvchan_t *ctrl)
 }
 
 
-int handle_just_exec(char *cmdline)
+static int handle_just_exec(char *cmdline)
 {
     int fdn, pid;
 
@@ -150,15 +154,13 @@ int handle_just_exec(char *cmdline)
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
             do_exec(cmdline);
-            perror("execl");
-            exit(1);
         default:;
     }
     fprintf(stderr, "executed (nowait) %s pid %d\n", cmdline, pid);
     return 0;
 }
 
-void send_exit_code(libvchan_t *data_vchan, int status)
+static void send_exit_code(libvchan_t *data_vchan, int status)
 {
     struct msg_header hdr;
     hdr.type = MSG_DATA_EXIT_CODE;
@@ -177,7 +179,7 @@ void send_exit_code(libvchan_t *data_vchan, int status)
  *  1 - some data processed, call it again when buffer space and more data
  *      available
  */
-int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
+static int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
 {
     const size_t max_len = max_data_chunk_size(data_protocol_version);
     char *buf;
@@ -191,6 +193,7 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_vers
         return -1;
     }
 
+    static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
     hdr.type = msg_type;
     while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
         len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
@@ -203,7 +206,7 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_vers
             /* otherwise keep rc = -1 */
             goto out;
         }
-        hdr.len = len;
+        hdr.len = (uint32_t)len;
         if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0)
             goto out;
 
@@ -237,7 +240,7 @@ out:
  *      available
  */
 
-int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
+static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
         struct buffer *stdin_buf, int data_protocol_version)
 {
     struct msg_header hdr;
@@ -343,14 +346,14 @@ out:
     return rc;
 }
 
-int process_child_io(libvchan_t *data_vchan,
+static int process_child_io(libvchan_t *data_vchan,
         int stdin_fd, int stdout_fd, int stderr_fd,
         int data_protocol_version)
 {
     fd_set rdset, wrset;
     int vchan_fd;
     sigset_t selectmask;
-    int child_process_status = -1;
+    int child_process_status = child_process_pid ? -1 : 0;
     int remote_process_status = -1;
     int ret, max_fd;
     struct timespec zero_timeout = { 0, 0 };
@@ -559,8 +562,8 @@ int process_child_io(libvchan_t *data_vchan,
  *  buffer_size is about vchan buffer allocated (only for vchan server cases),
  *  use 0 to use built-in default (64k); needs to be power of 2
  */
-int handle_new_process_common(int type, int connect_domain, int connect_port,
-                char *cmdline, int cmdline_len, /* MSG_JUST_EXEC and MSG_EXEC_CMDLINE */
+static int handle_new_process_common(int type, int connect_domain, int connect_port,
+                char *cmdline, size_t cmdline_len, /* MSG_JUST_EXEC and MSG_EXEC_CMDLINE */
                 int stdin_fd, int stdout_fd, int stderr_fd /* MSG_SERVICE_CONNECT */,
                 int buffer_size)
 {
@@ -621,7 +624,7 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
 
 /* Returns PID of data processing process */
 pid_t handle_new_process(int type, int connect_domain, int connect_port,
-        char *cmdline, int cmdline_len)
+        char *cmdline, size_t cmdline_len)
 {
     int exit_code;
     pid_t pid;
