@@ -63,8 +63,10 @@ void prepare_child_env() {
 
     signal(SIGCHLD, sigchld_handler);
     signal(SIGUSR1, sigusr1_handler);
-    snprintf(pid_s, sizeof(pid_s), "%d", getpid());
-    setenv("QREXEC_AGENT_PID", pid_s, 1);
+    int res = snprintf(pid_s, sizeof(pid_s), "%d", getpid());
+    if (res < 0) abort();
+    if (res >= (int)sizeof(pid_s)) abort();
+    if (setenv("QREXEC_AGENT_PID", pid_s, 1)) abort();
 }
 
 int handle_handshake(libvchan_t *ctrl)
