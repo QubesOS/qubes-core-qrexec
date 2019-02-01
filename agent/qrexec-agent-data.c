@@ -45,7 +45,7 @@
 #define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
 
 static volatile int child_exited;
-static volatile int stdio_socket_requested;
+static volatile sig_atomic_t stdio_socket_requested;
 int stdout_msg_type = MSG_DATA_STDOUT;
 pid_t child_process_pid;
 int remote_process_status = 0;
@@ -215,7 +215,8 @@ static int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protoc
 
         if (len == 0) {
             /* restore flags */
-            set_block(fd);
+            if (stdio_socket_requested < 2)
+                set_block(fd);
             if (shutdown(fd, SHUT_RD) < 0) {
                 if (errno == ENOTSOCK)
                     close(fd);
@@ -366,8 +367,12 @@ static int process_child_io(libvchan_t *data_vchan,
     sigemptyset(&selectmask);
 
     set_nonblock(stdin_fd);
-    set_nonblock(stdout_fd);
-    set_nonblock(stderr_fd);
+    if (stdout_fd != stdin_fd)
+        set_nonblock(stdout_fd);
+    else if ((stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3)) < 0)
+        abort(); // not worth handling running out of file descriptors
+    if (stderr_fd >= 0)
+        set_nonblock(stderr_fd);
 
     buffer_init(&stdin_buf);
     while (1) {
@@ -410,11 +415,24 @@ static int process_child_io(libvchan_t *data_vchan,
             break;
         }
         /* child signaled desire to use single socket for both stdin and stdout */
-        if (stdio_socket_requested) {
-            if (stdout_fd != -1 && stdout_fd != stdin_fd)
-                close(stdout_fd);
-            stdout_fd = stdin_fd;
-            stdio_socket_requested = 0;
+        if (stdio_socket_requested == 1) {
+            if (stdout_fd != -1) {
+                do
+                    errno = 0;
+                while (dup3(stdin_fd, stdout_fd, O_CLOEXEC) &&
+                       (errno == EINTR || errno == EBUSY));
+                // other errors are fatal
+                if (errno) {
+                    fputs("Fatal error from dup3()\n", stderr);
+                    abort();
+                }
+            } else {
+                stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3);
+                // all errors are fatal
+                if (stdout_fd < 3)
+                    abort();
+            }
+            stdio_socket_requested = 2;
         }
         /* otherwise handle the events */
 

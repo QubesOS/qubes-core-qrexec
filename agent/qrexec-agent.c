@@ -19,7 +19,6 @@
  *
  */
 
-#define _GNU_SOURCE
 #define HAVE_PAM
 
 #include <sys/select.h>
