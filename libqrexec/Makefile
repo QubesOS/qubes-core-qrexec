@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS+=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC `pkg-config --cflags vchan-$(BACKEND_VMM)`
+override CFLAGS:=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC `pkg-config --cflags vchan-$(BACKEND_VMM)`$(CFLAGS)
 COMMONIOALL=ioall.o
 SO_VER=2
 LDFLAGS+=-shared
@@ -22,9 +22,9 @@ clean:
 
 install:
 	mkdir -p $(DESTDIR)$(LIBDIR)
-	cp libqrexec-utils.so.$(SO_VER) $(DESTDIR)$(LIBDIR)
-	ln -s libqrexec-utils.so.$(SO_VER) $(DESTDIR)$(LIBDIR)/libqrexec-utils.so
+	install libqrexec-utils.so.$(SO_VER) $(DESTDIR)$(LIBDIR)
+	ln -sf libqrexec-utils.so.$(SO_VER) $(DESTDIR)$(LIBDIR)/libqrexec-utils.so
 	mkdir -p $(DESTDIR)$(INCLUDEDIR)
-	cp libqrexec-utils.h $(DESTDIR)$(INCLUDEDIR)
-	cp qrexec.h $(DESTDIR)$(INCLUDEDIR)
+	install -m 0644 libqrexec-utils.h $(DESTDIR)$(INCLUDEDIR)
+	install -m 0644 qrexec.h $(DESTDIR)$(INCLUDEDIR)
 
