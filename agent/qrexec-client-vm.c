@@ -32,20 +32,21 @@
 #include "qrexec.h"
 #include "qrexec-agent.h"
 
-void handle_vchan_error(const char *op)
+_Noreturn void handle_vchan_error(const char *op)
 {
     fprintf(stderr, "Error while vchan %s, exiting\n", op);
     exit(1);
 }
 
-void do_exec(char *cmd __attribute__((__unused__))) {
+void do_exec(char *const cmd __attribute__((__unused__))) {
     fprintf(stderr, "BUG: do_exec function shouldn't be called!\n");
     exit(1);
 }
 
-int connect_unix_socket(char *path)
+static int connect_unix_socket(char *path)
 {
-    int s, len;
+    int s;
+    size_t len;
     struct sockaddr_un remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -57,14 +58,14 @@ int connect_unix_socket(char *path)
     strncpy(remote.sun_path, path,
             sizeof(remote.sun_path) - 1);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
-    if (connect(s, (struct sockaddr *) &remote, len) == -1) {
+    if (connect(s, (struct sockaddr *) &remote, (socklen_t)len) == -1) {
         perror("connect");
         exit(1);
     }
     return s;
 }
 
-char *get_program_name(char *prog)
+static char *get_program_name(char *prog)
 {
     char *basename = rindex(prog, '/');
     if (basename)
@@ -76,7 +77,7 @@ char *get_program_name(char *prog)
 /* Target specification with keyword have changed from $... to @... . Convert
  * the argument appropriately, to avoid breaking user tools.
  */
-void convert_target_name_keyword(char *target)
+static void convert_target_name_keyword(char *target)
 {
     size_t i;
     size_t len = strlen(target);
@@ -86,12 +87,12 @@ void convert_target_name_keyword(char *target)
             target[i] = '@';
 }
 
-struct option longopts[] = {
+static struct option longopts[] = {
     { "buffer-size", required_argument, 0,  'b' },
     { NULL, 0, 0, 0},
 };
 
-_Noreturn void usage(const char *argv0) {
+_Noreturn static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [--buffer-size=BUFFER_SIZE] target_vmname program_ident [local_program [local program arguments]]\n",
             argv0);
@@ -104,7 +105,8 @@ int main(int argc, char **argv)
     int trigger_fd;
     struct trigger_service_params params;
     struct exec_params exec_params;
-    int ret, i;
+    ssize_t ret;
+    int i;
     int start_local_process = 0;
     char *abs_exec_path;
     pid_t child_pid = 0;
@@ -135,7 +137,8 @@ int main(int argc, char **argv)
     trigger_fd = connect_unix_socket(QREXEC_AGENT_TRIGGER_PATH);
 
     memset(&params, 0, sizeof(params));
-    strncpy(params.service_name, argv[optind + 1], sizeof(params.service_name) - 1);
+    strncpy(params.service_name, argv[optind + 1],
+            sizeof(params.service_name) - 1);
 
     convert_target_name_keyword(argv[optind]);
     strncpy(params.target_domain, argv[optind],
@@ -220,5 +223,5 @@ int main(int argc, char **argv)
         }
     }
 
-    return ret;
+    return (int)ret;
 }

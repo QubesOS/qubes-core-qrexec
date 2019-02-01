@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <stddef.h>
 #include "qrexec.h"
 #include <libvchan.h>
 #include "libqrexec-utils.h"
@@ -55,13 +56,13 @@ void do_exec(char *cmd)
     exit(1);
 }
 
-void handle_vchan_error(const char *op)
+_Noreturn void handle_vchan_error(const char *op)
 {
     fprintf(stderr, "Error while vchan %s, exiting\n", op);
     exit(1);
 }
 
-void handle_single_command(int fd, struct qrexec_cmd_info *info) {
+static void handle_single_command(int fd, struct qrexec_cmd_info *info) {
     char cmdline[info->cmdline_len+1];
 
     if (!read_all(fd, cmdline, info->cmdline_len))

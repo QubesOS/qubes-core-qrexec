@@ -166,7 +166,7 @@ static void sigchld_handler(int x __attribute__((__unused__)))
 }
 
 /* called from do_fork_exec */
-_Noreturn void do_exec(char *prog)
+_Noreturn void do_exec(char *prog, char *argument)
 {
     /* avoid calling qubes-rpc-multiplexer through shell */
     exec_qubes_rpc_if_requested(prog, environ);
@@ -201,7 +201,7 @@ static void prepare_local_fds(char *cmdline)
         return;
     }
     signal(SIGCHLD, sigchld_handler);
-    do_fork_exec(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
+    do_fork_exec(cmdline, NULL, &local_pid, &local_stdin_fd, &local_stdout_fd,
             NULL);
 }
 

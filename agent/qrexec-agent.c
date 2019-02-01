@@ -38,6 +38,7 @@
 #include <grp.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <limits.h>
 #ifdef HAVE_PAM
 #include <security/pam_appl.h>
 #endif
@@ -59,27 +60,26 @@ struct _waiting_request {
     int type;
     int connect_domain;
     int connect_port;
+    int padding;
     char *cmdline;
 };
 
-int max_process_fd = -1;
-
 /*  */
-struct _connection_info connection_info[MAX_FDS];
+static struct _connection_info connection_info[MAX_FDS];
 
-struct _waiting_request requests_waiting_for_session[MAX_FDS];
+static struct _waiting_request requests_waiting_for_session[MAX_FDS];
 
-libvchan_t *ctrl_vchan;
+static libvchan_t *ctrl_vchan;
 
-pid_t wait_for_session_pid = -1;
+static pid_t wait_for_session_pid = -1;
 
-int trigger_fd;
+static int trigger_fd;
 
-int meminfo_write_started = 0;
+static int meminfo_write_started = 0;
 
-void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline);
+static void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline);
 
-void no_colon_in_cmd()
+static _Noreturn void no_colon_in_cmd(void)
 {
     fprintf(stderr,
             "cmdline is supposed to be in user:command form\n");
@@ -87,12 +87,16 @@ void no_colon_in_cmd()
 }
 
 #ifdef HAVE_PAM
-int pam_conv_callback(int num_msg, const struct pam_message **msg,
+static int pam_conv_callback(int num_msg, const struct pam_message **msg,
         struct pam_response **resp, void *appdata_ptr __attribute__((__unused__)))
 {
+#if INT_MAX > SIZE_MAX
+    assert(num_msg <= (int)SIZE_MAX);
+#endif
+    assert(num_msg >= 0);
     int i;
     struct pam_response *resp_array =
-        calloc(sizeof(struct pam_response), num_msg);
+        calloc(sizeof(struct pam_response), (size_t)num_msg);
 
     if (resp_array == NULL)
         return PAM_BUF_ERR;
@@ -133,9 +137,9 @@ static struct pam_conv conv = {
  * If dom0 sends overly long cmd, it will probably crash qrexec-agent (unless
  * process can allocate up to 4GB on both stack and heap), sorry.
  */
-void do_exec(char *cmd)
+_Noreturn void do_exec(char *cmd)
 {
-    char *realcmd = index(cmd, ':'), *user;
+    char *realcmd = strchr(cmd, ':'), *user;
 #ifdef HAVE_PAM
     int retval, status;
     pam_handle_t *pamh=NULL;
@@ -151,7 +155,7 @@ void do_exec(char *cmd)
     if (!realcmd)
         no_colon_in_cmd();
     /* mark end of username and move to command */
-    user=strndup(cmd,realcmd-cmd);
+    user=strndup(cmd,(size_t)(realcmd-cmd));
     realcmd++;
     /* ignore "nogui:" prefix in linux agent */
     if (strncmp(realcmd, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) == 0)
@@ -161,7 +165,7 @@ void do_exec(char *cmd)
     signal(SIGPIPE, SIG_DFL);
 
 #ifdef HAVE_PAM
-    pw = getpwnam (user);
+    pw = getpwnam(user);
     if (! (pw && pw->pw_name && pw->pw_name[0] && pw->pw_dir && pw->pw_dir[0]
                 && pw->pw_passwd)) {
         fprintf(stderr, "user %s does not exist", user);
@@ -231,9 +235,13 @@ void do_exec(char *cmd)
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
+    if (setgid(pw->pw_gid))
+        exit(126);
+    if (setuid(pw->pw_uid))
+        exit(126);
 
     /* FORK HERE */
-    child = fork ();
+    child = fork();
 
     switch (child) {
         case -1:
@@ -303,13 +311,13 @@ error:
 
 }
 
-void handle_vchan_error(const char *op)
+_Noreturn void handle_vchan_error(const char *op)
 {
     fprintf(stderr, "Error while vchan %s, exiting\n", op);
     exit(1);
 }
 
-void init()
+static void init(void)
 {
     mode_t old_umask;
     /* FIXME: This 0 is remote domain ID */
@@ -328,7 +336,7 @@ void init()
         libvchan_wait(ctrl_vchan);
 }
 
-void wake_meminfo_writer()
+static void wake_meminfo_writer()
 {
     FILE *f;
     int pid;

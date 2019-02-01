@@ -82,7 +82,7 @@ struct msg_header {
 struct exec_params {
     uint32_t connect_domain; /* target domain name */
     uint32_t connect_port;   /* target vchan port for i/o exchange */
-    char cmdline[0];         /* command line to execute, null terminated, size = msg_header.len - sizeof(struct exec_params) */
+    char cmdline[];          /* command line to execute, null terminated, size = msg_header.len - sizeof(struct exec_params) */
 };
 
 struct service_params {
