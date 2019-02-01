@@ -309,8 +309,12 @@ static int process_child_io(libvchan_t *data_vchan,
     sigemptyset(&selectmask);
 
     set_nonblock(stdin_fd);
-    set_nonblock(stdout_fd);
-    set_nonblock(stderr_fd);
+    if (stdout_fd != stdin_fd)
+        set_nonblock(stdout_fd);
+    else if ((stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3)) < 0)
+        abort(); // not worth handling running out of file descriptors
+    if (stderr_fd >= 0)
+        set_nonblock(stderr_fd);
 
     buffer_init(&stdin_buf);
     while (1) {
@@ -354,9 +358,18 @@ static int process_child_io(libvchan_t *data_vchan,
         }
         /* child signaled desire to use single socket for both stdin and stdout */
         if (stdio_socket_requested) {
-            if (stdout_fd != -1 && stdout_fd != stdin_fd)
-                close(stdout_fd);
-            stdout_fd = stdin_fd;
+            if (stdout_fd != -1) {
+                do
+                    errno = 0;
+                while (dup3(stdin_fd, stdout_fd, O_CLOEXEC) &&
+                       (EINTR == errno || EBUSY == errno));
+                // other errors are fatal
+                assert(0 == errno);
+            } else {
+                stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3);
+                // all errors are fatal
+                assert(stdout_fd >= 3);
+            }
             stdio_socket_requested = 0;
         }
         /* otherwise handle the events */
