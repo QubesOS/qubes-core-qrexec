@@ -393,7 +393,6 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
         goto fail;
     }
 
-    _Static_assert(sizeof(remote.sun_path) > 64, "bad size of sun_path");
     remote.sun_path[sizeof(remote.sun_path) - 1] = '\0';
     remote.sun_family = AF_UNIX;
     strncpy(remote.sun_path, fork_server_socket_path,
