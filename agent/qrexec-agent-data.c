@@ -624,7 +624,9 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
             socklen_t socket_len = (socklen_t)(
                 offsetof(struct sockaddr_un, sun_path) + total_path_length + 1);
             if (!connect(s, (struct sockaddr *) &remote, socket_len)) {
-                *stdout_fd = *stdin_fd = s, *stderr_fd = -1, *pid = 0;
+                *stdout_fd = *stdin_fd = s;
+                *stderr_fd = -1;
+                *pid = 0;
                 set_nonblock(s);
                 return 0;
             }
