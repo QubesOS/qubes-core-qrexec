@@ -613,7 +613,7 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
     for (int use_bare_path = 0; use_bare_path < 2; ++use_bare_path) {
         for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); ++i) {
             size_t const directory_length = paths[i].length;
-            assert(sizeof(remote.sun_path) - directory_length > path_length);
+            assert(sizeof remote.sun_path > path_length + directory_length);
 
             // The total size of the path (not including NUL terminator).
             size_t const total_path_length = directory_length +
