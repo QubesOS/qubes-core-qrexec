@@ -554,9 +554,13 @@ static char *parse_qrexec_argument_from_commandline(char *cmdline) {
 
 
 static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd) {
+#ifndef NDEBUG
     fprintf(stderr, "%s\n", cmdline);
+#endif
     const char *realcmd = parse_qrexec_argument_from_commandline(cmdline);
+#ifndef NDEBUG
     fprintf(stderr, "%s\n", realcmd);
+#endif
     if (!realcmd) {
         do_fork_exec(cmdline, pid, stdin_fd, stdout_fd, stderr_fd);
         return 0;
@@ -567,10 +571,6 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
         abort();
     }
     *remote_domain++ = '\0';
-    if (0 && strcmp(remote_domain, "dom0")) {
-	fputs("Rejecting request from domain that is not dom0\n", stderr);
-	abort();
-    }
     int s = -1;
     struct sockaddr_un remote = { .sun_family = AF_UNIX };
     static_assert(sizeof(remote.sun_path) == QUBES_SOCKADDR_UN_MAX_PATH_LEN,
