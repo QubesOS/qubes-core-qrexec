@@ -1,7 +1,9 @@
 CC=gcc
 QUBES_CFLAGS:=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    `pkg-config --cflags vchan-$(BACKEND_VMM)` -fstack-protector \
-   -D_FORTIFY_SOURCE=2 -fstack-protector-strong
+   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection \
+   -fcheck-stack=specific
+
 QUBES_LDFLAGS := -pie -Wl,-z,relro,-z,now $(LDFLAGS)
 
 DISTRO:=$(shell lsb_release -is)
