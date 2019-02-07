@@ -608,19 +608,20 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
         return -1;
     }
 
-    for (int index = 0; index < 2; ++index) {
+    for (int use_bare_path = 0; use_bare_path < 2; ++use_bare_path) {
         for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); ++i) {
             size_t const directory_length = paths[i].length;
             assert(sizeof(remote.sun_path) - directory_length > path_length);
 
             // The total size of the path (not including NUL terminator).
-            size_t const total_path_length = directory_length + (index ? service_length : path_length);
+            size_t const total_path_length = directory_length +
+                (use_bare_path ? service_length : path_length);
             memcpy(remote.sun_path, paths[i].string, directory_length);
             memcpy(remote.sun_path + directory_length, realcmd, path_length);
             remote.sun_path[total_path_length] = '\0';
-
-            if (!connect(s, (struct sockaddr *) &remote,
-                        (socklen_t)(offsetof(struct sockaddr_un, sun_path) + total_path_length + 1))) {
+            socklen_t socket_len = (socklen_t)(
+                offsetof(struct sockaddr_un, sun_path) + total_path_length + 1);
+            if (!connect(s, (struct sockaddr *) &remote, socket_len)) {
                 *stdout_fd = *stdin_fd = s, *stderr_fd = -1, *pid = 0;
                 set_nonblock(s);
                 return 0;
@@ -657,40 +658,18 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
             case EPROTOTYPE:
             case ETIMEDOUT:
                 // Socket server problem.  Fail the whole connection.
-                // (We do not want to fall back because the user may have overriden
-                // behavior for security reasons, and because fail-fast is much
-                // easier to debug).
+                // (We do not want to fall back because the user may have
+                // overriden behavior for security reasons, and because
+                // fail-fast is much easier to debug).
                 goto fail;
             case EACCES:
             case EPERM:
-            case ECONNREFUSED: {
-	        if (access(remote.sun_path, X_OK) != 0) {
-                    fprintf(stderr, "cannot execute %s: no execute permission\n", remote.sun_path);
-                    break;
-                }
-                struct stat stat_buf;
-                if (stat(remote.sun_path, &stat_buf) != 0) {
-                    fprintf(stderr, "cannot execute %s: cannot stat\n", remote.sun_path);
-                    break;
-                }
-                if (!S_ISREG(stat_buf.st_mode)) {
-                    fprintf(stderr, "cannot execute %s: not a regular file\n", remote.sun_path);
-                    break;
-                }
-                if ((stat_buf.st_mode & 022)) {
-                    fprintf(stderr, "refusing to execute %s: group- or world- writable\n", remote.sun_path);
-                    break;
-                }
-                if ((stat_buf.st_uid && stat_buf.st_uid != getuid())) {
-                    fprintf(stderr, "refusing to execute %s: neither owned by root or myself\n", remote.sun_path);
-                    break;
-                }
+            case ECONNREFUSED:
                 remote_domain[-1] = ' ';
                 fprintf(stderr, "Executing command as normal: '%s'\n", cmdline);
                 close(s);
                 do_fork_exec(cmdline, pid, stdin_fd, stdout_fd, stderr_fd);
                 return 0;
-            }
             default:
                 /* Unexpected error */
                 break;
