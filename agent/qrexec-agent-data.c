@@ -372,9 +372,9 @@ static int process_child_io(libvchan_t *data_vchan,
                 do
                     errno = 0;
                 while (dup3(stdin_fd, stdout_fd, O_CLOEXEC) &&
-                       (EINTR == errno || EBUSY == errno));
+                       (errno == EINTR || errno == EBUSY));
                 // other errors are fatal
-                assert(0 == errno);
+                assert(!errno);
             } else {
                 stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3);
                 // all errors are fatal
@@ -593,7 +593,7 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
 
     if (argument_length + 1 > QUBES_MAX_SERVICE_ARG_LEN + 1) {
         FAIL("Service argument too long", E2BIG);
-    } else if (0 == service_length) {
+    } else if (!service_length) {
         FAIL("Service path empty", EINVAL);
     } else if (service_length > QUBES_MAX_SERVICE_NAME_LEN) {
         FAIL("Service path too long", ENAMETOOLONG);
@@ -619,7 +619,7 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
             memcpy(remote.sun_path + directory_length, realcmd, path_length);
             remote.sun_path[total_path_length] = '\0';
 
-            if (0 == connect(s, (struct sockaddr *) &remote,
+            if (!connect(s, (struct sockaddr *) &remote,
                         (socklen_t)(offsetof(struct sockaddr_un, sun_path) + total_path_length + 1))) {
                 *stdout_fd = *stdin_fd = s, *stderr_fd = -1, *pid = 0;
                 set_nonblock(s);
