@@ -63,16 +63,12 @@ void exec_qubes_rpc_if_requested(char *prog, char *const envp[]) {
 void fix_fds(int fdin, int fdout, int fderr)
 {
     int i;
-    for (i = 0; i < 256; i++)
+    for (i = 3; i < 256; i++)
         if (i != fdin && i != fdout && i != fderr)
             close(i);
-    dup2(fdin, 0);
-    dup2(fdout, 1);
-    dup2(fderr, 2);
-    close(fdin);
-    close(fdout);
-    if (fderr != 2)
-        close(fderr);
+    if (dup2(fdin, 0) || dup2(fdout, 1) || dup2(fderr, 2) ||
+        close(fdin) || close(fdout) || (fderr != 2 && close(fderr)))
+        abort();
 }
 
 int do_fork_exec(char *cmdline,
@@ -98,6 +94,8 @@ int do_fork_exec(char *cmdline,
             exit(-1);
         case 0: {
             int status;
+            if (signal(SIGPIPE, SIG_DFL))
+                abort();
             if (stderr_fd) {
                 fix_fds(inpipe[0], outpipe[1], errpipe[1]);
             } else
