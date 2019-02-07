@@ -554,10 +554,16 @@ static char *parse_qrexec_argument_from_commandline(char *cmdline) {
 
 
 static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd) {
+    int s = -1;
+    struct sockaddr_un remote = { .sun_family = AF_UNIX };
+    char *realcmd, *remote_domain;
+    size_t path_length;
+    static_assert(sizeof remote.sun_path == QUBES_SOCKADDR_UN_MAX_PATH_LEN,
+                  "I screwed up my math");
 #ifndef NDEBUG
     fprintf(stderr, "%s\n", cmdline);
 #endif
-    const char *realcmd = parse_qrexec_argument_from_commandline(cmdline);
+    realcmd = parse_qrexec_argument_from_commandline(cmdline);
 #ifndef NDEBUG
     fprintf(stderr, "%s\n", realcmd);
 #endif
@@ -565,17 +571,13 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
         do_fork_exec(cmdline, pid, stdin_fd, stdout_fd, stderr_fd);
         return 0;
     }
-    char *remote_domain = strchr(realcmd, ' ');
+    remote_domain = strchr(realcmd, ' ');
     if (!remote_domain) {
         fputs("Bad command from dom0: no remote domain\n", stderr);
         abort();
     }
     *remote_domain++ = '\0';
-    int s = -1;
-    struct sockaddr_un remote = { .sun_family = AF_UNIX };
-    static_assert(sizeof(remote.sun_path) == QUBES_SOCKADDR_UN_MAX_PATH_LEN,
-                   "I screwed up my math");
-    size_t path_length = strlen(realcmd);
+    path_length = strlen(realcmd);
     if (path_length > QUBES_MAX_SERVICE_DESCRIPTOR_LEN) {
         fputs("Absurdly long command\n", stderr);
         return -1;
