@@ -1,28 +1,28 @@
 CC=gcc
-DISTRO:=$(shell lsb_release -is)
-override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
+QUBES_CFLAGS:=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    `pkg-config --cflags vchan-$(BACKEND_VMM)` -fstack-protector \
-   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC \
-   $(CFLAGS)
-override LDFLAGS += -pie -Wl,-z,relro,-z,now -shared
-override LDLIBS=`pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils -lpam
+   -D_FORTIFY_SOURCE=2 -fstack-protector-strong
+QUBES_LDFLAGS := -pie -Wl,-z,relro,-z,now $(LDFLAGS)
+
+DISTRO:=$(shell lsb_release -is)
+QUBES_LDFLAGS +=-shared
 
 COMMONIOALL=ioall.o
 SO_VER=2
-LDFLAGS+=-shared
 VCHANLIBS = `pkg-config --libs vchan-$(BACKEND_VMM)`
 LIBDIR ?= /usr/lib
 INCLUDEDIR ?= /usr/include
 
 _XENSTORE_H=$(shell ls /usr/include/xenstore.h 2>/dev/null)
 ifneq "$(_XENSTORE_H)" ""
-override QUBES_CFLAGS += -DUSE_XENSTORE_H
+QUBES_CFLAGS += -DUSE_XENSTORE_H
 endif
 
 
-all: libqrexec-utils.so.$(SO_VER)
-libqrexec-utils.so.$(SO_VER): unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o
-	$(CC) $(LDFLAGS) -Wl,-soname,$@ -o $@ $^ $(VCHANLIBS)
+all: libqrexec-utils.so
+libqrexec-utils.so: unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o
+	$(CC) $(QUBES_LDFLAGS) -Wl,-soname,$@.$(SO_VER) -o $@.$(SO_VER) $^ $(VCHANLIBS)
+	ln -sf $@.$(SO_VER) $@ 
 
 %.a:
 	$(AR) rcs $@ $^
@@ -38,6 +38,6 @@ install:
 	install -m 0644 qrexec.h $(DESTDIR)$(INCLUDEDIR)
 
 %.o: %.c
-	$(CC) $< -c -o $@ $(QUBES_CFLAGS) -MD -MP -MF $@.dep
+	$(CC) $< -c -o $@ $(QUBES_CFLAGS) $(CFLAGS) -MD -MP -MF $@.dep
 
 -include *.o.dep

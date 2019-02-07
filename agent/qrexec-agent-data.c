@@ -26,23 +26,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <stddef.h>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <assert.h>
+#include <stdbool.h>
+
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <stddef.h>
 #include <fcntl.h>
 #include <libvchan.h>
-#ifdef NDEBUG
-#undef NDEBUG
-#endif
-#include <assert.h>
-#include <limits.h>
 
 #include "qrexec.h"
 #include "libqrexec-utils.h"
@@ -135,7 +136,7 @@ static int handle_just_exec(char *cmdline)
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
-            do_exec(cmdline, NULL);
+            do_exec(cmdline);
         default:;
     }
     fprintf(stderr, "executed (nowait) %s pid %d\n", cmdline, pid);
@@ -557,11 +558,8 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
     const char *realcmd = parse_qrexec_argument_from_commandline(cmdline);
     fprintf(stderr, "%s\n", realcmd);
     if (!realcmd) {
-#if 1
-        return do_fork_exec(cmdline, NULL, pid, stdin_fd, stdout_fd, stderr_fd);
-#else
-        abort();
-#endif
+        do_fork_exec(cmdline, pid, stdin_fd, stdout_fd, stderr_fd);
+        return 0;
     }
     char *remote_domain = strchr(realcmd, ' ');
     if (!remote_domain) {
@@ -687,17 +685,11 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
                     fprintf(stderr, "refusing to execute %s: neither owned by root or myself\n", remote.sun_path);
                     break;
                 }
-                // Indicates that this is a regular file
-                char *const arguments[4] __attribute__((unused)) = {
-                    remote.sun_path,
-                    remote.sun_path + directory_length,
-                    delimiter ? remote.sun_path + directory_length + service_length + 1 : NULL,
-                    NULL,
-                };
                 remote_domain[-1] = ' ';
                 fprintf(stderr, "Executing command as normal: '%s'\n", cmdline);
                 close(s);
-                return do_fork_exec(cmdline, NULL, pid, stdin_fd, stdout_fd, stderr_fd);
+                do_fork_exec(cmdline, pid, stdin_fd, stdout_fd, stderr_fd);
+                return 0;
             }
             default:
                 /* Unexpected error */

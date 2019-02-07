@@ -1,11 +1,11 @@
 CC=gcc
-override QUBES_CFLAGS:=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC \
+MAKEFLAGS := -rR
+.SUFFIXES:
+QUBES_CFLAGS:=-I. -I../libqrexec -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    `pkg-config --cflags vchan-$(BACKEND_VMM)` -fstack-protector \
-   -D_FORTIFY_SOURCE=2 -fstack-protector-strong \
-   $(CFLAGS)
-override LDFLAGS += -pie -Wl,-z,relro,-z,now
-override LDLIBS=`pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils
-
+   -D_FORTIFY_SOURCE=2 -fstack-protector-strong
+QUBES_LDFLAGS := -pie -Wl,-z,relro,-z,now $(LDFLAGS)
+QUBES_LDLIBS:=`pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils $(LDLIBS)
 
 all: qrexec-daemon qrexec-client 
 clean:
@@ -17,9 +17,9 @@ install: all
 .PHONY: all clean install
 
 %: %.o
-	$(CC) $(LDFLAGS) -pie -g -o $@ $< $(LDLIBS)
+	$(CC) $(QUBES_LDFLAGS) -pie -g -o $@ $< $(QUBES_LDLIBS)
 
 %.o: %.c
-	$(CC) $< -c -o $@ $(QUBES_CFLAGS) -MD -MP -MF $@.dep
+	$(CC) $< -c -o $@ $(QUBES_CFLAGS) $(CFLAGS) -MD -MP -MF $@.dep
 
 -include *.o.dep

@@ -38,18 +38,12 @@ void register_exec_func(do_exec_t *func) {
     exec_func = func;
 }
 
-void exec_qubes_rpc_if_requested(char *prog, char *const envp[], char *const *const arguments) {
+void exec_qubes_rpc_if_requested(char *prog, char *const envp[]) {
     /* avoid calling qubes-rpc-multiplexer through shell */
     if (strncmp(prog, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) == 0) {
         char *tok, *saveptr;
         char *argv[16]; // right now 6 are used, but allow future extensions
         size_t i = 0;
-        if (arguments) {
-            assert(arguments[0]);
-            assert(arguments[1]);
-            execve(arguments[0], arguments + 1, envp);
-            goto fail;
-        }
         tok=strtok_r(prog, " ", &saveptr);
         do {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
@@ -61,9 +55,8 @@ void exec_qubes_rpc_if_requested(char *prog, char *const envp[], char *const *co
         argv[i] = NULL;
         argv[0] = QUBES_RPC_MULTIPLEXER_PATH;
         execve(QUBES_RPC_MULTIPLEXER_PATH, argv, envp);
-fail:
         perror("exec qubes-rpc-multiplexer");
-        exit(126);
+        _exit(126);
     }
 }
 
@@ -83,7 +76,6 @@ void fix_fds(int fdin, int fdout, int fderr)
 }
 
 int do_fork_exec(char *cmdline,
-                 char *const *argument,
                  int *pid,
                  int *stdin_fd,
                  int *stdout_fd,
@@ -117,7 +109,7 @@ int do_fork_exec(char *cmdline,
             fcntl(statuspipe[1], F_SETFD, status | FD_CLOEXEC);
 #endif
             if (exec_func != NULL)
-                exec_func(cmdline, argument);
+                exec_func(cmdline);
             else
                 abort();
             status = errno;
