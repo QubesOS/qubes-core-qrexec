@@ -90,6 +90,7 @@ rm -f %{name}-%{version}
 
 %{_bindir}/qrexec-client
 %{_sbindir}/qrexec-daemon
+/usr/lib/qubes/qrexec-client
 
 %{_sysconfdir}/qubes-rpc/policy.RegisterArgument
 

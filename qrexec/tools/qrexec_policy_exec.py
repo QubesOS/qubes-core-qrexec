@@ -129,7 +129,11 @@ def main(args=None):
         log.error(log_prefix + 'error getting system info: ' + str(err))
         return 1
 
-    service, argument, *_ = args.service_and_arg.split('+', 1) + ['+']
+    try:
+        i = args.service_and_arg.index('+')
+        service, argument = args.service_and_arg[:i], args.service_and_arg[i:]
+    except ValueError:
+        service, argument = args.service_and_arg, '+'
 
     try:
         policy = parser.FilePolicy(policy_path=args.path)
