@@ -92,10 +92,14 @@ rm -f %{name}-%{version}
 %{_sbindir}/qrexec-daemon
 /usr/lib/qubes/qrexec-client
 
-%{_sysconfdir}/qubes-rpc/policy.RegisterArgument
+%dir %{_sysconfdir}/qubes/policy.d
+%dir %{_sysconfdir}/qubes/policy.d/include
+%{_sysconfdir}/qubes/policy.d/README
 
 %attr(2775,root,qubes) %dir %{_sysconfdir}/qubes-rpc/policy
-%attr(0664,root,qubes) %config(noreplace) %{_sysconfdir}/qubes-rpc/policy/policy.RegisterArgument
+%dir %{_sysconfdir}/qubes-rpc/policy/include
+
+%{_sysconfdir}/qubes-rpc/policy.RegisterArgument
 
 %changelog
 @CHANGELOG@

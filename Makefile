@@ -28,7 +28,9 @@ install-dom0:
 	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc-dom0/*
 	install -d $(DESTDIR)/etc/qubes-rpc/policy -m 775
 	install -d $(DESTDIR)/etc/qubes-rpc/policy/include -m 775
-	install -t $(DESTDIR)/etc/qubes-rpc/policy -m 664 qubes-rpc-policy/*
+	install -d $(DESTDIR)/etc/qubes/policy.d -m 775
+	install -d $(DESTDIR)/etc/qubes/policy.d/include -m 775
+	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/*
 .PHONY: install-dom0
 
 

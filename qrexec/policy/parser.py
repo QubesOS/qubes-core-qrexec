@@ -64,7 +64,9 @@ def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
         qrexec.exc.AccessDenied: for invalid path which is not ignored
     '''
     filepaths = [path for path in filepaths
-        if path.is_file() and not path.name.startswith('.')]
+        if path.is_file()
+            and not path.name.startswith('.')
+            and not path.name == 'README']
 
     # check for invalid filenames first, then return all or nothing
     for path in filepaths:
