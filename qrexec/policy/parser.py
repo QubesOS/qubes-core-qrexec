@@ -1190,6 +1190,8 @@ class AbstractFileLoader(AbstractParser):
             filepath, lineno) -> Tuple[TextIO, pathlib.PurePath]:
         '''Resolve ``!include[-service]`` to open file and filepath
 
+        The callee is responsible for closing the file descriptor.
+
         Raises:
             qrexec.exc.PolicySyntaxError: when the path does not point to a file
         '''
