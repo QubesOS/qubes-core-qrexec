@@ -55,8 +55,8 @@ Simplicity.
 
 ## New policy location
 
-The files reside in `/etc/qubes/policy`. Files are considered in lexicographical
-order of the "C" locale.
+The files reside in `/etc/qubes/policy.d`. Files are considered in
+lexicographical order of the "C" locale.
 
 Files must be named using only digits, latin lowercase, underscore, full stop
 and hyphen (`0123456789abcdefghijklmnopqrstuvwxyz_.-`).
@@ -124,7 +124,7 @@ be managed together.
 ## New Policy API service: per-policy restore
 
 The service `policy.RestoreService+SERVICE` restores a service, not an API. It
-operates on `/etc/qubes/policy/60-policyapi` file. The content of the policy
+operates on `/etc/qubes/policy.d/40-policyapi` file. The content of the policy
 should only include rules related to the SERVICE. Arguments are not constrained.
 
 # Other ideas and options not included elsewhere
@@ -136,18 +136,18 @@ Most of those are probably rubbish.
 
 By default we ship those files:
 
-- `/etc/qubes/policy/30-user`
-- `/etc/qubes/policy/40-policyapi`
-- `/etc/qubes/policy/50-salt`
-- `/etc/qubes/policy/90-default`
+- `/etc/qubes/policy.d/30-user`
+- `/etc/qubes/policy.d/40-policyapi`
+- `/etc/qubes/policy.d/50-salt`
+- `/etc/qubes/policy.d/90-default`
 
 Administrators deploying their company policies may use
 `/etc/qubes/policy/20-admin`.
 
 Vendors providing packaged rules should use:
-- `/etc/qubes/policy/60-<pkgname>` for explicit deny rules
-- `/etc/qubes/policy/70-<pkgname>` for explicit allow rules
-- `/etc/qubes/policy/80-<pkgname>` for generic rules, possibly with `*` in
+- `/etc/qubes/policy.d/60-<pkgname>` for explicit deny rules
+- `/etc/qubes/policy.d/70-<pkgname>` for explicit allow rules
+- `/etc/qubes/policy.d/80-<pkgname>` for generic rules, possibly with `*` in
   service name.
 
 This is expected of vendors to avoid conflicts between different packages.
