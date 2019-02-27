@@ -13,6 +13,7 @@ all-base:
 install-base:
 	make install -C libqrexec
 	$(PYTHON) setup.py install -O1 --skip-build --root $(DESTDIR)
+	ln -s qrexec-policy-exec $(DESTDIR)/usr/bin/qrexec-policy
 	install -d $(DESTDIR)/usr/lib/qubes -m 755
 	install -t $(DESTDIR)/usr/lib/qubes -m 755 lib/*
 .PHONY: install-base

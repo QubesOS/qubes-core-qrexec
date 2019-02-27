@@ -83,11 +83,12 @@ rm -f %{name}-%{version}
 %files
 %defattr(-,root,root,-)
 
-%{_bindir}/qrexec-policy
 %{_bindir}/qrexec-policy-exec
 %{_bindir}/qrexec-policy-agent
 %{_bindir}/qrexec-policy-graph
 %{_bindir}/qrexec-policy-restore
+%{_bindir}/qubes-policy
+%{_bindir}/qrexec-policy
 
 %{_includedir}/qrexec.h
 %{_includedir}/libqrexec-utils.h
