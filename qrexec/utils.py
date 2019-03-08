@@ -1,10 +1,9 @@
-# -*- encoding: utf8 -*-
-#
 # The Qubes OS Project, http://www.qubes-os.org
 #
 # Copyright (C) 2013-2017  Marek Marczykowski-Górecki
 #                                   <marmarek@invisiblethingslab.com>
 # Copyright (C) 2017 boring-stuff <boring-stuff@users.noreply.github.com>
+# Copyright (C) 2019  Wojtek Porczyk <woju@invisiblethingslab.com>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -112,7 +111,6 @@ def get_system_info():
           - type: domain type
           - template_for_dispvms: should DispVM based on this VM be allowed
           - default_dispvm: name of default AppVM for DispVMs started from here
-
     '''
 
     system_info = qubesd_call('dom0', 'internal.GetSystemInfo')

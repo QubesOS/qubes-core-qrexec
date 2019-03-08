@@ -121,7 +121,7 @@ rm -f %{name}-%{version}
 %dir %{python3_sitelib}/qrexec/tools/__pycache__
 %{python3_sitelib}/qrexec/tools/__pycache__/*
 %{python3_sitelib}/qrexec/tools/__init__.py
-%{python3_sitelib}/qrexec/tools/qrexec_policy.py
+%{python3_sitelib}/qrexec/tools/qubes_policy.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_agent.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_exec.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_graph.py
