@@ -115,6 +115,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/policy/__init__.py
 %{python3_sitelib}/qrexec/policy/api.py
 %{python3_sitelib}/qrexec/policy/parser.py
+%{python3_sitelib}/qrexec/policy/parser_compat.py
 
 %dir %{python3_sitelib}/qrexec/tools
 %dir %{python3_sitelib}/qrexec/tools/__pycache__

@@ -13,6 +13,8 @@ QUBESD_SOCK = '/var/run/qubesd.sock'
 POLICYPATH = pathlib.Path('/etc/qubes/policy.d')
 INCLUDEPATH = POLICYPATH / 'include'
 
+POLICYPATH_OLD = pathlib.Path('/etc/qubes-rpc/policy')
+
 RPCNAME_ALLOWED_CHARSET = frozenset(
     string.ascii_uppercase + string.ascii_lowercase + string.digits + '+-._')
 

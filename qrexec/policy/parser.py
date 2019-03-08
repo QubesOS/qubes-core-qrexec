@@ -44,6 +44,7 @@ from .. import exc
 from .. import utils
 from ..exc import (
     AccessDenied, PolicySyntaxError, QubesMgmtException)
+from .parser_compat import Compat4MixIn
 
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + '_.-')
 
@@ -77,6 +78,24 @@ def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
 
     return filepaths
 
+def parse_service_and_argument(rpcname, *, no_arg='+'):
+    '''Parse service and argument string.
+
+    Parse ``SERVICE+ARGUMENT``. Argument may be empty (single ``+`` at the end)
+    or omitted (no ``+`` at all). If no argument is given, `no_arg` is returned
+    instead. By default this returns ``'+'``, as if argument is empty.
+    '''
+    if '+' in rpcname:
+        service, argument = rpcname.split('+', 1)
+        argument = '+' + argument
+    else:
+        service, argument = rpcname, no_arg
+    return service, argument
+
+def get_invalid_characters(s, allowed=RPCNAME_ALLOWED_CHARSET):
+    return tuple(sorted(set(c for c in s
+        if c not in RPCNAME_ALLOWED_CHARSET.difference('+'))))
+
 def validate_service_and_argument(service, argument, *, filepath, lineno):
     '''Check service name and argument
 
@@ -102,8 +121,7 @@ def validate_service_and_argument(service, argument, *, filepath, lineno):
         service = None
 
     if service is not None:
-        invalid_chars = tuple(sorted(set(c for c in service
-            if c not in RPCNAME_ALLOWED_CHARSET.difference('+'))))
+        invalid_chars = get_invalid_characters(service)
         if invalid_chars:
             raise PolicySyntaxError(filepath, lineno,
                 'service {!r} contains invalid characters: {!r}'.format(
@@ -113,8 +131,7 @@ def validate_service_and_argument(service, argument, *, filepath, lineno):
         argument = None
 
     if argument is not None:
-        invalid_chars = tuple(sorted(set(c for c in argument
-            if c not in RPCNAME_ALLOWED_CHARSET)))
+        invalid_chars = get_invalid_characters(argument)
         if invalid_chars:
             raise PolicySyntaxError(filepath, lineno,
                 'argument {!r} contains invalid characters: {!r}'.format(
@@ -982,6 +999,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
 
             # skip empty lines and comments
             if not line or line[0] == '#':
+                self.handle_comment(line, filepath=filepath, lineno=lineno)
                 continue
 
             if line.startswith('!'):
@@ -1016,6 +1034,16 @@ class AbstractParser(metaclass=abc.ABCMeta):
                         pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
                     continue
+
+                if directive == '!compat-4':
+                    if params:
+                        raise PolicySyntaxError(filepath, lineno,
+                            'invalid number of params')
+                    logging.warning(
+                        'warning: !compat directive in file %s line %s'
+                        ' is transitional and will be deprecated',
+                        filepath, lineno)
+                    self.handle_compat4(filepath=filepath, lineno=lineno)
 
                 raise PolicySyntaxError(filepath, lineno, 'invalid directive')
 
@@ -1103,6 +1131,21 @@ class AbstractParser(metaclass=abc.ABCMeta):
         This method is to be provided by subclass.
         '''
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def handle_compat4(self, *, filepath, lineno):
+        '''Handle ``!compat-4`` line when encountered in :meth:`policy_load_file`.
+
+        This method is to be provided by subclass.
+        '''
+        raise NotImplementedError()
+
+    def handle_comment(self, line, *, filepath, lineno):
+        '''Handle a line with a comment
+
+        This method may be overloaded in subclass. By default it does nothing.
+        '''
+        pass
 
 class AbstractPolicy(AbstractParser):
     '''This class is a parser that accumulates the rules to form policy.'''
@@ -1280,7 +1323,7 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
     def resolve_path(self, included_path):
         return (self.policy_path / included_path).resolve()
 
-class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
+class FilePolicy(Compat4MixIn, AbstractFileSystemLoader, AbstractPolicy):
     '''Full policy loaded from files.
 
     Usage:

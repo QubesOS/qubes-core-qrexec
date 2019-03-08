@@ -121,6 +121,19 @@ as it is the only way to express policy for multiple services in one place. For
 example it is used for Admin API, which consists of multiple calls which should
 be managed together.
 
+## Compatibility statement (R4.0)
+```
+!compat-4
+```
+
+This statement includes old policy emulating old behaviour. It reads files in
+`/etc/qubes-rpc/policy` and adds rules found there. After each file for specific
+argument (with `+` in filename) it also adds `deny` rules that were previously
+implicit. Those rules are not added for non-specific files (without `+` in
+filename) not to shadow the default policy.
+
+This statement is transitional and will be unavailable in 5.0.
+
 ## New Policy API service: per-policy restore
 
 The service `policy.RestoreService+SERVICE` restores a service, not an API. It
@@ -136,10 +149,11 @@ Most of those are probably rubbish.
 
 By default we ship those files:
 
-- `/etc/qubes/policy.d/30-user`
-- `/etc/qubes/policy.d/40-policyapi`
-- `/etc/qubes/policy.d/50-salt`
-- `/etc/qubes/policy.d/90-default`
+- `/etc/qubes/policy.d/30-user.policy`
+- `/etc/qubes/policy.d/35-compat.policy`
+- `/etc/qubes/policy.d/40-policyapi.policy`
+- `/etc/qubes/policy.d/50-salt.policy`
+- `/etc/qubes/policy.d/90-default.policy`
 
 Administrators deploying their company policies may use
 `/etc/qubes/policy/20-admin`.
