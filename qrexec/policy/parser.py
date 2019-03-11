@@ -39,7 +39,7 @@ from typing import (
     Tuple,
 )
 
-from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET
+from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
 from .. import exc
 from .. import utils
 from ..exc import (
@@ -65,9 +65,8 @@ def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
         qrexec.exc.AccessDenied: for invalid path which is not ignored
     '''
     filepaths = [path for path in filepaths
-        if path.is_file()
-            and not path.name.startswith('.')
-            and not path.name == 'README']
+        if path.is_file() and path.suffix == POLICYSUFFIX
+            and not path.name.startswith('.')]
 
     # check for invalid filenames first, then return all or nothing
     for path in filepaths:

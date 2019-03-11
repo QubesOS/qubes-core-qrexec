@@ -55,15 +55,17 @@ Simplicity.
 
 ## New policy location
 
-The files reside in `/etc/qubes/policy.d`. Files are considered in
-lexicographical order of the "C" locale.
+The files reside in `/etc/qubes/policy.d`. Files with `.` as first character
+and/or files not ending with `.policy` are ignored.
 
-Files must be named using only digits, latin lowercase, underscore, full stop
-and hyphen (`0123456789abcdefghijklmnopqrstuvwxyz_.-`).
+Files ending with `.policy` must be named using only digits, latin lowercase,
+underscore, full stop and hyphen (`0123456789abcdefghijklmnopqrstuvwxyz_.-`).
+Invalid, not ignored files are considered configuration errors and cause any
+qrexec call to be rejected.
 
-Files with `.` as first character are ignored.
+Files are considered in lexicographical order of the "C" locale.
 
-### Rationale for limited character set
+### Rationale for file name constraints
 
 The command `ls` has locale-dependent order. Many locales have different sort
 orders than "C" locale for mixed-case filenames. If multiple files share common
@@ -75,11 +77,12 @@ At least `pl_PL.UTF-8`, `de_DE.UTF-8` and `en_GB.UTF-8` have those problems
 other locales with more severe problems, like `eesti` which has the letter `Z`
 sorted differently, but those are not worked around here.
 
-As to `.` as first character, there are two reasons. First reason is, `ls`
-without `-a` or `-A` won't list them. Second reason is, several editors (notably
-Vim) keep swap files together with edited files. Typically they won't parse
-correctly, so they would cause errors. Effectively this would break any qrexec
-calls while the policy file is opened for editing.
+As to file name content (`.policy` suffix and first character other than `.`),
+there are two reasons. First reason is, `ls` without `-a` or `-A` won't list
+them. Second reason is, several editors (notably Vim) keep backup and/or swap
+files together with edited files. Typically they won't parse correctly, so they
+would cause errors. Effectively this would break any qrexec calls while the
+policy file is opened for editing.
 
 ## New include syntax
 ```

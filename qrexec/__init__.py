@@ -12,6 +12,7 @@ QUBESD_SOCK = '/var/run/qubesd.sock'
 
 POLICYPATH = pathlib.Path('/etc/qubes/policy.d')
 INCLUDEPATH = POLICYPATH / 'include'
+POLICYSUFFIX = '.policy'
 
 POLICYPATH_OLD = pathlib.Path('/etc/qubes-rpc/policy')
 
