@@ -32,6 +32,8 @@
 #include "qrexec.h"
 #include "qrexec-agent.h"
 
+const bool qrexec_is_fork_server = false;
+
 _Noreturn void handle_vchan_error(const char *op)
 {
     fprintf(stderr, "Error while vchan %s, exiting\n", op);

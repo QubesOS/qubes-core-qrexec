@@ -35,6 +35,7 @@
 #include "qrexec-agent.h"
 
 extern char **environ;
+const bool qrexec_is_fork_server = true;
 
 void do_exec(char *cmd)
 {

@@ -168,13 +168,13 @@ static int handle_input(libvchan_t *vchan, int fd, int msg_type)
     ssize_t len;
     struct msg_header hdr;
 
-    _Static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
+    static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
     hdr.type = msg_type;
     while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
         len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
-        _Static_assert(sizeof(buf) <= SSIZE_MAX, "impossible");
-        _Static_assert(sizeof(buf) <= INT_MAX, "impossible");
-        _Static_assert(sizeof(buf) <= UINT32_MAX, "impossible");
+        static_assert(sizeof(buf) <= SSIZE_MAX, "impossible");
+        static_assert(sizeof(buf) <= INT_MAX, "impossible");
+        static_assert(sizeof(buf) <= UINT32_MAX, "impossible");
         if (len > (int)sizeof(buf))
             len = sizeof(buf);
         len = read(fd, buf, len);
@@ -528,12 +528,12 @@ static const struct Q {
     MAKE_STRUCT(S)
 #undef S
 };
-_Static_assert(sizeof("/etc/qubes-rpc/") == 16, "impossible");
-_Static_assert(sizeof("/usr/local/etc/qubes-rpc/") == 26, "impossible");
-_Static_assert(QUBES_MAX_SERVICE_DESCRIPTOR_LEN == 65,
+static_assert(sizeof("/etc/qubes-rpc/") == 16, "impossible");
+static_assert(sizeof("/usr/local/etc/qubes-rpc/") == 26, "impossible");
+static_assert(QUBES_MAX_SERVICE_DESCRIPTOR_LEN == 65,
         "bad macro definition");
 #define S(z) \
-    _Static_assert(sizeof(z) + QUBES_MAX_SERVICE_DESCRIPTOR_LEN <= QUBES_SOCKADDR_UN_MAX_PATH_LEN, \
+    static_assert(sizeof(z) + QUBES_MAX_SERVICE_DESCRIPTOR_LEN <= QUBES_SOCKADDR_UN_MAX_PATH_LEN, \
             "Path too long: " #z);
 MAKE_STRUCT(S)
 #undef S
@@ -544,12 +544,28 @@ MAKE_STRUCT(S)
 #endif
 
 static char *parse_qrexec_argument_from_commandline(char *cmdline) {
-    if (strncmp(cmdline, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) != 0)
-        return NULL;
-    cmdline += RPC_REQUEST_COMMAND_LEN;
-    if (' ' != *cmdline)
+    char *end_user;
+    uintptr_t user_len;
+    if (!qrexec_is_fork_server) {
+        end_user = strchr(cmdline, ':');
+        if (!end_user) {
+            fputs("Bad command from dom0: no colon\n", stderr);
+            abort();
+        }
+        end_user++;
+    } else {
+        end_user = cmdline;
+    }
+
+    user_len = (uintptr_t)end_user - (uintptr_t)cmdline;
+    if (user_len > PTRDIFF_MAX) {
+        fputs("absurd user length\n", stderr);
         abort();
-    return cmdline + 1;
+    }
+
+    if (strncmp(end_user, RPC_REQUEST_COMMAND " ", RPC_REQUEST_COMMAND_LEN + 1) != 0)
+        return NULL;
+    return end_user + RPC_REQUEST_COMMAND_LEN + 1;
 }
 
 
@@ -711,6 +727,7 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
 
     if (type != MSG_SERVICE_CONNECT) {
         assert(cmdline != NULL);
+        assert(cmdline_len > 0);
         cmdline[cmdline_len-1] = 0;
     }
 

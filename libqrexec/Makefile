@@ -1,8 +1,7 @@
 CC=gcc
 QUBES_CFLAGS:=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    `pkg-config --cflags vchan-$(BACKEND_VMM)` -fstack-protector \
-   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection \
-   -fcheck-stack=specific
+   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection
 
 QUBES_LDFLAGS := -pie -Wl,-z,relro,-z,now $(LDFLAGS)
 

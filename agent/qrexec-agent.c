@@ -91,6 +91,8 @@ static _Noreturn void no_colon_in_cmd(void)
     exit(1);
 }
 
+const bool qrexec_is_fork_server = false;
+
 #ifdef HAVE_PAM
 static int pam_conv_callback(int num_msg, const struct pam_message **msg,
         struct pam_response **resp, void *appdata_ptr __attribute__((__unused__)))
@@ -336,7 +338,53 @@ static void init(void)
         libvchan_wait(ctrl_vchan);
 }
 
-static void wake_meminfo_writer()
+#if 0
+static socklen_t unix_socket_path_length(struct sockaddr_un *remote)
+{
+    if (remote->sun_family != AF_UNIX)
+        abort();
+    size_t const len = strnlen(remote->sun_path, sizeof remote->sun_path);
+    if (len >= sizeof remote->sun_path)
+        abort();
+    return (socklen_t)(offsetof(struct sockaddr_un, sun_path) + len);
+}
+
+
+static int unix_connect(int sock, struct sockaddr_un *remote) {
+    return connect(sock, (struct sockaddr *)remote,
+                   unix_socket_path_length(remote));
+}
+
+static int unix_bind(int sock, struct sockaddr_un *local) {
+    return bind(sock, (struct sockaddr *)remote,
+                unix_socket_path_length(remote));
+}
+
+static pid_t spawn_fork_server(int s, struct sockaddr_un *remote, uid_t uid)
+{
+    int pid = -1;
+
+    if ((retval = unix_bind(s, remote)) < 0)
+        goto fail;
+
+    if ((retval = spawn_process_as_user(uid, QREXEC_SERVER_PATH, s)) < 0)
+        goto fail;
+    pid = retval;
+
+    if ((retval = register_socket_client(pid, uid)) < 0)
+        goto fail;
+
+    int error;
+fail:
+    error = errno;
+    do
+        retval = unlink(remote->sun_path);
+    while (retval < 0 && errno == EINTR);
+    errno = error;
+}
+#endif
+
+static void wake_meminfo_writer(void)
 {
     FILE *f;
     int pid;
@@ -345,7 +393,7 @@ static void wake_meminfo_writer()
         /* wake meminfo-writer only once */
         return;
 
-    f = fopen(MEMINFO_WRITER_PIDFILE, "r");
+    f = fopen(MEMINFO_WRITER_PIDFILE, "re");
     if (f == NULL) {
         /* no meminfo-writer found, ignoring */
         return;
@@ -477,7 +525,7 @@ static int load_service_config(const char *service_name, int *wait_for_session) 
         return -1;
     }
 
-    config_file = fopen(filename, "r");
+    config_file = fopen(filename, "re");
     if (!config_file) {
         if (errno == ENOENT)
             return 0;

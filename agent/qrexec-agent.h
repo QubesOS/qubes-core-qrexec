@@ -32,6 +32,9 @@ _Noreturn void do_exec(char *cmd);
 /* call before fork() for service handling process (either end) */
 void prepare_child_env(void);
 
+/* true in qrexec-fork-server, false in qrexec-agent */
+extern const bool qrexec_is_fork_server;
+
 pid_t handle_new_process(int type,
         int connect_domain, int connect_port,
         char *cmdline, size_t cmdline_len);

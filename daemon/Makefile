@@ -4,9 +4,9 @@ MAKEFLAGS := -rR
 QUBES_CFLAGS:=-I. -I../libqrexec -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    `pkg-config --cflags vchan-$(BACKEND_VMM)` -fstack-protector \
    -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection \
-   -fcheck-stack=specific
+   -fcheck-stack=specific -Wl,-z,relro,-z,now,-E
 
-QUBES_LDFLAGS := -pie -Wl,-z,relro,-z,now $(LDFLAGS)
+QUBES_LDFLAGS := -pie -Wl,-z,relro,-z,now,-E $(LDFLAGS)
 QUBES_LDLIBS:=`pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils $(LDLIBS)
 
 all: qrexec-daemon qrexec-client 
