@@ -162,10 +162,10 @@ Administrators deploying their company policies may use
 `/etc/qubes/policy/20-admin`.
 
 Vendors providing packaged rules should use:
-- `/etc/qubes/policy.d/60-<pkgname>` for explicit deny rules
-- `/etc/qubes/policy.d/70-<pkgname>` for explicit allow rules
-- `/etc/qubes/policy.d/80-<pkgname>` for generic rules, possibly with `*` in
-  service name.
+- `/etc/qubes/policy.d/60-<pkgname>.policy` for explicit deny rules
+- `/etc/qubes/policy.d/70-<pkgname>.policy` for explicit allow rules
+- `/etc/qubes/policy.d/80-<pkgname>.policy` for generic rules, possibly with `*`
+  in the service name.
 
 This is expected of vendors to avoid conflicts between different packages.
 
