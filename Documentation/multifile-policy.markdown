@@ -126,7 +126,7 @@ be managed together.
 
 ## Compatibility statement (R4.0)
 ```
-!compat-4
+!compat-4.0
 ```
 
 This statement includes old policy emulating old behaviour. It reads files in

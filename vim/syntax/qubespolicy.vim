@@ -8,11 +8,11 @@ if exists("b:current_syntax")
     finish
 endif
 
-" !, -, 0-9, A-Z, a-z
-setlocal iskeyword=33,45,48-57,65-90,97-122
+" !, -, ., 0-9, A-Z, a-z
+setlocal iskeyword=33,45-46,48-57,65-90,97-122
 
 syn keyword qubespolicyInclude
-    \ !include !include-dir !include-service !compat-4
+    \ !include !include-dir !include-service !compat-4.0
 
 syn keyword qubespolicyResolution
     \ allow deny ask

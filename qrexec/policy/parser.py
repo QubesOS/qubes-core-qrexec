@@ -44,7 +44,6 @@ from .. import exc
 from .. import utils
 from ..exc import (
     AccessDenied, PolicySyntaxError, QubesMgmtException)
-from .parser_compat import Compat4MixIn
 
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + '_.-')
 
@@ -1034,15 +1033,16 @@ class AbstractParser(metaclass=abc.ABCMeta):
                         filepath=filepath, lineno=lineno)
                     continue
 
-                if directive == '!compat-4':
+                if directive == '!compat-4.0':
                     if params:
                         raise PolicySyntaxError(filepath, lineno,
                             'invalid number of params')
                     logging.warning(
-                        'warning: !compat directive in file %s line %s'
+                        'warning: !compat-4.0 directive in file %s line %s'
                         ' is transitional and will be deprecated',
                         filepath, lineno)
-                    self.handle_compat4(filepath=filepath, lineno=lineno)
+                    self.handle_compat40(filepath=filepath, lineno=lineno)
+                    continue
 
                 raise PolicySyntaxError(filepath, lineno, 'invalid directive')
 
@@ -1132,7 +1132,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def handle_compat4(self, *, filepath, lineno):
+    def handle_compat40(self, *, filepath, lineno):
         '''Handle ``!compat-4`` line when encountered in :meth:`policy_load_file`.
 
         This method is to be provided by subclass.
@@ -1243,7 +1243,7 @@ class AbstractFileLoader(AbstractParser):
         if not included_path.is_file():
             raise exc.PolicySyntaxError(filepath, lineno,
                 'not a file: {}'.format(included_path))
-        return open(str(filepath)), included_path
+        return open(str(included_path)), included_path
 
     def handle_include(self, included_path: pathlib.PurePosixPath, *,
             filepath, lineno):
@@ -1322,7 +1322,10 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
     def resolve_path(self, included_path):
         return (self.policy_path / included_path).resolve()
 
-class FilePolicy(Compat4MixIn, AbstractFileSystemLoader, AbstractPolicy):
+# late import for circular
+from .parser_compat import Compat40Parser
+
+class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
     '''Full policy loaded from files.
 
     Usage:
@@ -1334,6 +1337,10 @@ class FilePolicy(Compat4MixIn, AbstractFileSystemLoader, AbstractPolicy):
     >>> resolution.execute('process-ident')
     '''
     pass
+
+    def handle_compat40(self, *, filepath, lineno):
+        subparser = Compat40Parser(master=self)
+        subparser.execute(filepath=filepath, lineno=lineno)
 
 class ValidateIncludesParser(AbstractParser):
     '''A parser that checks if included file does indeed exist.

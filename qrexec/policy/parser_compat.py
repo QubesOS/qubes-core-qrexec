@@ -18,8 +18,10 @@
 import collections
 import functools
 import logging
+import pathlib
 
 from .. import POLICYPATH_OLD
+from ..exc import PolicySyntaxError
 from . import parser
 
 @functools.total_ordering
@@ -29,9 +31,9 @@ class _NoArgumentLastKey:
     def __eq__(self, other):
         return self.arg == other.arg
     def __lt__(self, other):
-        return (self.arg == '*' or self.arg < other.arg)
+        return self.arg == '*' or self.arg < other.arg
 
-def walk_compat_files(legacypath=POLICYPATH_OLD):
+def walk_compat_files(legacy_path=POLICYPATH_OLD):
     '''Walks files in correct order for generating compat policy.
 
     Yields:
@@ -40,7 +42,7 @@ def walk_compat_files(legacypath=POLICYPATH_OLD):
 
     services = collections.defaultdict(dict)
 
-    for filepath in legacypath.iterdir():
+    for filepath in legacy_path.iterdir():
         if not filepath.is_file():
             logging.info('ignoring %s (not a file)', filepath)
             continue
@@ -59,9 +61,13 @@ def walk_compat_files(legacypath=POLICYPATH_OLD):
         for argument in sorted(services[service], key=_NoArgumentLastKey):
             yield service, argument, services[service][argument]
 
-class Compat4MixIn:
-    def handle_compat4(self, *, filepath, lineno):
-        for service, argument, path in walk_compat_files():
+class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
+    def __init__(self, *, master, legacy_path=POLICYPATH_OLD):
+        self.legacy_path = pathlib.Path(legacy_path)
+        self.master = master
+
+    def execute(self, *, filepath, lineno):
+        for service, argument, path in walk_compat_files(self.legacy_path):
             self.handle_include_service(service, argument, path,
                 filepath=filepath, lineno=lineno)
 
@@ -75,3 +81,16 @@ class Compat4MixIn:
                 self.handle_rule(self.rule_type.from_line_service(self,
                     service, argument, '@anyvm @adminvm deny',
                     filepath=path, lineno=None))
+
+    def resolve_path(self, included_path):
+        return (self.legacy_path / included_path).resolve()
+
+    def handle_rule(self, rule, *, filepath, lineno):
+        return self.master.handle_rule(rule, filepath=filepath, lineno=lineno)
+
+    def load_policy_file(self, file, filepath):
+        raise RuntimeError('this method should not be called')
+
+    def handle_compat40(self, *, filepath, lineno):
+        raise PolicySyntaxError(filepath, lineno,
+            '!compat-4.0 is not recursive')
