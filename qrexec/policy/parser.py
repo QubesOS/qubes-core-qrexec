@@ -180,6 +180,8 @@ class VMToken(str, metaclass=VMTokenMeta):
     other strings.
     '''
     def __new__(cls, token, *, filepath=None, lineno=None):
+        orig_token = token
+
         # first, adjust some aliases
         if token == 'dom0':
             # TODO: log a warning in Qubes 4.1
@@ -215,7 +217,7 @@ class VMToken(str, metaclass=VMTokenMeta):
 
         # the loop didn't find any valid prefix, so this is not a valid token
         raise PolicySyntaxError(filepath, lineno,
-            'invalid {} token: {!r}'.format(cls.__name__.lower(), token))
+            'invalid {} token: {!r}'.format(cls.__name__.lower(), orig_token))
 
     def __init__(self, token, *, filepath=None, lineno=None):
         # pylint: disable=unused-argument
@@ -308,7 +310,7 @@ class IntendedTarget(VMToken):
 
 # And the tokens. Inheritance defines, where the token can be used.
 
-class AdminVM(Target, Redirect, IntendedTarget):
+class AdminVM(Source, Target, Redirect, IntendedTarget):
     # no Source, for calls originating from AdminVM policy is not evaluated
     # pylint: disable=missing-docstring,unused-argument
     EXACT = '@adminvm'

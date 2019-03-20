@@ -36,7 +36,7 @@ For that case, argument also has to be `*`.
 | token                 | SRCQUBE   | DSTQUBE   | target=   | orig. target |
 | --------------------- | --------- | --------- | --------- | --------- |
 | a literal name        | +         | +         | +         | +         |
-| `@adminvm`            | - (N/A)   | +         | +         | +         |
+| `@adminvm`            | +         | +         | +         | +         |
 | `@anyvm`              | +         | +         | -         | -         |
 | `@default`            | -         | +         | -         | +         |
 | `@dispvm`             | -         | +         | +         | +         |
