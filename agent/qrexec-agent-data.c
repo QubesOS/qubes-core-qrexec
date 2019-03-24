@@ -307,7 +307,7 @@ static int process_child_io(libvchan_t *data_vchan,
     fd_set rdset, wrset;
     int vchan_fd;
     sigset_t selectmask;
-    int child_process_status = child_process_pid ? -1 : 0;
+    int child_process_status = child_process_pid > 0 ? -1 : 0;
     int remote_process_status = -1;
     int ret, max_fd;
     struct timespec zero_timeout = { 0, 0 };
@@ -330,7 +330,7 @@ static int process_child_io(libvchan_t *data_vchan,
     while (1) {
         if (child_exited) {
             int status;
-            if (child_process_pid &&
+            if (child_process_pid > 0 &&
                     waitpid(child_process_pid, &status, WNOHANG) > 0) {
                 if (WIFSIGNALED(status))
                     child_process_status = 128 + WTERMSIG(status);
@@ -642,7 +642,7 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
             if (!connect(s, (struct sockaddr *) &remote, socket_len)) {
                 *stdout_fd = *stdin_fd = s;
                 *stderr_fd = -1;
-                *pid = 0;
+                *pid = -1;
                 set_nonblock(s);
                 return 0;
             }
