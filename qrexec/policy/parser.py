@@ -1512,8 +1512,8 @@ class ToposortMixIn:
         self.included_paths[self._path_to_key(filepath)]
         super().load_policy_file(file, filepath)
 
-class TestPolicy(ToposortMixIn, AbstractFileLoader, AbstractPolicy):
-    '''An in-memory policy used for tests
+class TestLoader(AbstractFileLoader):
+    '''An in-memory loader used for tests
 
     Args:
         policy (dict or str): policy dictionary. The keys are filenames to be
@@ -1523,21 +1523,7 @@ class TestPolicy(ToposortMixIn, AbstractFileLoader, AbstractPolicy):
     '''
     def __init__(self, *args, policy, **kwds):
         super().__init__(*args, **kwds)
-
-        # This gets line and file of our caller, not the actual definition of
-        # the policy dict. Our test suite uses it this way, so we can get away
-        # with this.
-        caller = inspect.stack()[1]
-        self.filepath_suffix = '({}+{})'.format(caller.filename, caller.lineno)
-
-        if not isinstance(policy, collections.abc.Mapping):
-            policy = {'__main__': policy}
         self.policy = policy
-
-        file, filepath = self.resolve_filepath('__main__',
-            filepath=caller.filename, lineno=caller.lineno)
-        with file:
-            self.load_policy_file(file, filepath)
 
     def resolve_filepath(self, included_path, *, filepath, lineno):
         '''
@@ -1550,9 +1536,35 @@ class TestPolicy(ToposortMixIn, AbstractFileLoader, AbstractPolicy):
         except KeyError:
             raise exc.PolicySyntaxError(filepath, lineno,
                 'no such policy file: {!r}'.format(included_path))
-        return file, pathlib.PurePosixPath(included_path + self.filepath_suffix)
+        return file, pathlib.PurePosixPath(included_path + '[in-memory]')
 
     def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
             filepath, lineno):
         raise NotImplementedError(
             '!include-dir is unsupported in {}'.format(type(self).__name__))
+
+class TestPolicy(ToposortMixIn, TestLoader, AbstractPolicy):
+    '''Test policy, used for tests. It can be used to test most of the code
+    paths used in policy parsing.
+
+    >>> testpolicy = TestPolicy(policy={
+    ...     '__main__': '!include policy2'
+    ...     'policy2': '* * @anyvm @anyvm allow'})
+    '''
+    def __init__(self, *, policy, policy_compat={}, **kwds):
+        if not isinstance(policy, collections.abc.Mapping):
+            policy = {'__main__': policy}
+        super().__init__(policy=policy, **kwds)
+        self.policy_compat = policy_compat
+        file, filepath = self.resolve_filepath('__main__',
+            filepath=None, lineno=None)
+        with file:
+            self.load_policy_file(file, filepath)
+
+    def handle_compat40(self, *, filepath, lineno):
+        ''''''
+        # late import for circular
+        from .parser_compat import TestCompat40Loader
+
+        subparser = TestCompat40Loader(master=self, policy=self.policy_compat)
+        subparser.execute(filepath=filepath, lineno=lineno)

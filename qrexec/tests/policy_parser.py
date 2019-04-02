@@ -100,10 +100,8 @@ class TC_00_VMToken(unittest.TestCase):
 #       with self.assertRaises(exc.PolicySyntaxError):
 #           parser.Source(None)
         parser.Source('test-vm1')
-        with self.assertRaises(exc.PolicySyntaxError):
-            parser.Source('@adminvm')
-        with self.assertRaises(exc.PolicySyntaxError):
-            parser.Source('dom0')
+        parser.Source('@adminvm')
+        parser.Source('dom0')
         parser.Source('@anyvm')
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Source('@default')
