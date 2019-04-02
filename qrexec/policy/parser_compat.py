@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
+import abc
 import collections
 import functools
 import logging
@@ -33,15 +34,19 @@ class _NoArgumentLastKey:
     def __lt__(self, other):
         return self.arg == '*' or self.arg < other.arg
 
-def walk_compat_files(legacy_path=POLICYPATH_OLD):
-    '''Walks files in correct order for generating compat policy.
-
-    Yields:
-        (service, argument, filepath)
-    '''
-
+def _sorted_compat_files(filepaths):
     services = collections.defaultdict(dict)
 
+    for filepath in filepaths:
+        service, argument = parser.parse_service_and_argument(filepath,
+            no_arg='*')
+        services[service][argument] = filepath
+
+    for service in sorted(services):
+        for argument in sorted(services[service], key=_NoArgumentLastKey):
+            yield service, argument, services[service][argument]
+
+def _list_compat_files(legacy_path):
     for filepath in legacy_path.iterdir():
         if not filepath.is_file():
             logging.info('ignoring %s (not a file)', filepath)
@@ -53,21 +58,44 @@ def walk_compat_files(legacy_path=POLICYPATH_OLD):
                 filepath, invalid_chars)
             continue
 
-        service, argument = parser.parse_service_and_argument(filepath.name,
-            no_arg='*')
-        services[service][argument] = filepath
+        yield filepath
 
-    for service in sorted(services):
-        for argument in sorted(services[service], key=_NoArgumentLastKey):
-            yield service, argument, services[service][argument]
+def walk_compat_files(legacy_path=POLICYPATH_OLD):
+    '''Walks files in correct order for generating compat policy.
+
+    Args:
+        legacy_path (pathlib.Path): base path for legacy policy
+
+    Yields:
+        (service, argument, filepath)
+    '''
+    yield from _sorted_compat_files(_list_compat_files(legacy_path))
 
 class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
-    def __init__(self, *, master, legacy_path=POLICYPATH_OLD):
-        self.legacy_path = pathlib.Path(legacy_path)
+    '''Abstract parser for compat policy. Needs :py:func:`walk_includes`.
+
+    Args:
+        master (qrexec.policy.parser.AbstractPolicyParser):
+            the parser that will handle all the syntax parsed from the legacy
+            policy
+    '''
+    def __init__(self, *, master, **kwds):
+        super().__init__(**kwds)
         self.master = master
 
+    @abc.abstractmethod
+    def walk_includes(self):
+        '''An iterator that walks over all files to be included via
+        ``!compat-4.0`` statement.
+
+        Yields:
+            (service, argument, filepath)
+        '''
+        raise NotImplementedError()
+
     def execute(self, *, filepath, lineno):
-        for service, argument, path in walk_compat_files(self.legacy_path):
+        '''Insert the policy into :py:attr:`master` parser.'''
+        for service, argument, path in self.walk_includes():
             self.handle_include_service(service, argument, path,
                 filepath=filepath, lineno=lineno)
 
@@ -82,15 +110,42 @@ class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
                     service, argument, '@anyvm @adminvm deny',
                     filepath=path, lineno=None))
 
-    def resolve_path(self, included_path):
-        return (self.legacy_path / included_path).resolve()
-
     def handle_rule(self, rule, *, filepath, lineno):
+        ''''''
         return self.master.handle_rule(rule, filepath=filepath, lineno=lineno)
 
     def load_policy_file(self, file, filepath):
+        ''''''
         raise RuntimeError('this method should not be called')
 
     def handle_compat40(self, *, filepath, lineno):
+        ''''''
         raise PolicySyntaxError(filepath, lineno,
             '!compat-4.0 is not recursive')
+
+class Compat40Loader(Compat40Parser):
+    '''This parser should be used as helper for executing compatibility
+    statement:
+
+        >>> class MyParser(qrexec.policy.parser.AbstractPolicyParser):
+        ...     def handle_compat40(self, *, filepath, lineno):
+        ...         subparser = Compat40Parser(master=self)
+        ...         subparser.execute(filepath=filepath, lineno=lineno)
+    '''
+    def __init__(self, *, legacy_path=POLICYPATH_OLD, **kwds):
+        super().__init__(**kwds)
+        self.legacy_path = pathlib.Path(legacy_path)
+
+    def resolve_path(self, included_path):
+        ''''''
+        return (self.legacy_path / included_path).resolve()
+
+    def walk_includes(self):
+        ''''''
+        yield from walk_compat_files(self.legacy_path)
+
+class TestCompat40Loader(Compat40Loader, parser.TestLoader):
+    '''Used for tests. See :py:class:`qrexec.policy.parser.TestPolicy`.'''
+    def walk_includes(self):
+        ''''''
+        yield from _sorted_compat_files(self.policy)

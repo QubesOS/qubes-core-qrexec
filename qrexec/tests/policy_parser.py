@@ -29,7 +29,7 @@ import unittest.mock
 
 from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
-from ..policy import parser
+from ..policy import parser, parser_compat
 
 SYSTEM_INFO = {
     'domains': {

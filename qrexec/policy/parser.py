@@ -82,7 +82,13 @@ def parse_service_and_argument(rpcname, *, no_arg='+'):
     Parse ``SERVICE+ARGUMENT``. Argument may be empty (single ``+`` at the end)
     or omitted (no ``+`` at all). If no argument is given, `no_arg` is returned
     instead. By default this returns ``'+'``, as if argument is empty.
+
+    A `Path` from :py:mod:`pathlib` is also accepted, in which case the filename
+    is parsed.
     '''
+    if isinstance(rpcname, pathlib.PurePath):
+        rpcname = rpcname.name
+
     if '+' in rpcname:
         service, argument = rpcname.split('+', 1)
         argument = '+' + argument
@@ -1324,13 +1330,11 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
     def resolve_path(self, included_path):
         return (self.policy_path / included_path).resolve()
 
-# late import for circular
-from .parser_compat import Compat40Parser
-
 class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
     '''Full policy loaded from files.
 
     Usage:
+
     >>> policy = qrexec.policy.parser.FilePolicy()
     >>> request = Request(
     ...     'qrexec.Service', '+argument', 'source-name', 'target-name',
@@ -1341,7 +1345,11 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
     pass
 
     def handle_compat40(self, *, filepath, lineno):
-        subparser = Compat40Parser(master=self)
+        ''''''
+        # late import for circular
+        from .parser_compat import Compat40Loader
+
+        subparser = Compat40Loader(master=self)
         subparser.execute(filepath=filepath, lineno=lineno)
 
 class ValidateIncludesParser(AbstractParser):
