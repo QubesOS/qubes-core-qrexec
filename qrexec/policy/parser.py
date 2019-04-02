@@ -24,7 +24,6 @@ import abc
 import collections
 import collections.abc
 import enum
-import inspect
 import io
 import itertools
 import logging
@@ -96,9 +95,10 @@ def parse_service_and_argument(rpcname, *, no_arg='+'):
         service, argument = rpcname, no_arg
     return service, argument
 
-def get_invalid_characters(s, allowed=RPCNAME_ALLOWED_CHARSET):
+def get_invalid_characters(s, allowed=RPCNAME_ALLOWED_CHARSET, disallowed=''):
+    '''Return characters contained in *disallowed* and/or not int *allowed*'''
     return tuple(sorted(set(c for c in s
-        if c not in RPCNAME_ALLOWED_CHARSET.difference('+'))))
+        if c not in allowed.difference(disallowed))))
 
 def validate_service_and_argument(service, argument, *, filepath, lineno):
     '''Check service name and argument
@@ -125,7 +125,7 @@ def validate_service_and_argument(service, argument, *, filepath, lineno):
         service = None
 
     if service is not None:
-        invalid_chars = get_invalid_characters(service)
+        invalid_chars = get_invalid_characters(service, disallowed='+')
         if invalid_chars:
             raise PolicySyntaxError(filepath, lineno,
                 'service {!r} contains invalid characters: {!r}'.format(
@@ -1141,7 +1141,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def handle_compat40(self, *, filepath, lineno):
-        '''Handle ``!compat-4`` line when encountered in :meth:`policy_load_file`.
+        '''Handle ``!compat-4.0`` line when encountered in :meth:`policy_load_file`.
 
         This method is to be provided by subclass.
         '''
@@ -1342,7 +1342,6 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
     >>> resolution = policy.evaluate(request)
     >>> resolution.execute('process-ident')
     '''
-    pass
 
     def handle_compat40(self, *, filepath, lineno):
         ''''''

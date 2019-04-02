@@ -32,7 +32,11 @@ class _NoArgumentLastKey:
     def __eq__(self, other):
         return self.arg == other.arg
     def __lt__(self, other):
-        return self.arg == '*' or self.arg < other.arg
+        if self.arg == '*':
+            return False
+        if other.arg == '*':
+            return True
+        return self.arg < other.arg
 
 def _sorted_compat_files(filepaths):
     services = collections.defaultdict(dict)
