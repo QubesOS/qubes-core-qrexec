@@ -1,9 +1,10 @@
 :py:mod:`qrexec.policy.parser` -- Qubes RPC policy parser
 =========================================================
 
-.. py:module:: qrexec.policy.parser
+.. module:: qrexec.policy.parser
 
-Qrexec policy format is available as separate specification: :doc:`multifile-policy`.
+Qrexec policy format is available as separate specification:
+:doc:`multifile-policy`.
 
 Representing domain names
 -------------------------
@@ -20,8 +21,8 @@ Representing domain names
 .. autoclass:: IntendedTarget
    :members:
 
-The classes should be instantiated using either :py:class:`VMToken` or the
-context that expects the token.
+The classes should be instantiated using either :class:`VMToken` or the context
+that expects the token.
 
 >>> type(VMToken('@adminvm'))
 <class 'qrexec.policy.parser.AdminVM'>
@@ -97,9 +98,9 @@ Actions and resolutions
 -----------------------
 
 There are two things that represent "what to do" when there is a match in
-policy: actions and resolutions. Action is part of a :py:class:`Rule`, it means
+policy: actions and resolutions. Action is part of a :class:`Rule`, it means
 what this rule prescripts. In contrast, a resolution is something that happens
-after a :py:class:`Rule` was actually matched to :py:class:`Request`.
+after a :class:`Rule` was actually matched to :class:`Request`.
 
 .. autoclass:: ActionType
    :members:
@@ -135,7 +136,7 @@ Parsers
    :members:
    :member-order: bysource
 
-.. autoclass:: AbstractFileParser
+.. autoclass:: AbstractFileLoader
    :members:
    :member-order: bysource
 
@@ -143,13 +144,38 @@ Parsers
    :members:
    :member-order: bysource
 
+.. autoclass:: AbstractFileSystemLoader
+   :members:
+   :member-order: bysource
+
 .. autoclass:: FilePolicy
+   :members:
+   :member-order: bysource
+
+Miscellaneous and test facilities
+---------------------------------
+
+.. .. autoclass:: ValidateIncludesParser
+   :members:
+   :member-order: bysource
+
+.. .. autoclass:: CheckIfNotIncludedParser
+   :members:
+   :member-order: bysource
+
+.. autoclass:: TestLoader
+   :members:
+   :member-order: bysource
+
+.. autoclass:: TestPolicy
    :members:
    :member-order: bysource
 
 Helper functions
 ----------------
 
+.. autofunction:: get_invalid_characters
+.. autofunction:: parse_service_and_argument
 .. autofunction:: validate_service_and_argument
 .. autofunction:: filter_filepaths
 .. .. autofunction:: toposort

@@ -5,8 +5,11 @@ Welcome to qubes-core-qrexec's documentation!
    :maxdepth: 1
    :caption: Contents:
 
+   qrexec
    qrexec-policy-parser
+   qrexec-policy-parser_compat
    qrexec-exc
+   qrexec-utils
 
 
 Indices and tables

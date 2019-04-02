@@ -4,7 +4,7 @@
 #
 # Copyright (C) 2017 Marek Marczykowski-Górecki
 #                               <marmarek@invisiblethingslab.com>
-# Copyright (C) 2018  Wojtek Porczyk <woju@invisiblethingslab.com>
+# Copyright (C) 2018-2019  Wojtek Porczyk <woju@invisiblethingslab.com>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public

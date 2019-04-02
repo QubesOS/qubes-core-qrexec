@@ -15,6 +15,23 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
+'''This module is transitional and may go away any time.
+
+.. autofunction:: walk_compat_files
+
+.. autoclass:: Compat40Loader
+   :members:
+   :member-order: bysource
+
+.. autoclass:: Compat40Parser
+   :members:
+   :member-order: bysource
+
+.. autoclass:: TestCompat40Loader
+   :members:
+   :member-order: bysource
+'''
+
 import abc
 import collections
 import functools

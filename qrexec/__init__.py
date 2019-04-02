@@ -1,4 +1,44 @@
-'''Some package-wide constants'''
+'''
+Functions
+---------
+
+.. function:: call(dest, rpcname[, arg=None, \*, input=None])
+
+   Execute a qrexec call.
+
+   :param str dest: destination (a qube name or a valid ``@token``)
+   :param str rpcname: name of the invoked call
+   :param arg: argument of the call
+   :type arg: str or None
+   :param input: input to the qrexec call
+   :type input: str or bytes or file or None
+   :rtype: bytes
+   :raises subprocess.CalledProcessError: on failure
+
+Constants
+---------
+
+.. data:: POLICYPATH
+
+   Path to system policy.
+
+.. data:: POLICYPATH_OLD
+
+   Path to legacy policy, imported via ``!compat-4.0`` statement.
+
+.. data:: INCLUDEPATH
+
+   Path where all includes should be kept.
+
+.. data:: POLICYSUFFIX
+
+   Suffix for policy files. Any file in :const:`POLICYPATH` without this suffix
+   is ignored.
+
+.. data:: RPCNAME_ALLOWED_CHARSET
+
+   Allowed characters in name of qrexec calls and in argument, including ``+``.
+'''
 
 __version__ = '4.0.0'
 
@@ -13,7 +53,6 @@ QUBESD_SOCK = '/var/run/qubesd.sock'
 POLICYPATH = pathlib.Path('/etc/qubes/policy.d')
 INCLUDEPATH = POLICYPATH / 'include'
 POLICYSUFFIX = '.policy'
-
 POLICYPATH_OLD = pathlib.Path('/etc/qubes-rpc/policy')
 
 RPCNAME_ALLOWED_CHARSET = frozenset(
