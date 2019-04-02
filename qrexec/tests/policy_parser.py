@@ -1246,3 +1246,11 @@ class TC_50_Misc(unittest.TestCase):
             unittest.mock.call().makefile('rb'),
             unittest.mock.call().makefile().read(),
         ])
+
+class TC_90_Compat40(unittest.TestCase):
+    def test_001_loader(self):
+        policy = parser.TestPolicy(policy={'__main__': '!compat-4.0'},
+            policy_compat={'test.Allow': '$anyvm $anyvm allow'})
+        policy.evaluate(parser.Request(
+            'test.Allow', '+', 'test-vm1', 'test-vm2',
+            system_info=SYSTEM_INFO))
