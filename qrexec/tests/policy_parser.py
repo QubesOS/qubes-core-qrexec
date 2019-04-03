@@ -1254,3 +1254,32 @@ class TC_90_Compat40(unittest.TestCase):
         policy.evaluate(parser.Request(
             'test.Allow', '+', 'test-vm1', 'test-vm2',
             system_info=SYSTEM_INFO))
+
+    def test_100_implicit_deny(self):
+        policy = parser.TestPolicy(
+            policy={'__main__': '''
+                test.AllowBefore    * @anyvm @anyvm allow
+                !compat-4.0
+                test.AllowAfter     * @anyvm @anyvm allow
+                test.ImplicitDeny   * @anyvm @anyvm allow
+            '''},
+            policy_compat={
+                'test.AllowAfter': '''
+                    test-vm1 test-vm2 allow
+                ''',
+                'test.ImplicitDeny+arg': '''
+                    test-vm1 test-vm2 allow
+                ''',
+            })
+
+        policy.evaluate(parser.Request(
+            'test.AllowAfter', '+', 'test-vm1', 'test-vm2',
+            system_info=SYSTEM_INFO))
+        policy.evaluate(parser.Request(
+            'test.AllowAfter', '+', 'test-vm1', 'test-vm3',
+            system_info=SYSTEM_INFO))
+
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(parser.Request(
+                'test.ImplicitDeny', '+arg', 'test-vm1', 'test-vm3',
+                system_info=SYSTEM_INFO))

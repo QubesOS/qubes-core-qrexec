@@ -126,10 +126,10 @@ class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
             if argument != '*':
                 self.handle_rule(self.rule_type.from_line_service(self,
                     service, argument, '@anyvm @anyvm deny',
-                    filepath=path, lineno=None))
+                    filepath=path, lineno=None), filepath=path, lineno=None)
                 self.handle_rule(self.rule_type.from_line_service(self,
                     service, argument, '@anyvm @adminvm deny',
-                    filepath=path, lineno=None))
+                    filepath=path, lineno=None), filepath=path, lineno=None)
 
     def handle_rule(self, rule, *, filepath, lineno):
         ''''''
