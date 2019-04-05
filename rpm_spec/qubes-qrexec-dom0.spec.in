@@ -62,7 +62,7 @@ Source0: qubes-core-qrexec-%{version}.tar.gz
 The Qubes qrexec files for installation on Dom0.
 
 %prep
-%setup -q
+%setup -q -n qubes-core-qrexec-%{version}
 
 %build
 %{?set_build_flags}
