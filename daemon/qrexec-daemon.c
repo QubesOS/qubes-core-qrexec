@@ -179,7 +179,8 @@ static void incompatible_protocol_error_message(
             domain_name, remote_version, QREXEC_PROTOCOL_VERSION, domain_name);
 #undef KDIALOG_CMD
 #undef ZENITY_CMD
-    system(text);
+    /* silence -Wunused-result */
+    ret = system(text);
 }
 
 int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
@@ -289,7 +290,10 @@ void init(int xid)
     dup2(logfd, 1);
     dup2(logfd, 2);
 
-    chdir("/var/run/qubes");
+    if (chdir("/var/run/qubes") < 0) {
+        perror("chdir /var/run/qubes failed");
+        exit(1);
+    }
     if (setsid() < 0) {
         perror("setsid()");
         exit(1);
