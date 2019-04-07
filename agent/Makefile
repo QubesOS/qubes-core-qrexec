@@ -1,7 +1,11 @@
+PANDOC ?= pandoc
+
 CC ?= gcc
 CFLAGS += -I. -g -O2 -Wall -Wextra -Werror -pie -fPIC `pkg-config --cflags vchan-$(BACKEND_VMM)`
+CFLAGS += -I../libqrexec
 LDFLAGS += -pie
-LDLIBS = `pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils -lpam
+LDLIBS = -L../libqrexec
+LDLIBS += `pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils -lpam
 
 all: qrexec-agent qrexec-client-vm qrexec-fork-server qrexec-client-vm.1.gz
 qrexec-agent: qrexec-agent.o qrexec-agent-data.o
@@ -13,6 +17,7 @@ clean:
 install:
 	install -d $(DESTDIR)/etc/qubes-rpc
 	install -d $(DESTDIR)/usr/lib/qubes $(DESTDIR)/usr/bin
+	install -d $(DESTDIR)/usr/share/man/man1
 	install qrexec-agent $(DESTDIR)/usr/lib/qubes
 	install qrexec-client-vm $(DESTDIR)/usr/bin
 	install qrexec-client-vm.1.gz $(DESTDIR)/usr/share/man/man1

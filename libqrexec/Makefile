@@ -1,3 +1,6 @@
+LIBDIR ?= /usr/lib
+INCLUDEDIR ?= /usr/include
+
 CC=gcc
 CFLAGS+=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC `pkg-config --cflags vchan-$(BACKEND_VMM)`
 COMMONIOALL=ioall.o
@@ -11,9 +14,12 @@ ifneq "$(_XENSTORE_H)" ""
 endif
 
 
-all: libqrexec-utils.so.$(SO_VER)
+all: libqrexec-utils.so libqrexec-utils.so.$(SO_VER)
 libqrexec-utils.so.$(SO_VER): unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o
 	$(CC) $(LDFLAGS) -Wl,-soname,$@ -o $@ $^ $(VCHANLIBS)
+
+libqrexec-utils.so: libqrexec-utils.so.$(SO_VER)
+	ln -s libqrexec-utils.so.$(SO_VER) libqrexec-utils.so
 
 %.a:
 	$(AR) rcs $@ $^
