@@ -87,6 +87,8 @@ fi
 %files
 %defattr(-,root,root,-)
 %config(noreplace) /etc/pam.d/qrexec
+%dir /etc/qubes/rpc-config
+/etc/qubes/rpc-config/README
 
 %{_bindir}/qrexec-client-vm
 %{_bindir}/qrexec-fork-server
