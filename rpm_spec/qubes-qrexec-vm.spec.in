@@ -22,11 +22,8 @@
 #
 #
 
-# debug_package hack should be removed when BuildArch:noarch is enabled below
-%define debug_package %{nil}
-
-Name:		qubes-qrexec-vm
-Version:	%{version}
+Name:		qubes-core-qrexec-vm
+Version:	@VERSION@
 Release:	1%{dist}
 Summary:	The Qubes qrexec files (qube side)
 
@@ -36,9 +33,10 @@ License:	GPL
 URL:		http://www.qubes-os.org
 
 BuildRequires:	pam-devel
+BuildRequires:	qubes-core-qrexec-devel
 
 Requires:   python3
-Requires:   qubes-qrexec-base
+Requires:   qubes-core-qrexec
 
 Provides:   qubes-core-agent-qrexec = 4.1.0-1
 Obsoletes:  qubes-core-agent-qrexec < 4.1.0-1
@@ -76,6 +74,15 @@ rm -f %{name}-%{version}
 
 %preun
 %systemd_preun qubes-qrexec-agent.service
+
+%posttrans
+# when upgrading from R4.0, %%postun of qubes-core-agent-qrexec will revert
+# %%post of this package. Redo the action in %%posttrans
+%systemd_post qubes-qrexec-agent.service
+# and then start it back
+if systemctl is-enabled qubes-qrexec-agent.service >/dev/null 2>&1; then
+    systemctl start qubes-qrexec-agent.service
+fi
 
 %files
 %defattr(-,root,root,-)

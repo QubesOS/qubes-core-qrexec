@@ -22,10 +22,7 @@
 #
 #
 
-# debug_package hack should be removed when BuildArch:noarch is enabled below
-%define debug_package %{nil}
-
-Name:		qubes-qrexec-base
+Name:		qubes-core-qrexec
 Version:	@VERSION@
 Release:	1%{dist}
 Summary:	The Qubes qrexec files (common files)
@@ -35,12 +32,6 @@ Vendor:		Invisible Things Lab
 License:	GPL
 URL:		http://www.qubes-os.org
 
-# Because we have "#!/usr/bin/env python" shebangs, RPM puts
-# "Requires: $(which python)" dependency, which, depending on $PATH order, may
-# point to /usr/bin/python or /bin/python (because Fedora has this stupid
-# /bin -> usr/bin symlink). python*.rpm provides only /usr/bin/python.
-AutoReq:	no
-
 BuildRequires:  python3-devel
 # for building documentation
 BuildRequires:	python3-sphinx
@@ -49,11 +40,27 @@ BuildRequires:	qubes-libvchan-devel
 
 Requires:   python3
 Conflicts:  qubes-utils-libs < 4.1.0
+Conflicts:  qubes-core-agent-qrexec < 4.1.0
+Conflicts:  qubes-core-dom0-linux < 4.1.0
 
 Source0: qubes-core-qrexec-%{version}.tar.gz
 
 %description
 The Qubes qrexec files for installation on both dom0 and qube.
+
+%package libs
+Summary:    Libraries for qubes-qrexec
+Conflicts:  qubes-utils-libs < 4.1.0
+
+%description libs
+Libraries for qubes-qrexec
+
+%package devel
+Summary:    Development headers for qubes-qrexec
+Requires:   %{name}-libs
+
+%description devel
+Development header and files for qubes-qrexec
 
 %prep
 %setup -q -n qubes-core-qrexec-%{version}
@@ -87,11 +94,6 @@ rm -f %{name}-%{version}
 %{_bindir}/qrexec-policy-agent
 %{_bindir}/qrexec-policy-graph
 
-%{_includedir}/qrexec.h
-%{_includedir}/libqrexec-utils.h
-
-%{_libdir}/libqrexec-utils.so*
-
 /usr/lib/qubes/qubes-rpc-multiplexer
 
 %dir %{python3_sitelib}/qrexec-*.egg-info
@@ -120,6 +122,13 @@ rm -f %{name}-%{version}
 %dir %{python3_sitelib}/qrexec/glade
 %{python3_sitelib}/qrexec/glade/PolicyCreateConfirmationWindow.glade
 %{python3_sitelib}/qrexec/glade/RPCConfirmationWindow.glade
+
+%files devel
+%{_includedir}/qrexec.h
+%{_includedir}/libqrexec-utils.h
+
+%files libs
+%{_libdir}/libqrexec-utils.so*
 
 %changelog
 @CHANGELOG@
