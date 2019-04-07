@@ -1,0 +1,52 @@
+Source: qubes-core-qrexec
+Section: admin
+Priority: optional
+Maintainer: unman <unman@thirdeyesecurity.org>
+Build-Depends:
+ debhelper (>= 9),
+ libpam0g-dev,
+ libvchan-xen-dev,
+ pkg-config,
+ dh-python,
+ dh-systemd (>= 1.5),
+ python3-setuptools,
+ pandoc,
+Standards-Version: 3.9.5
+Homepage: https://www.qubes-os.org
+#Vcs-Git: https://github.com/QubesOS/qubes-core-qrexec
+
+Package: qubes-core-qrexec
+Architecture: any
+Depends: 
+ libvchan-xen,
+ ${shlibs:Depends}, 
+ ${misc:Depends}
+Replaces: qubes-core-agent-qrexec (<< 4.1.0-1)
+Breaks: qubes-core-agent-qrexec (<< 4.1.0-1)
+Description: Qubes qrexec agent
+ Agent part of Qubes RPC system. A daemon responsible for starting processes as
+ requested by dom0 or other VMs, according to dom0-enforced policy.
+
+Package: libqrexec-utils2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Breaks: qubes-utils (<< 3.1.4)
+Replaces: qubes-utils (<< 3.1.4)
+Description: Library of common functions of qrexec agent and daemon
+ This library contains common helper functions for qrexec agent and daemon.
+
+Package: libqrexec-utils-dev
+Architecture: any
+Section: libdevel
+Depends: libqrexec-utils2 (= ${binary:Version}), ${misc:Depends}
+Breaks: qubes-utils (<< 3.1.4)
+Replaces: qubes-utils (<< 3.1.4)
+Description: Development headers for libqrexec-utils
+ This package contains files required to compile qrexec-agent and qrexec-daemon.
+
+Package: python3-qrexec
+Architecture: any
+Depends:
+ ${python3:Depends},
+Description: Qrexec policy related python module
+ Qrexec policy related python module
