@@ -22,10 +22,7 @@
 #
 #
 
-# debug_package hack should be removed when BuildArch:noarch is enabled below
-%define debug_package %{nil}
-
-Name:		qubes-qrexec-dom0
+Name:		qubes-core-qrexec-dom0
 Version:	@VERSION@
 Release:	1%{dist}
 Summary:	The Qubes qrexec files (Dom0-side)
@@ -35,24 +32,15 @@ Vendor:		Invisible Things Lab
 License:	GPL
 URL:		http://www.qubes-os.org
 
-# Because we have "#!/usr/bin/env python" shebangs, RPM puts
-# "Requires: $(which python)" dependency, which, depending on $PATH order, may
-# point to /usr/bin/python or /bin/python (because Fedora has this stupid
-# /bin -> usr/bin symlink). python*.rpm provides only /usr/bin/python.
-AutoReq:	no
-
-# FIXME: Enable this and disable debug_package
-#BuildArch: noarch
-
 BuildRequires:  python3-devel
 # for building documentation
 BuildRequires:	python3-sphinx
 BuildRequires:	python3-dbus
-BuildRequires:  qubes-qrexec-base
+BuildRequires:  qubes-core-qrexec-devel
 
 Requires:   python3
 Requires:   qubes-core-dom0
-Requires:   qubes-qrexec-base
+Requires:   qubes-core-qrexec
 
 Conflicts:  qubes-core-dom0-linux < 4.1.0
 
