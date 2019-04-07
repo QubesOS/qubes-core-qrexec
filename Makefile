@@ -40,6 +40,7 @@ install-vm:
 	$(MAKE) install -C agent
 	install -d $(DESTDIR)/lib/systemd/system -m 755
 	install -t $(DESTDIR)/lib/systemd/system -m 644 systemd/*
+	install -m 0644 -D qubes-rpc-config/README $(DESTDIR)/etc/qubes/rpc-config/README
 #	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 #	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc/*
 .PHONY: install-vm
