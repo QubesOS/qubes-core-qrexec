@@ -78,7 +78,9 @@ rm -f %{name}-%{version}
 %{_bindir}/qrexec-client
 %{_sbindir}/qrexec-daemon
 
+%{_sysconfdir}/xdg/autostart/qrexec-policy-agent.desktop
 %{_sysconfdir}/qubes-rpc/policy.RegisterArgument
+%{_sysconfdir}/dbus-1/system.d/org.qubesos.PolicyAgent.conf
 
 %attr(2775,root,qubes) %dir %{_sysconfdir}/qubes-rpc/policy
 %attr(0664,root,qubes) %config(noreplace) %{_sysconfdir}/qubes-rpc/policy/policy.RegisterArgument

@@ -29,6 +29,12 @@ install-dom0:
 	install -d $(DESTDIR)/etc/qubes-rpc/policy -m 775
 	install -d $(DESTDIR)/etc/qubes-rpc/policy/include -m 775
 	install -t $(DESTDIR)/etc/qubes-rpc/policy -m 664 qubes-rpc-policy/*
+	install -d $(DESTDIR)/etc/xdg/autostart -m 755
+	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
+		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
+	install -d $(DESTDIR)/etc/dbus-1/system.d
+	install -m 644 policy-agent-extra/dbus-org.qubesos.PolicyAgent.conf \
+		$(DESTDIR)/etc/dbus-1/system.d/org.qubesos.PolicyAgent.conf
 .PHONY: install-dom0
 
 
