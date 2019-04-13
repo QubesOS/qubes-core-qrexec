@@ -33,6 +33,7 @@ License:	GPL
 URL:		http://www.qubes-os.org
 
 BuildRequires:	pam-devel
+BuildRequires:	pandoc
 BuildRequires:	qubes-core-qrexec-devel
 
 Requires:   python3
