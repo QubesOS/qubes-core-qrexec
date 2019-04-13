@@ -8,12 +8,6 @@ SO_VER=2
 LDFLAGS+=-shared
 VCHANLIBS = `pkg-config --libs vchan-$(BACKEND_VMM)`
 
-_XENSTORE_H=$(shell ls /usr/include/xenstore.h)
-ifneq "$(_XENSTORE_H)" ""
-	CFLAGS+= -DUSE_XENSTORE_H
-endif
-
-
 all: libqrexec-utils.so libqrexec-utils.so.$(SO_VER)
 libqrexec-utils.so.$(SO_VER): unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o
 	$(CC) $(LDFLAGS) -Wl,-soname,$@ -o $@ $^ $(VCHANLIBS)
