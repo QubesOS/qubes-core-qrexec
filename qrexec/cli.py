@@ -24,7 +24,7 @@ import os
 
 import sys
 
-import qubespolicy
+import qrexec
 
 parser = argparse.ArgumentParser(description="Evaluate qrexec policy")
 
@@ -48,7 +48,7 @@ parser.add_argument('process_ident', metavar='process-ident',
 
 
 def create_default_policy(service_name):
-    policy_file = os.path.join(qubespolicy.POLICY_DIR, service_name)
+    policy_file = os.path.join(qrexec.POLICY_DIR, service_name)
     with open(policy_file, "w") as policy:
         policy.write(
             "## Policy file automatically created on first service call.\n")
@@ -67,7 +67,7 @@ def main(args=None):
     # Add source domain information, required by qrexec-client for establishing
     # connection
     caller_ident = args.process_ident + "," + args.domain + "," + args.domain_id
-    log = logging.getLogger('qubespolicy')
+    log = logging.getLogger('qrexec')
     log.setLevel(logging.INFO)
     if not log.handlers:
         handler = logging.handlers.SysLogHandler(address='/dev/log')
@@ -75,14 +75,14 @@ def main(args=None):
     log_prefix = 'qrexec: {}: {} -> {}: '.format(
         args.service_name, args.domain, args.target)
     try:
-        system_info = qubespolicy.get_system_info()
-    except qubespolicy.QubesMgmtException as e:
+        system_info = qrexec.get_system_info()
+    except qrexec.QubesMgmtException as e:
         log.error(log_prefix + 'error getting system info: ' + str(e))
         return 1
     try:
         try:
-            policy = qubespolicy.Policy(args.service_name)
-        except qubespolicy.PolicyNotFound:
+            policy = qrexec.Policy(args.service_name)
+        except qrexec.PolicyNotFound:
             service_name = args.service_name.split('+')[0]
             import pydbus
             bus = pydbus.SystemBus()
@@ -92,20 +92,20 @@ def main(args=None):
                 args.domain, service_name)
             if create_policy:
                 create_default_policy(service_name)
-                policy = qubespolicy.Policy(args.service_name)
+                policy = qrexec.Policy(args.service_name)
             else:
                 raise
 
         action = policy.evaluate(system_info, args.domain, args.target)
-        if args.assume_yes_for_ask and action.action == qubespolicy.Action.ask:
-            action.action = qubespolicy.Action.allow
+        if args.assume_yes_for_ask and action.action == qrexec.Action.ask:
+            action.action = qrexec.Action.allow
         if args.just_evaluate:
             return {
-                qubespolicy.Action.allow: 0,
-                qubespolicy.Action.deny: 1,
-                qubespolicy.Action.ask: 1,
+                qrexec.Action.allow: 0,
+                qrexec.Action.deny: 1,
+                qrexec.Action.ask: 1,
             }[action.action]
-        if action.action == qubespolicy.Action.ask:
+        if action.action == qrexec.Action.ask:
             # late import to save on time for allow/deny actions
             import pydbus
             bus = pydbus.SystemBus()
@@ -132,10 +132,10 @@ def main(args=None):
                 action.handle_user_response(False)
         log.info(log_prefix + 'allowed to {}'.format(action.target))
         action.execute(caller_ident)
-    except qubespolicy.PolicySyntaxError as e:
+    except qrexec.PolicySyntaxError as e:
         log.error(log_prefix + 'error loading policy: ' + str(e))
         return 1
-    except qubespolicy.AccessDenied as e:
+    except qrexec.AccessDenied as e:
         log.info(log_prefix + 'denied: ' + str(e))
         return 1
     return 0

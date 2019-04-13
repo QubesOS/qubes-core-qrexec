@@ -24,7 +24,7 @@ import os
 
 import sys
 
-import qubespolicy
+import qrexec
 
 parser = argparse.ArgumentParser(description='Graph qrexec policy')
 parser.add_argument('--include-ask', action='store_true',
@@ -38,7 +38,7 @@ parser.add_argument('--service', action='store', nargs='+',
 parser.add_argument('--output', action='store',
     help='Write to *output* instead of stdout')
 parser.add_argument('--policy-dir', action='store',
-    default=qubespolicy.POLICY_DIR,
+    default=qrexec.POLICY_DIR,
     help='Look for policy in *policy-dir*')
 parser.add_argument('--system-info', action='store',
     help='Load system information from file instead of querying qubesd')
@@ -58,11 +58,11 @@ def handle_single_action(args, action):
         target = action.rule.override_target
     if args.target and target not in args.target:
         return ''
-    if action.action == qubespolicy.Action.ask:
+    if action.action == qrexec.Action.ask:
         if args.include_ask:
             return '  "{}" -> "{}" [label="{}" color=orange];\n'.format(
                 action.source, target, service)
-    elif action.action == qubespolicy.Action.allow:
+    elif action.action == qrexec.Action.allow:
         return '  "{}" -> "{}" [label="{}" color=red];\n'.format(
                 action.source, target, service)
     return ''
@@ -78,7 +78,7 @@ def main(args=None):
         with open(args.system_info) as f_system_info:
             system_info = json.load(f_system_info)
     else:
-        system_info = qubespolicy.get_system_info()
+        system_info = qrexec.get_system_info()
 
     sources = list(system_info['domains'].keys())
     if args.source:
@@ -99,7 +99,7 @@ def main(args=None):
                 not any(service.startswith(srv + '+') for srv in args.service):
             continue
 
-        policy = qubespolicy.Policy(service, args.policy_dir)
+        policy = qrexec.Policy(service, args.policy_dir)
         for source in sources:
             for target in targets:
                 try:
@@ -110,7 +110,7 @@ def main(args=None):
                     if line:
                         output.write(line)
                     connections.add(line)
-                except qubespolicy.AccessDenied:
+                except qrexec.AccessDenied:
                     continue
 
     output.write('}\n')

@@ -30,7 +30,7 @@ from gi.repository import Gtk
 
 class PolicyCreateConfirmationWindow(object):
     # pylint: disable=too-few-public-methods
-    _source_file = pkg_resources.resource_filename('qubespolicy',
+    _source_file = pkg_resources.resource_filename('qrexec',
         os.path.join('glade', "PolicyCreateConfirmationWindow.glade"))
     _source_id = {'window': "PolicyCreateConfirmationWindow",
                   'ok': "okButton",
