@@ -21,14 +21,14 @@ import os
 from gi.repository import Gtk, Gdk, GLib  # pylint: disable=import-error
 import pkg_resources
 
-from qubespolicy.gtkhelpers import VMListModeler, FocusStealingHelper
-from qubespolicy.utils import sanitize_domain_name, \
+from qrexec.gtkhelpers import VMListModeler, FocusStealingHelper
+from qrexec.utils import sanitize_domain_name, \
     sanitize_service_name
 
 
 class RPCConfirmationWindow:
     # pylint: disable=too-few-public-methods
-    _source_file = pkg_resources.resource_filename('qubespolicy',
+    _source_file = pkg_resources.resource_filename('qrexec',
         os.path.join('glade', "RPCConfirmationWindow.glade"))
     _source_id = {'window': "RPCConfirmationWindow",
                   'ok': "okButton",

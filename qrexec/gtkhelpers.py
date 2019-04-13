@@ -25,7 +25,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib
 # pylint: enable=import-error
 
-from qubespolicy.utils import sanitize_domain_name
+from qrexec.utils import sanitize_domain_name
 # pylint: enable=wrong-import-position
 
 class VMListModeler:

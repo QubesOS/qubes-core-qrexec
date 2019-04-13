@@ -29,8 +29,8 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import GLib
 # pylint: enable=import-error
 
-import qubespolicy.rpcconfirmation
-import qubespolicy.policycreateconfirmation
+import qrexec.rpcconfirmation
+import qrexec.policycreateconfirmation
 # pylint: enable=wrong-import-position
 
 class PolicyAgent(object):
@@ -64,7 +64,7 @@ class PolicyAgent(object):
             entries_info[entry] = {}
             entries_info[entry]['icon'] = icons.get(entry, None)
 
-        response = qubespolicy.rpcconfirmation.confirm_rpc(
+        response = qrexec.rpcconfirmation.confirm_rpc(
             entries_info, source, service_name,
             targets, default_target or None)
         return response or ''
@@ -73,7 +73,7 @@ class PolicyAgent(object):
     def ConfirmPolicyCreate(source, service_name):
         # pylint: disable=invalid-name
 
-        response = qubespolicy.policycreateconfirmation.confirm(
+        response = qrexec.policycreateconfirmation.confirm(
             source, service_name)
         return response
 
