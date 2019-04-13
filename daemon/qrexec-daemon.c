@@ -801,10 +801,11 @@ static void handle_message_from_agent(void)
  * to (because its pipe is full) to write_fdset. Return the highest used file
  * descriptor number, needed for the first select() parameter.
  */
-static int fill_fdsets_for_select(fd_set * read_fdset, fd_set * write_fdset)
+static int fill_fdsets_for_select(int vchan_fd, fd_set * read_fdset, fd_set * write_fdset)
 {
     int i;
     int max = -1;
+
     FD_ZERO(read_fdset);
     FD_ZERO(write_fdset);
     for (i = 0; i <= max_client_fd; i++) {
@@ -813,17 +814,69 @@ static int fill_fdsets_for_select(fd_set * read_fdset, fd_set * write_fdset)
             max = i;
         }
     }
+
+    FD_SET(vchan_fd, read_fdset);
+    if (vchan_fd > max)
+        max = vchan_fd;
+
     FD_SET(qrexec_daemon_unix_socket_fd, read_fdset);
     if (qrexec_daemon_unix_socket_fd > max)
         max = qrexec_daemon_unix_socket_fd;
+
     return max;
+}
+
+/* qrexec-agent has disconnected, cleanup local state and try to connect again.
+ * If remote domain dies, terminate qrexec-daemon.
+ */
+static int handle_agent_restart(void) {
+    size_t i;
+
+    /* Close old (dead) vchan connection. */
+    libvchan_close(vchan);
+    vchan = NULL;
+
+    /* Disconnect all local clients. This will look like all the qrexec
+     * connections were terminated, which isn't necessary true (established
+     * qrexec connection may survive qrexec-agent and qrexec-daemon restart),
+     * but we won't be notified about its termination. This may kill DispVM
+     * prematurely (if anyone restarts qrexec-agent inside DispVM), but it's
+     * better than the alternative (leaking DispVMs).
+     *
+     * But, do not mark related vchan ports as unused. Since we won't get call
+     * end notification, we don't know when such ports will really be unused.
+     */
+    for (i = 0; i < MAX_CLIENTS; i++) {
+        if (clients[i].state != CLIENT_INVALID)
+            terminate_client(i);
+    }
+
+    /* Abort pending qrexec requests */
+    for (i = 0; i < MAX_CLIENTS; i++) {
+        if (policy_pending[i].pid != 0)
+            policy_pending[i].pid = 0;
+    }
+    policy_pending_max = -1;
+
+    vchan = libvchan_client_init(remote_domain_id, VCHAN_BASE_PORT);
+    if (!vchan) {
+        perror("cannot connect to qrexec agent");
+        return -1;
+    }
+    if (handle_agent_hello(vchan, remote_domain_name) < 0) {
+        libvchan_close(vchan);
+        vchan = NULL;
+        return -1;
+    }
+    fprintf(stderr, "qrexec-agent has reconnected\n");
+    return 0;
 }
 
 int main(int argc, char **argv)
 {
     fd_set read_fdset, write_fdset;
-    int i, opt;
-    int max;
+    int i, opt, ret;
+    int max, vchan_fd;
     sigset_t chld_set;
 
     while ((opt=getopt(argc, argv, "q")) != -1) {
@@ -856,15 +909,37 @@ int main(int argc, char **argv)
      * - child exited
      */
     for (;;) {
-        max = fill_fdsets_for_select(&read_fdset, &write_fdset);
+        struct timeval tv = { 0, 1000000 };
+
+        vchan_fd = libvchan_fd_for_select(vchan);
+        max = fill_fdsets_for_select(vchan_fd, &read_fdset, &write_fdset);
         if (libvchan_buffer_space(vchan) <= (int)sizeof(struct msg_header))
             FD_ZERO(&read_fdset);	// vchan full - don't read from clients
 
         sigprocmask(SIG_BLOCK, &chld_set, NULL);
         if (child_exited)
             reap_children();
-        wait_for_vchan_or_argfd(vchan, max, &read_fdset, &write_fdset);
+        ret = select(max+1, &read_fdset, &write_fdset, NULL, &tv);
+        if (ret < 0 && errno != EINTR) {
+            perror("select");
+            return 1;
+        }
         sigprocmask(SIG_UNBLOCK, &chld_set, NULL);
+
+        if (FD_ISSET(vchan_fd, &read_fdset))
+            // the following will never block; we need to do this to
+            // clear libvchan_fd pending state
+            libvchan_wait(vchan);
+
+        if (!libvchan_is_open(vchan)) {
+            fprintf(stderr, "qrexec-agent has disconnected\n");
+            if (handle_agent_restart() < 0) {
+                fprintf(stderr, "Failed to reconnect to qrexec-agent, terminating\n");
+                return 1;
+            }
+            /* read_fdset may be outdated at this point, calculate it again. */
+            continue;
+        }
 
         if (FD_ISSET(qrexec_daemon_unix_socket_fd, &read_fdset))
             handle_new_client();
