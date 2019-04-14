@@ -32,13 +32,14 @@ Vendor:		Invisible Things Lab
 License:	GPL
 URL:		http://www.qubes-os.org
 
-BuildRequires:  python3-devel
+BuildRequires:  python%{python3_pkgversion}-devel
 # for building documentation
-BuildRequires:	python3-sphinx
-BuildRequires:	python3-dbus
+BuildRequires:	python%{python3_pkgversion}-sphinx
+BuildRequires:	python%{python3_pkgversion}-dbus
 BuildRequires:	qubes-libvchan-devel
+BuildRequires:  python3-rpm-macros
 
-Requires:   python3
+Requires:   python%{python3_pkgversion}
 Conflicts:  qubes-utils-libs < 4.1.0
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 Conflicts:  qubes-core-dom0-linux < 4.1.0

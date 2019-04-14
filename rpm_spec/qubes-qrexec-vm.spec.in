@@ -37,7 +37,7 @@ BuildRequires:	pandoc
 BuildRequires:	qubes-core-qrexec-devel
 BuildRequires:	lsb-core-noarch
 
-Requires:   python3
+Requires:   python%{python3_pkgversion}
 Requires:   qubes-core-qrexec
 
 Provides:   qubes-core-agent-qrexec = 4.1.0-1
