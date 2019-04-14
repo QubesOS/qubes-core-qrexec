@@ -463,7 +463,7 @@ class RPCConfirmationWindow:
         return False
 
 
-class PolicyCreateConfirmationWindow(object):
+class PolicyCreateConfirmationWindow:
     # pylint: disable=too-few-public-methods
     _source_file = pkg_resources.resource_filename('qrexec',
         os.path.join('glade', "PolicyCreateConfirmationWindow.glade"))
@@ -524,7 +524,7 @@ def confirm_rpc(entries_info, source, rpc_operation, targets_list, target=None):
     return window.confirm_rpc()
 
 
-class PolicyAgent(object):
+class PolicyAgent:
     # pylint: disable=too-few-public-methods
     dbus = """
     <node>

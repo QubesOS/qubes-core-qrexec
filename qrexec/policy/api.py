@@ -34,8 +34,6 @@
     https://github.com/QubesOS/qubes-policy-control
 '''
 
-import subprocess
-
 from .. import call as _call
 
 QREXEC_CLIENT = '/usr/bin/qrexec-client-vm'
@@ -56,7 +54,6 @@ def _qrexec(rpcname, *, name=None, argument=None, input=None):
     if name is not None:
         rpcname = '{}+{}'.format(rpcname, name)
 
-    kwds = {}
     if argument is not None or input is not None:
         if argument is None:
             argument = b'\n'

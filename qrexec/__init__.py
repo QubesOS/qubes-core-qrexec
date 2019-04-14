@@ -1,3 +1,4 @@
+# pylint: disable=anomalous-backslash-in-string
 '''
 Functions
 ---------

@@ -25,7 +25,7 @@ import argparse
 import sys
 
 from ..policy import api
-from .. import RPCNAME_ALLOWED_CHARS
+from .. import RPCNAME_ALLOWED_CHARSET
 
 parser = argparse.ArgumentParser(
     usage='qubes-policy {[-l]|-g|-r|-d} [include/][RPCNAME[+ARGUMENT]]')
@@ -73,7 +73,7 @@ def main(args=None):
             name = name[len('include/'):]
             proxy = proxy.include
 
-        invalid_chars = set(name) - RPCNAME_ALLOWED_CHARS
+        invalid_chars = set(name) - RPCNAME_ALLOWED_CHARSET
         if invalid_chars:
             parser.error('invalid character(s) in RPCNAME: {!r}'.format(
                 ''.join(sorted(invalid_chars))))

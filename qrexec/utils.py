@@ -72,7 +72,7 @@ def qubesd_call(dest, method, arg=None, payload=None):
     try:
         client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         client_socket.connect(socket_path)
-    except IOError:
+    except IOError: # pylint: disable=try-except-raise
         # TODO:
         raise
 
@@ -89,14 +89,13 @@ def qubesd_call(dest, method, arg=None, payload=None):
     return_data = client_socket.makefile('rb').read()
     if return_data.startswith(b'0\x00'):
         return return_data[2:]
-    elif return_data.startswith(b'2\x00'):
+    if return_data.startswith(b'2\x00'):
         # pylint: disable=unused-variable
         (_, exc_type, _traceback, _format_string, _args) = \
             return_data.split(b'\x00', 4)
         raise QubesMgmtException(exc_type.decode('ascii'))
-    else:
-        raise AssertionError(
-            'invalid qubesd response: {!r}'.format(return_data))
+    raise AssertionError(
+        'invalid qubesd response: {!r}'.format(return_data))
 
 
 def get_system_info():
@@ -118,7 +117,7 @@ def get_system_info():
 
 def prepare_subprocess_kwds(input):
     '''Prepare kwds for :py:func:`subprocess.run` for given input
-    '''
+    ''' # pylint: disable=redefined-builtin
     kwds = {}
     if input is None:
         kwds['stdin'] = subprocess.DEVNULL

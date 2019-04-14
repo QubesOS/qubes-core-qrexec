@@ -9,7 +9,7 @@
 
 # Add files or directories to the blacklist. They should be base names, not
 # paths.
-ignore=CVS
+ignore=tests
 
 # Add files or directories matching the regex patterns to the blacklist. The
 # regex matches against base names, not paths.
@@ -69,6 +69,12 @@ confidence=
 
 # abstract-method: https://stackoverflow.com/questions/30884804/pylint-for-half-implemented-abstract-classes
 disable=
+ missing-docstring,
+ empty-docstring,
+ fixme,
+ too-few-public-methods,
+ duplicate-code,
+ cyclic-import,
  abstract-method,
  bad-continuation,
  bad-option-value,
@@ -184,7 +190,7 @@ ignore-imports=no
 [BASIC]
 
 # Good variable names which should always be accepted, separated by a comma
-good-names=i,j,k,ex,Run,_,parser,argparser,vm,f
+good-names=e,i,j,k,ex,Run,_,parser,argparser,vm,f
 
 # Bad variable names which should always be refused, separated by a comma
 bad-names=foo,bar,baz,toto,tutu,tata
@@ -333,13 +339,13 @@ max-args=5
 ignored-argument-names=_.*
 
 # Maximum number of locals for function / method body
-max-locals=15
+max-locals=20
 
 # Maximum number of return / yield for function / method body
 max-returns=6
 
 # Maximum number of branch for function / method body
-max-branches=12
+max-branches=18
 
 # Maximum number of statements in function / method body
 max-statements=50

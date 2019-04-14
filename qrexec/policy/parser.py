@@ -18,6 +18,8 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
+# pylint: disable=too-many-lines
+
 '''Qrexec policy parser and evaluator'''
 
 import abc
@@ -97,6 +99,7 @@ def parse_service_and_argument(rpcname, *, no_arg='+'):
 
 def get_invalid_characters(s, allowed=RPCNAME_ALLOWED_CHARSET, disallowed=''):
     '''Return characters contained in *disallowed* and/or not int *allowed*'''
+    # pylint: disable=invalid-name
     return tuple(sorted(set(c for c in s
         if c not in allowed.difference(disallowed))))
 
@@ -198,17 +201,17 @@ class VMToken(str, metaclass=VMTokenMeta):
             return super().__new__(cls, token)
 
         # token starts with @, we search for right subclass
-        for exact, c in cls.exacts.items():
-            if not issubclass(c, cls):
+        for exact, token_cls in cls.exacts.items():
+            if not issubclass(token_cls, cls):
                 # the class has to be our subclass, that's how we define which
                 # tokens can be used where
                 continue
             if token == exact:
-                return super().__new__(c, token)
+                return super().__new__(token_cls, token)
 
         # for prefixed tokens, we pass just suffixes
-        for prefix, c in cls.prefixes.items():
-            if not issubclass(c, cls):
+        for prefix, token_cls in cls.prefixes.items():
+            if not issubclass(token_cls, cls):
                 continue
             if token.startswith(prefix):
                 value = token[len(prefix):]
@@ -219,7 +222,7 @@ class VMToken(str, metaclass=VMTokenMeta):
                     # we are either part of a longer prefix (@dispvm:@tag: etc),
                     # or the token is invalid, in which case this will fallthru
                     continue
-                return super().__new__(c, token)
+                return super().__new__(token_cls, token)
 
         # the loop didn't find any valid prefix, so this is not a valid token
         raise PolicySyntaxError(filepath, lineno,
@@ -378,7 +381,8 @@ class DispVM(Target, Redirect, IntendedTarget):
     def verify(self, *, system_info):
         return self
 
-    def get_dispvm_template(self, source, *, system_info):
+    @staticmethod
+    def get_dispvm_template(source, *, system_info):
         '''Given source, get appropriate template for DispVM. Maybe None.'''
         if (source not in system_info['domains']
                 or system_info['domains'][source]['default_dispvm'] is None):
@@ -821,7 +825,7 @@ class Action(enum.Enum):
     deny = Deny
     ask = Ask
 
-class Rule(object):
+class Rule:
     '''A single line of policy file
 
     Avoid instantiating manually, use either :py:meth:`from_line()` or
@@ -1152,7 +1156,6 @@ class AbstractParser(metaclass=abc.ABCMeta):
 
         This method may be overloaded in subclass. By default it does nothing.
         '''
-        pass
 
 class AbstractPolicy(AbstractParser):
     '''This class is a parser that accumulates the rules to form policy.'''

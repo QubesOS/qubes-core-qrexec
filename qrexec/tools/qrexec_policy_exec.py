@@ -72,8 +72,7 @@ class DBusAskResolution(parser.AskResolution):
         if response:
             return self.handle_user_response(True, response).execute(
                 caller_ident)
-        else:
-            return self.handle_user_response(False, None)
+        return self.handle_user_response(False, None)
 
 def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask):
     ret = {
@@ -121,12 +120,12 @@ def main(args=None):
     if not log.handlers:
         handler = logging.handlers.SysLogHandler(address='/dev/log')
         log.addHandler(handler)
-    log_prefix = 'qrexec: {}: {} -> {}: '.format(
+    log_prefix = 'qrexec: {}: {} -> {}:'.format(
         args.service_and_arg, args.source, args.intended_target)
     try:
         system_info = utils.get_system_info()
     except exc.QubesMgmtException as err:
-        log.error(log_prefix + 'error getting system info: ' + str(err))
+        log.error('%s error getting system info: %s', log_prefix, err)
         return 1
 
     try:
@@ -146,13 +145,15 @@ def main(args=None):
                 assume_yes_for_ask=args.assume_yes_for_ask))
         resolution = policy.evaluate(request)
         result = resolution.execute(caller_ident)
-        log.info(log_prefix + 'allowed to {}'.format(resolution.target))
+        if result is not None:
+            resolution = result
+        log.info('%s allowed to %s', log_prefix, resolution.target)
 
     except exc.PolicySyntaxError as err:
-        log.error(log_prefix + 'error loading policy: ' + str(err))
+        log.error('%s error loading policy: %s', log_prefix, err)
         return 1
     except exc.AccessDenied as err:
-        log.info(log_prefix + 'denied: ' + str(err))
+        log.info('%s denied: %s', log_prefix, err)
         return 1
     return 0
 

@@ -96,7 +96,9 @@ def main(args=None):
 
     connections = set()
 
+    policy = parser.FilePolicy(policy_path=args.policy_dir)
     output.write('digraph g {\n')
+    # TODO: list defined services and arguments
     for service in os.listdir(args.policy_dir):
         if os.path.isdir(os.path.join(args.policy_dir, service)):
             continue
@@ -104,11 +106,13 @@ def main(args=None):
                 not any(service.startswith(srv + '+') for srv in args.service):
             continue
 
-        policy = parser.Policy(service, policy_path=args.policy_dir)
         for source in sources:
             for target in targets:
                 try:
-                    action = policy.evaluate(system_info, source, target)
+                    request = parser.Request(
+                         service, '+', source, target,
+                         system_info=system_info)
+                    action = policy.evaluate(request)
                     line = handle_single_action(args, action)
                     if line in connections:
                         continue

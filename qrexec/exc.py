@@ -21,7 +21,6 @@
 
 class AccessDenied(Exception):
     ''' Raised when qrexec policy denied access '''
-    pass
 
 class PolicySyntaxError(AccessDenied):
     ''' Syntax error in qrexec policy, abort parsing '''
