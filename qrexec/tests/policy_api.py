@@ -26,6 +26,7 @@ $include:/dev/null
 # - various problems around argument
 # - policy.test.Setup (to be supplied with .Cleanup in auxiliary rpm)
 
+@unittest.skip('TODO')
 class TC_00_Integration(unittest.TestCase):
     @property
     def rpcname(self):

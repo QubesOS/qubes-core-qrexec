@@ -20,12 +20,11 @@
 
 import time
 import unittest
+import os
 
 import gi  # isort:skip
 gi.require_version('Gtk', '3.0')  # isort:skip
 from gi.repository import Gtk  # isort:skip pylint:
-
-from qubes.tests import skipUnlessEnv
 
 from qrexec.tools.qrexec_policy_agent import VMListModeler, GtkOneTimerHelper, \
     FocusStealingHelper
@@ -82,7 +81,7 @@ class GtkTestCase(unittest.TestCase):
         return iterations, time_length
 
 
-@skipUnlessEnv('DISPLAY')
+@unittest.skipUnless('DISPLAY' in os.environ, 'no DISPLAY variable')
 class VMListModelerTest(VMListModeler, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
@@ -307,7 +306,7 @@ class FocusStealingHelperMock(FocusStealingHelper):
         self._window_changed_focus(True)
 
 
-@skipUnlessEnv('DISPLAY')
+@unittest.skipUnless('DISPLAY' in os.environ, 'no DISPLAY variable')
 class FocusStealingHelperTest(FocusStealingHelperMock, GtkTestCase):
     def __init__(self, *args, **kwargs):
         GtkTestCase.__init__(self, *args, **kwargs)
