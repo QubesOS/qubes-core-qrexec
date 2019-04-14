@@ -4,8 +4,11 @@ lib/systemd/system/qubes-qrexec-agent.service
 usr/bin/qrexec-client-vm
 usr/bin/qrexec-fork-server
 usr/bin/qrexec-policy-graph
+usr/bin/qrexec-policy-restore
+usr/bin/qrexec-policy-exec
 usr/bin/qrexec-policy
 usr/bin/qrexec-policy-agent
+usr/bin/qubes-policy
 usr/lib/qubes/qrexec-agent
 usr/lib/qubes/qrexec-client-vm
 usr/lib/qubes/qrexec_client_vm
