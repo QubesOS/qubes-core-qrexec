@@ -17,8 +17,8 @@ qrexec.Service  *           @anyvm      @adminvm    {allow|deny|ask} [PARAM=VALU
 
 `ARGUMENT` may be empty. A single `+` means just empty argument.
 
-Comment lines are as before, lines starting with `\s*#`, empty, or containing
-only whitespace. Inline comments are not allowed.
+Comments are lines starting with `#` (possibly preceded by whitespace) and empty
+lines (or containing only whitespace). Inline comments are not allowed.
 
 Parameters should be separated by whitespace, separation by comma is no longer
 supported. Rationale: simplicity.
@@ -28,19 +28,22 @@ Supported params for actions other than `deny` (*NO CHANGE*):
 - `user`
 - `default_target` (only for `ask`)
 
-Supported values for SRCQUBE and DSTQUBE (*NO CHANGE*):
-- a literal name
-- `@anyvm`
-- `@adminvm` (only for target, as policy is not evaluated for calls originating
-  at AdminVM)
-- `@dispvm:VMNAME`
-- `@dispvm:@tag:TAG`
-- `@dispvm`
-- `@tag:TAG`
-- `@type:TYPE`
+Service may be specified as `*` (a single asterisk) which means "any service".
+For that case, argument also has to be `*`.
 
-Also service may be specified as `*` (a single asterisk) which means "any
-service". For that case, argument also has to be `*`.
+### Qube specification
+
+| token                 | SRCQUBE   | DSTQUBE   | target=   | orig. target |
+| --------------------- | --------- | --------- | --------- | --------- |
+| a literal name        | +         | +         | +         | +         |
+| `@adminvm`            | +         | +         | +         | +         |
+| `@anyvm`              | +         | +         | -         | -         |
+| `@default`            | -         | +         | -         | +         |
+| `@dispvm`             | -         | +         | +         | +         |
+| `@dispvm:VMNAME`      | +         | +         | +         | +         |
+| `@dispvm:@tag:TAG`    | +         | +         | -         | -         |
+| `@tag:TAG`            | +         | +         | -         | -         |
+| `@type:TYPE`          | +         | +         | -         | -         |
 
 ### Rationale for \*
 Previously there was no possibility to ensure that a call is prohibited for any
@@ -52,13 +55,17 @@ Simplicity.
 
 ## New policy location
 
-The files reside in `/etc/qubes/policy`. Files are considered in lexicographical
-order of the "C" locale.
+The files reside in `/etc/qubes/policy.d`. Files with `.` as first character
+and/or files not ending with `.policy` are ignored.
 
-Files must be named using only digits, latin lowercase, underscore, full stop
-and hyphen (`0123456789abcdefghijklmnopqrstuvwxyz_.-`).
+Files ending with `.policy` must be named using only digits, latin lowercase,
+underscore, full stop and hyphen (`0123456789abcdefghijklmnopqrstuvwxyz_.-`).
+Invalid, not ignored files are considered configuration errors and cause any
+qrexec call to be rejected.
 
-### Rationale for limited character set
+Files are considered in lexicographical order of the "C" locale.
+
+### Rationale for file name constraints
 
 The command `ls` has locale-dependent order. Many locales have different sort
 orders than "C" locale for mixed-case filenames. If multiple files share common
@@ -69,6 +76,13 @@ At least `pl_PL.UTF-8`, `de_DE.UTF-8` and `en_GB.UTF-8` have those problems
 (the letters are ordered "aAbBcC...", cf. C locale "ABC...abc..."). There are
 other locales with more severe problems, like `eesti` which has the letter `Z`
 sorted differently, but those are not worked around here.
+
+As to file name content (`.policy` suffix and first character other than `.`),
+there are two reasons. First reason is, `ls` without `-a` or `-A` won't list
+them. Second reason is, several editors (notably Vim) keep backup and/or swap
+files together with edited files. Typically they won't parse correctly, so they
+would cause errors. Effectively this would break any qrexec calls while the
+policy file is opened for editing.
 
 ## New include syntax
 ```
@@ -110,10 +124,23 @@ as it is the only way to express policy for multiple services in one place. For
 example it is used for Admin API, which consists of multiple calls which should
 be managed together.
 
+## Compatibility statement (R4.0)
+```
+!compat-4.0
+```
+
+This statement includes old policy emulating old behaviour. It reads files in
+`/etc/qubes-rpc/policy` and adds rules found there. After each file for specific
+argument (with `+` in filename) it also adds `deny` rules that were previously
+implicit. Those rules are not added for non-specific files (without `+` in
+filename) not to shadow the default policy.
+
+This statement is transitional and will be unavailable in 5.0.
+
 ## New Policy API service: per-policy restore
 
 The service `policy.RestoreService+SERVICE` restores a service, not an API. It
-operates on `/etc/qubes/policy/60-policyapi` file. The content of the policy
+operates on `/etc/qubes/policy.d/40-policyapi` file. The content of the policy
 should only include rules related to the SERVICE. Arguments are not constrained.
 
 # Other ideas and options not included elsewhere
@@ -125,18 +152,20 @@ Most of those are probably rubbish.
 
 By default we ship those files:
 
-- `/etc/qubes/policy/40-default`
-- `/etc/qubes/policy/50-user`
-- `/etc/qubes/policy/60-policyapi`
+- `/etc/qubes/policy.d/30-user.policy`
+- `/etc/qubes/policy.d/35-compat.policy`
+- `/etc/qubes/policy.d/40-policyapi.policy`
+- `/etc/qubes/policy.d/50-salt.policy`
+- `/etc/qubes/policy.d/90-default.policy`
 
 Administrators deploying their company policies may use
-`/etc/qubes/policy/30-admin`.
+`/etc/qubes/policy/20-admin`.
 
 Vendors providing packaged rules should use:
-- `/etc/qubes/policy/70-<pkgname>` for explicit deny rules
-- `/etc/qubes/policy/75-<pkgname>` for explicit allow rules
-- `/etc/qubes/policy/80-<pkgname>` for generic rules, possibly with `*` in
-  service name.
+- `/etc/qubes/policy.d/60-<pkgname>.policy` for explicit deny rules
+- `/etc/qubes/policy.d/70-<pkgname>.policy` for explicit allow rules
+- `/etc/qubes/policy.d/80-<pkgname>.policy` for generic rules, possibly with `*`
+  in the service name.
 
 This is expected of vendors to avoid conflicts between different packages.
 

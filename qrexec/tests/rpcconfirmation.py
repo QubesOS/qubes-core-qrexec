@@ -21,11 +21,11 @@
 import sys
 import unittest
 
-from qubespolicy.tests.gtkhelpers import GtkTestCase, FocusStealingHelperMock
-from qubespolicy.tests.gtkhelpers import mock_domains_info, mock_whitelist
+from qrexec.tests.gtkhelpers import GtkTestCase, FocusStealingHelperMock
+from qrexec.tests.gtkhelpers import mock_domains_info, mock_whitelist
 
-from qubespolicy.gtkhelpers import VMListModeler
-from qubespolicy.rpcconfirmation import RPCConfirmationWindow
+from qrexec.tools.qrexec_policy_agent import VMListModeler
+from qrexec.tools.qrexec_policy_agent import RPCConfirmationWindow
 
 
 class MockRPCConfirmationWindow(RPCConfirmationWindow):

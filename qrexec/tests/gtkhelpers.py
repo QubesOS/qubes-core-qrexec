@@ -27,7 +27,7 @@ from gi.repository import Gtk  # isort:skip pylint:
 
 from qubes.tests import skipUnlessEnv
 
-from qubespolicy.gtkhelpers import VMListModeler, GtkOneTimerHelper, \
+from qrexec.tools.qrexec_policy_agent import VMListModeler, GtkOneTimerHelper, \
     FocusStealingHelper
 
 mock_domains_info = {
@@ -98,11 +98,11 @@ class VMListModelerTest(VMListModeler, unittest.TestCase):
                      "test-target", "Disposable VM (test-disp6)"]:
 
             mock = MockComboEntry(name)
-            self.assertEquals(name,
+            self.assertEqual(name,
                 self._get_valid_qube_name(mock, mock, mock_whitelist))
-            self.assertEquals(name,
+            self.assertEqual(name,
                 self._get_valid_qube_name(None, mock, mock_whitelist))
-            self.assertEquals(name,
+            self.assertEqual(name,
                 self._get_valid_qube_name(mock, None, mock_whitelist))
             self.assertIsNone(
                 self._get_valid_qube_name(None, None, mock_whitelist))
@@ -161,15 +161,15 @@ class VMListModelerTest(VMListModeler, unittest.TestCase):
         combo = Gtk.ComboBox()
 
         self.apply_model(combo, list(mock_domains_info.keys()))
-        self.assertEquals(7, len(combo.get_model()))
+        self.assertEqual(7, len(combo.get_model()))
 
         names = [entry['api_name'] for entry in self._entries.values()]
 
         self.apply_model(combo, [names[0]])
-        self.assertEquals(1, len(combo.get_model()))
+        self.assertEqual(1, len(combo.get_model()))
 
         self.apply_model(combo, [names[0], names[1]])
-        self.assertEquals(2, len(combo.get_model()))
+        self.assertEqual(2, len(combo.get_model()))
 
     def test_apply_icon(self):
         new_object = Gtk.Entry()
@@ -215,22 +215,22 @@ class GtkOneTimerHelperTest(GtkOneTimerHelper, GtkTestCase):
 
     def test_nothing_runs_automatically(self):
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([], self._run_timers)
-        self.assertEquals(0, self._current_timer_id)
+        self.assertEqual([], self._run_timers)
+        self.assertEqual(0, self._current_timer_id)
         self.assertFalse(self._timer_has_completed())
 
     def test_schedule_one_task(self):
         self._timer_schedule()
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([1], self._run_timers)
-        self.assertEquals(1, self._current_timer_id)
+        self.assertEqual([1], self._run_timers)
+        self.assertEqual(1, self._current_timer_id)
         self.assertTrue(self._timer_has_completed())
 
     def test_invalidate_completed(self):
         self._timer_schedule()
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([1], self._run_timers)
-        self.assertEquals(1, self._current_timer_id)
+        self.assertEqual([1], self._run_timers)
+        self.assertEqual(1, self._current_timer_id)
 
         self.assertTrue(self._timer_has_completed())
         self._invalidate_timer_completed()
@@ -240,8 +240,8 @@ class GtkOneTimerHelperTest(GtkOneTimerHelper, GtkTestCase):
         self._timer_schedule()
         self._invalidate_current_timer()
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([], self._run_timers)
-        self.assertEquals(2, self._current_timer_id)
+        self.assertEqual([], self._run_timers)
+        self.assertEqual(2, self._current_timer_id)
         self.assertFalse(self._timer_has_completed())
 
     def test_two_tasks(self):
@@ -249,8 +249,8 @@ class GtkOneTimerHelperTest(GtkOneTimerHelper, GtkTestCase):
         self.flush_gtk_events(self._test_time/4)
         self._timer_schedule()
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([2], self._run_timers)
-        self.assertEquals(2, self._current_timer_id)
+        self.assertEqual([2], self._run_timers)
+        self.assertEqual(2, self._current_timer_id)
         self.assertTrue(self._timer_has_completed())
 
     def test_more_tasks(self):
@@ -259,8 +259,8 @@ class GtkOneTimerHelperTest(GtkOneTimerHelper, GtkTestCase):
             self._timer_schedule()
             self.flush_gtk_events(self._test_time/4)
         self.flush_gtk_events(self._test_time*1.75)
-        self.assertEquals([num], self._run_timers)
-        self.assertEquals(num, self._current_timer_id)
+        self.assertEqual([num], self._run_timers)
+        self.assertEqual(num, self._current_timer_id)
         self.assertTrue(self._timer_has_completed())
 
     def test_more_tasks_cancel(self):
@@ -270,35 +270,35 @@ class GtkOneTimerHelperTest(GtkOneTimerHelper, GtkTestCase):
             self.flush_gtk_events(self._test_time/4)
         self._invalidate_current_timer()
         self.flush_gtk_events(int(self._test_time*1.75))
-        self.assertEquals([], self._run_timers)
-        self.assertEquals(num+1, self._current_timer_id)
+        self.assertEqual([], self._run_timers)
+        self.assertEqual(num+1, self._current_timer_id)
         self.assertFalse(self._timer_has_completed())
 
     def test_subsequent_tasks(self):
         self._timer_schedule()  # 1
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([1], self._run_timers)
-        self.assertEquals(1, self._current_timer_id)
+        self.assertEqual([1], self._run_timers)
+        self.assertEqual(1, self._current_timer_id)
         self.assertTrue(self._timer_has_completed())
 
         self._timer_schedule()  # 2
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([1, 2], self._run_timers)
-        self.assertEquals(2, self._current_timer_id)
+        self.assertEqual([1, 2], self._run_timers)
+        self.assertEqual(2, self._current_timer_id)
         self.assertTrue(self._timer_has_completed())
 
         self._invalidate_timer_completed()
         self._timer_schedule()  # 3
         self._invalidate_current_timer()  # 4
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([1, 2], self._run_timers)
-        self.assertEquals(4, self._current_timer_id)
+        self.assertEqual([1, 2], self._run_timers)
+        self.assertEqual(4, self._current_timer_id)
         self.assertFalse(self._timer_has_completed())
 
         self._timer_schedule()  # 5
         self.flush_gtk_events(self._test_time*2)
-        self.assertEquals([1, 2, 5], self._run_timers)
-        self.assertEquals(5, self._current_timer_id)
+        self.assertEqual([1, 2, 5], self._run_timers)
+        self.assertEqual(5, self._current_timer_id)
         self.assertTrue(self._timer_has_completed())
 
 

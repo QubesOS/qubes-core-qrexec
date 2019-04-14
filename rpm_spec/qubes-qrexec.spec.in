@@ -63,7 +63,7 @@ Requires:   %{name}-libs
 Development header and files for qubes-qrexec
 
 %prep
-%setup -q -n qubes-core-qrexec-%{version}
+%setup -qn qubes-core-qrexec-%{version}
 
 %build
 %{?set_build_flags}
@@ -90,9 +90,12 @@ rm -f %{name}-%{version}
 %files
 %defattr(-,root,root,-)
 
-%{_bindir}/qrexec-policy
+%{_bindir}/qrexec-policy-exec
 %{_bindir}/qrexec-policy-agent
 %{_bindir}/qrexec-policy-graph
+%{_bindir}/qrexec-policy-restore
+%{_bindir}/qubes-policy
+%{_bindir}/qrexec-policy
 
 /usr/lib/qubes/qubes-rpc-multiplexer
 
@@ -103,13 +106,28 @@ rm -f %{name}-%{version}
 %dir %{python3_sitelib}/qrexec/__pycache__
 %{python3_sitelib}/qrexec/__pycache__/*
 %{python3_sitelib}/qrexec/__init__.py
-%{python3_sitelib}/qrexec/cli.py
-%{python3_sitelib}/qrexec/agent.py
-%{python3_sitelib}/qrexec/gtkhelpers.py
-%{python3_sitelib}/qrexec/policycreateconfirmation.py
-%{python3_sitelib}/qrexec/rpcconfirmation.py
+%{python3_sitelib}/qrexec/client_dom0.py
+%{python3_sitelib}/qrexec/client_vm.py
+%{python3_sitelib}/qrexec/exc.py
 %{python3_sitelib}/qrexec/utils.py
-%{python3_sitelib}/qrexec/graph.py
+
+%dir %{python3_sitelib}/qrexec/policy
+%dir %{python3_sitelib}/qrexec/policy/__pycache__
+%{python3_sitelib}/qrexec/policy/__pycache__/*
+%{python3_sitelib}/qrexec/policy/__init__.py
+%{python3_sitelib}/qrexec/policy/api.py
+%{python3_sitelib}/qrexec/policy/parser.py
+%{python3_sitelib}/qrexec/policy/parser_compat.py
+
+%dir %{python3_sitelib}/qrexec/tools
+%dir %{python3_sitelib}/qrexec/tools/__pycache__
+%{python3_sitelib}/qrexec/tools/__pycache__/*
+%{python3_sitelib}/qrexec/tools/__init__.py
+%{python3_sitelib}/qrexec/tools/qubes_policy.py
+%{python3_sitelib}/qrexec/tools/qrexec_policy_agent.py
+%{python3_sitelib}/qrexec/tools/qrexec_policy_exec.py
+%{python3_sitelib}/qrexec/tools/qrexec_policy_graph.py
+%{python3_sitelib}/qrexec/tools/qrexec_policy_restore.py
 
 %dir %{python3_sitelib}/qrexec/tests
 %dir %{python3_sitelib}/qrexec/tests/__pycache__
@@ -118,6 +136,8 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/cli.py
 %{python3_sitelib}/qrexec/tests/gtkhelpers.py
 %{python3_sitelib}/qrexec/tests/rpcconfirmation.py
+%{python3_sitelib}/qrexec/tests/policy_api.py
+%{python3_sitelib}/qrexec/tests/policy_parser.py
 
 %dir %{python3_sitelib}/qrexec/glade
 %{python3_sitelib}/qrexec/glade/PolicyCreateConfirmationWindow.glade

@@ -1,2 +1,3 @@
-qrexec/__pycache__
+qrexec/**/__pycache__
 pkgs/
+.mypy_cache/

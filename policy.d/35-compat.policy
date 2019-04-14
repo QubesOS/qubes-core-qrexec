@@ -1,0 +1,16 @@
+#
+# NOTE:
+#
+# The following line enables compatibility mode. It reads files in old directory
+# (/etc/qubes-rpc/policy). It also generates deny rules that were previously
+# implicit after each file, but they are added only after policies for specific
+# arguments, that is, for files with '+' in the name. For generic files, without
+# '+', no such rules are generated and the control "falls through", which is
+# a departure from previous semantics. It is done that way not to shadow the
+# default rules.
+#
+# The "!compat-4.0" directive is transitional only and will be unavailable in
+# next major release (R5.0). This file will be removed in that release also.
+#
+
+!compat-4.0

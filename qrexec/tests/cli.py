@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # The Qubes OS Project, http://www.qubes-os.org
 #
@@ -17,27 +16,27 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
+#
+
 import os
 import tempfile
 import unittest.mock
 
-import shutil
-
 import qubes.tests
-import qubespolicy
-import qubespolicy.cli
-import qubespolicy.tests
 
+from .. import util
+from ..policy import parser
+from ..tools import qrexec_policy_exec
 
 
 class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
     def setUp(self):
         super(TC_00_qrexec_policy, self).setUp()
-        self.policy_patch = unittest.mock.patch('qubespolicy.Policy')
+        self.policy_patch = unittest.mock.patch('parser.Policy')
         self.policy_mock = self.policy_patch.start()
 
         self.system_info_patch = unittest.mock.patch(
-            'qubespolicy.get_system_info')
+            'util.get_system_info')
         self.system_info_mock = self.system_info_patch.start()
 
         self.system_info = {
@@ -66,9 +65,9 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
     def test_000_allow(self):
         self.policy_mock.configure_mock(**{
             'return_value.evaluate.return_value.action':
-                qubespolicy.Action.allow,
+                parser.Action.allow,
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
         self.assertEqual(self.policy_mock.mock_calls, [
@@ -92,7 +91,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
         self.dbus_mock.configure_mock(**{
             'return_value.get.return_value.Ask.return_value': 'test-vm1'
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
         self.assertEqual(self.policy_mock.mock_calls, [
@@ -132,7 +131,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
         self.dbus_mock.configure_mock(**{
             'return_value.get.return_value.Ask.return_value': ''
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 1)
         self.assertEqual(self.policy_mock.mock_calls, [
@@ -168,7 +167,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
         self.dbus_mock.configure_mock(**{
             'return_value.get.return_value.Ask.return_value': 'test-vm1'
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
         self.assertEqual(self.policy_mock.mock_calls, [
@@ -200,7 +199,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
             'return_value.evaluate.return_value.execute.side_effect':
                 qubespolicy.AccessDenied,
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 1)
         self.assertEqual(self.policy_mock.mock_calls, [
@@ -217,7 +216,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
             'return_value.evaluate.return_value.action':
                 qubespolicy.Action.allow,
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['--just-evaluate',
                 'source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
@@ -233,7 +232,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
             'return_value.evaluate.return_value.action':
                 qubespolicy.Action.deny,
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['--just-evaluate',
                 'source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 1)
@@ -249,7 +248,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
             'return_value.evaluate.return_value.action':
                 qubespolicy.Action.ask,
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['--just-evaluate',
                 'source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 1)
@@ -265,7 +264,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
             'return_value.evaluate.return_value.action':
                 qubespolicy.Action.ask,
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['--just-evaluate', '--assume-yes-for-ask',
                 'source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
@@ -287,7 +286,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
             'return_value.get.return_value.ConfirmPolicyCreate.return_value':
                 True
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
         self.assertEqual(self.policy_mock.mock_calls, [
@@ -327,7 +326,7 @@ class TC_00_qrexec_policy(qubes.tests.QubesTestCase):
             'return_value.get.return_value.ConfirmPolicyCreate.return_value':
                 False
         })
-        retval = qubespolicy.cli.main(
+        retval = qrexec_policy_exec.main(
             ['source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 1)
         self.assertEqual(self.policy_mock.mock_calls, [

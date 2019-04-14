@@ -1,0 +1,3 @@
+# This directory contains qrexec policy in new (Qubes R5.0) format.
+# See https://www.qubes-os.org/doc/ for explanation. If you want to
+# write your own policy, see the '30-user' file.
