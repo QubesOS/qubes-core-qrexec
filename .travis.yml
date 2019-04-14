@@ -1,7 +1,14 @@
 sudo: required
 dist: xenial
-language: generic
-install: git clone https://github.com/QubesOS/qubes-builder ~/qubes-builder
+language: python
+virtualenv:
+  system_site_packages: true
+services:
+  - xvfb
+install:
+ - sudo apt-get -y install python3-gi gir1.2-gtk-3.0
+ - pip install --quiet -r ci/requirements.txt
+ - git clone https://github.com/QubesOS/qubes-builder ~/qubes-builder
 script: ~/qubes-builder/scripts/travis-build
 env:
  - DIST_DOM0=fc29 USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
@@ -9,6 +16,24 @@ env:
  - DISTS_VM=fc30 USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
  - DISTS_VM=stretch USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
  - DISTS_VM=buster USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
+ - DISTS_VM=centos7 USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
+
+jobs:
+  include:
+    - python: '3.5'
+      script: pylint qrexec
+    - python: '3.5'
+      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
+#    - python: '3.6'
+#      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
+#    - python: '3.7'
+#      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
+    - stage: deploy
+      python: '3.5'
+      script: ~/qubes-builder/scripts/travis-deploy
+
+after_success:
+  - codecov
 
 # don't build tags which are meant for code signing only
 branches:
