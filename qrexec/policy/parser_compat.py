@@ -135,6 +135,9 @@ class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
         ''''''
         return self.master.handle_rule(rule, filepath=filepath, lineno=lineno)
 
+    def collect_targets_for_ask(self, request):
+        return self.master.collect_targets_for_ask(request)
+
     def load_policy_file(self, file, filepath):
         ''''''
         raise RuntimeError('this method should not be called')
