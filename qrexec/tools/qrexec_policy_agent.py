@@ -128,13 +128,19 @@ class VMListModeler:
     def apply_model(self, destination_object, vm_list,
                     selection_trigger=None, activation_trigger=None):
         if isinstance(destination_object, Gtk.ComboBox):
-            list_store = Gtk.ListStore(int, str, GdkPixbuf.Pixbuf)
+            list_store = Gtk.ListStore(int, str, GdkPixbuf.Pixbuf, str)
 
             for entry_no, display_name in zip(itertools.count(),
                     sorted(self._entries)):
                 entry = self._entries[display_name]
                 if entry['api_name'] in vm_list:
-                    list_store.append([entry_no, display_name, entry['icon']])
+                    list_store.append([
+                        entry_no,
+                        display_name,
+                        entry['icon'],
+                        entry['api_name'],
+                    ])
+
 
             destination_object.set_model(list_store)
             destination_object.set_id_column(1)
@@ -354,7 +360,7 @@ class RPCConfirmationWindow:
 
                 found = False
                 for item in model:
-                    if item[1] == target:
+                    if item[3] == target:
                         found = True
 
                         self._rpc_combo_box.set_active_iter(
