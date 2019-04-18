@@ -849,16 +849,16 @@ class TC_20_Policy(unittest.TestCase):
 
         self.assertCountEqual(
             policy.collect_targets_for_ask(_req('test-vm1', '@default')),
-            ['test-vm1', 'test-vm2', 'test-vm3',
+            ['test-vm2', 'test-vm3',
                 '@dispvm:test-vm3',
                 'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
                 'test-no-dvm', 'test-template', 'test-standalone'])
         self.assertCountEqual(
             policy.collect_targets_for_ask(_req('test-vm2', '@default')),
-            ['test-vm2', 'test-vm3'])
+            ['test-vm3'])
         self.assertCountEqual(
             policy.collect_targets_for_ask(_req('test-vm3', '@default')),
-            ['test-vm3'])
+            [])
         self.assertCountEqual(
             policy.collect_targets_for_ask(_req('test-standalone', '@default')),
             ['test-vm1', 'test-vm2', 'test-vm3',
@@ -984,7 +984,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertCountEqual(resolution.targets_for_ask,
             ['test-vm1', 'test-vm2', 'test-vm3', '@dispvm:test-vm3',
                 'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
-                'test-no-dvm', 'test-template', 'test-standalone'])
+                'test-no-dvm', 'test-template'])
 
     def test_033_eval_ask(self):
         resolution = self.policy.evaluate(_req('test-standalone', 'test-vm3'))
@@ -996,7 +996,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertCountEqual(resolution.targets_for_ask,
             ['test-vm1', 'test-vm2', 'test-vm3', '@dispvm:test-vm3',
                 'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
-                'test-no-dvm', 'test-template', 'test-standalone'])
+                'test-no-dvm', 'test-template'])
 
     def test_034_eval_resolve_dispvm(self):
         policy = parser.TestPolicy(policy='''\

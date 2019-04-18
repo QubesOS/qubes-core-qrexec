@@ -774,6 +774,10 @@ class Allow(ActionType):
                     'but no DispVM base is set for this VM'.format(
                         self.rule.filepath, self.rule.lineno))
 
+        # XXX remove when #951 gets fixed
+        if request.source == target:
+            raise AccessDenied('loopback qrexec connection not supported')
+
         return request.allow_resolution_type(self.rule, request,
             user=self.user, target=target)
 
@@ -1225,6 +1229,10 @@ class AbstractPolicy(AbstractParser):
         if '@adminvm' in targets:
             targets.remove('@adminvm')
             targets.add('dom0')
+
+        # XXX remove when #951 gets fixed
+        if request.source in targets:
+            targets.remove(request.source)
 
         return targets
 
