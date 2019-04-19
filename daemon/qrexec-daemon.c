@@ -720,9 +720,9 @@ static void handle_execute_service(void)
             remote_domain_id);
     execl("/usr/bin/qrexec-policy-exec", "qrexec-policy-exec", "--",
             remote_domain_id_str,
-            params.service_name,
             remote_domain_name,
             params.target_domain,
+            params.service_name,
             params.request_id.ident,
             NULL);
     perror("execl");

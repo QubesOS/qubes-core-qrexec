@@ -100,12 +100,12 @@ argparser.add_argument('--path',
 
 argparser.add_argument('domain_id', metavar='src-domain-id',
     help='Source domain ID (Xen ID or similar, not Qubes ID)')
-argparser.add_argument('service_and_arg', metavar='SERVICE+ARGUMENT',
-    help='Service name')
 argparser.add_argument('source', metavar='SOURCE',
     help='Source domain name')
 argparser.add_argument('intended_target', metavar='TARGET',
     help='Target domain name')
+argparser.add_argument('service_and_arg', metavar='SERVICE+ARGUMENT',
+    help='Service name')
 argparser.add_argument('process_ident', metavar='process-ident',
     help='Qrexec process identifier - for connecting data channel')
 
