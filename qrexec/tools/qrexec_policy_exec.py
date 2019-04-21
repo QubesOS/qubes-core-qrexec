@@ -67,7 +67,7 @@ class DBusAskResolution(parser.AskResolution):
                 icons[dispvm_api_name].replace('app', 'disp')
 
         response = proxy.Ask(self.request.source, self.request.service,
-            self.targets_for_ask, self.request.target or '', icons)
+            self.targets_for_ask, self.default_target or '', icons)
 
         if response:
             return self.handle_user_response(True, response).execute(
