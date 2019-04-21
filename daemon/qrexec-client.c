@@ -715,12 +715,13 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
-    if (strcmp(domname, "dom0") == 0 && !connect_existing) {
+    if ((strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) &&
+            !connect_existing) {
         fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
         usage(argv[0]);
     }
 
-    if (strcmp(domname, "dom0") == 0) {
+    if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
         if (connect_existing) {
             msg_type = MSG_SERVICE_CONNECT;
             strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
