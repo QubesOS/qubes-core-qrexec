@@ -24,6 +24,7 @@
 #define _LIBQREXEC_UTILS_H
 #include <sys/select.h>
 #include <libvchan.h>
+#include <qrexec.h>
 
 struct buffer {
     char *data;
@@ -70,4 +71,11 @@ int get_server_socket(const char *);
 int do_accept(int s);
 
 void set_nonblock(int fd);
+
+static inline size_t max_data_chunk_size(int protocol_version) {
+    if (protocol_version < QREXEC_PROTOCOL_V3)
+        return MAX_DATA_CHUNK_V2;
+    else
+        return MAX_DATA_CHUNK_V3;
+}
 #endif /* _LIBQREXEC_UTILS_H */

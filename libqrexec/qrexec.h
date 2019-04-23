@@ -28,7 +28,10 @@
 
 #define QREXEC_PROTOCOL_VERSION 2
 #define MAX_FDS 256
-#define MAX_DATA_CHUNK 4096
+/* protocol version 2 */
+#define MAX_DATA_CHUNK_V2 4096
+/* protocol version 3+ */
+#define MAX_DATA_CHUNK_V3 65536
 
 #define RPC_REQUEST_COMMAND "QUBESRPC"
 #define RPC_REQUEST_COMMAND_LEN (sizeof(RPC_REQUEST_COMMAND)-1)

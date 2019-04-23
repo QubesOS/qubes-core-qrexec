@@ -40,6 +40,8 @@
 
 #define VCHAN_BUFFER_SIZE 65536
 
+#define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
+
 static volatile int child_exited;
 static volatile int stdio_socket_requested;
 int stdout_msg_type = MSG_DATA_STDOUT;
@@ -105,7 +107,7 @@ int handle_handshake(libvchan_t *ctrl)
 
     actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
 
-    if (actual_version != QREXEC_PROTOCOL_VERSION) {
+    if (actual_version < QREXEC_DATA_MIN_VERSION) {
         fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
         return -1;
     }
@@ -153,17 +155,18 @@ void send_exit_code(libvchan_t *data_vchan, int status)
  *  1 - some data processed, call it again when buffer space and more data
  *      available
  */
-int handle_input(libvchan_t *vchan, int fd, int msg_type)
+int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
 {
-    char buf[MAX_DATA_CHUNK];
+    const size_t max_len = max_data_chunk_size(data_protocol_version);
+    char buf[max_len];
     ssize_t len;
     struct msg_header hdr;
 
     hdr.type = msg_type;
     while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
         len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
-        if ((size_t)len > sizeof(buf))
-            len = sizeof(buf);
+        if ((size_t)len > max_len)
+            len = max_len;
         len = read(fd, buf, len);
         if (len < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -202,10 +205,11 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type)
  */
 
 int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
-        struct buffer *stdin_buf)
+        struct buffer *stdin_buf, int data_protocol_version)
 {
     struct msg_header hdr;
-    char buf[MAX_DATA_CHUNK];
+    const size_t max_len = max_data_chunk_size(data_protocol_version);
+    char buf[max_len];
 
     /* do not receive any data if we have something already buffered */
     switch (flush_client_data(stdin_fd, stdin_buf)) {
@@ -221,9 +225,9 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
     while (libvchan_data_ready(data_vchan) > 0) {
         if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) < 0)
             return -1;
-        if (hdr.len > MAX_DATA_CHUNK) {
+        if (hdr.len > max_len) {
             fprintf(stderr, "Too big data chunk received: %" PRIu32 " > %zu\n",
-                    hdr.len, MAX_DATA_CHUNK);
+                    hdr.len, max_len);
             return -1;
         }
         if (!read_vchan_all(data_vchan, buf, hdr.len))
@@ -289,7 +293,8 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
 }
 
 int process_child_io(libvchan_t *data_vchan,
-        int stdin_fd, int stdout_fd, int stderr_fd)
+        int stdin_fd, int stdout_fd, int stderr_fd,
+        int data_protocol_version)
 {
     fd_set rdset, wrset;
     int vchan_fd;
@@ -408,7 +413,10 @@ int process_child_io(libvchan_t *data_vchan,
         }
 
         /* handle_remote_data will check if any data is available */
-        switch (handle_remote_data(data_vchan, stdin_fd, &remote_process_status, &stdin_buf)) {
+        switch (handle_remote_data(data_vchan, stdin_fd,
+                    &remote_process_status,
+                    &stdin_buf,
+                    data_protocol_version)) {
             case -1:
                 handle_vchan_error("read");
                 break;
@@ -432,7 +440,8 @@ int process_child_io(libvchan_t *data_vchan,
                 break;
         }
         if (stdout_fd >= 0 && FD_ISSET(stdout_fd, &rdset)) {
-            switch (handle_input(data_vchan, stdout_fd, stdout_msg_type)) {
+            switch (handle_input(data_vchan, stdout_fd, stdout_msg_type,
+                        data_protocol_version)) {
                 case -1:
                     handle_vchan_error("send");
                     break;
@@ -442,7 +451,8 @@ int process_child_io(libvchan_t *data_vchan,
             }
         }
         if (stderr_fd >= 0 && FD_ISSET(stderr_fd, &rdset)) {
-            switch (handle_input(data_vchan, stderr_fd, MSG_DATA_STDERR)) {
+            switch (handle_input(data_vchan, stderr_fd, MSG_DATA_STDERR,
+                        data_protocol_version)) {
                 case -1:
                     handle_vchan_error("send");
                     break;
@@ -506,6 +516,7 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
     libvchan_t *data_vchan;
     int exit_code = 0;
     pid_t pid;
+    int data_protocol_version;
 
     if (type != MSG_SERVICE_CONNECT) {
         assert(cmdline != NULL);
@@ -527,7 +538,7 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
         fprintf(stderr, "Data vchan connection failed\n");
         exit(1);
     }
-    handle_handshake(data_vchan);
+    data_protocol_version = handle_handshake(data_vchan);
 
     prepare_child_env();
     /* TODO: use setresuid to allow child process to actually send the signal? */
@@ -540,13 +551,17 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
             do_fork_exec(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd);
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
             child_process_pid = pid;
-            exit_code = process_child_io(data_vchan, stdin_fd, stdout_fd, stderr_fd);
+            exit_code = process_child_io(
+                    data_vchan, stdin_fd, stdout_fd, stderr_fd,
+                    data_protocol_version);
             fprintf(stderr, "pid %d exited with %d\n", pid, exit_code);
             break;
         case MSG_SERVICE_CONNECT:
             child_process_pid = 0;
             stdout_msg_type = MSG_DATA_STDIN;
-            exit_code = process_child_io(data_vchan, stdin_fd, stdout_fd, stderr_fd);
+            exit_code = process_child_io(
+                    data_vchan, stdin_fd, stdout_fd, stderr_fd,
+                    data_protocol_version);
             break;
     }
     libvchan_close(data_vchan);
