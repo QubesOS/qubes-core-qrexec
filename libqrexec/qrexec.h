@@ -26,7 +26,7 @@
 
 #include <stdint.h>
 
-#define QREXEC_PROTOCOL_VERSION 2
+#define QREXEC_PROTOCOL_VERSION 3
 #define MAX_FDS 256
 /* protocol version 2 */
 #define MAX_DATA_CHUNK_V2 4096
