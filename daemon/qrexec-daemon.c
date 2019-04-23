@@ -33,6 +33,8 @@
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 
+#define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
+
 enum client_state {
     CLIENT_INVALID = 0,	// table slot not used
     CLIENT_HELLO, // waiting for client hello
@@ -207,7 +209,7 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 
     actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
 
-    if (actual_version < 2) {
+    if (actual_version < QREXEC_MIN_VERSION) {
         fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
         incompatible_protocol_error_message(domain_name, info.version);
         return -1;
@@ -593,7 +595,7 @@ static void sigchld_handler(int UNUSED(x))
     signal(SIGCHLD, sigchld_handler);
 }
 
-static void send_service_refused(libvchan_t *vchan, struct service_params *params) {
+static void send_service_refused(libvchan_t *vchan, const struct service_params *params) {
     struct msg_header hdr;
 
     hdr.type = MSG_SERVICE_REFUSED;
@@ -676,31 +678,22 @@ static void sanitize_name(char * untrusted_s_signed, char *extra_allowed_chars)
  * Called when agent sends a message asking to execute a predefined command.
  */
 
-static void handle_execute_service(void)
+static void handle_execute_service(
+        const int remote_domain_id,
+        const char *remote_domain_name,
+        const char *target_domain,
+        const char *service_name,
+        const struct service_params *request_id)
 {
     int i;
     int policy_pending_slot;
     pid_t pid;
-    struct trigger_service_params untrusted_params, params;
     char remote_domain_id_str[10];
-
-    if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params)) < 0)
-        handle_vchan_error("recv params");
-
-    /* sanitize start */
-    ENSURE_NULL_TERMINATED(untrusted_params.service_name);
-    ENSURE_NULL_TERMINATED(untrusted_params.target_domain);
-    ENSURE_NULL_TERMINATED(untrusted_params.request_id.ident);
-    sanitize_name(untrusted_params.service_name, "+");
-    sanitize_name(untrusted_params.target_domain, "@:");
-    sanitize_name(untrusted_params.request_id.ident, " ");
-    params = untrusted_params;
-    /* sanitize end */
 
     policy_pending_slot = find_policy_pending_slot();
     if (policy_pending_slot < 0) {
         fprintf(stderr, "Service request denied, too many pending requests\n");
-        send_service_refused(vchan, &untrusted_params.request_id);
+        send_service_refused(vchan, request_id);
         return;
     }
 
@@ -712,7 +705,7 @@ static void handle_execute_service(void)
             break;
         default:
             policy_pending[policy_pending_slot].pid = pid;
-            policy_pending[policy_pending_slot].params = untrusted_params.request_id;
+            policy_pending[policy_pending_slot].params = *request_id;
             return;
     }
     for (i = 3; i < MAX_FDS; i++)
@@ -724,9 +717,9 @@ static void handle_execute_service(void)
     execl("/usr/bin/qrexec-policy-exec", "qrexec-policy-exec", "--",
             remote_domain_id_str,
             remote_domain_name,
-            params.target_domain,
-            params.service_name,
-            params.request_id.ident,
+            target_domain,
+            service_name,
+            request_id->ident,
             NULL);
     perror("execl");
     _exit(1);
@@ -756,8 +749,29 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
 {
     switch (untrusted_header->type) {
         case MSG_TRIGGER_SERVICE:
+            if (protocol_version >= QREXEC_PROTOCOL_V3) {
+                fprintf(stderr, "agent sent (old) MSG_TRIGGER_SERVICE "
+                        "although it uses protocol %d\n", protocol_version);
+                exit(1);
+            }
             if (untrusted_header->len != sizeof(struct trigger_service_params)) {
                 fprintf(stderr, "agent sent invalid MSG_TRIGGER_SERVICE packet\n");
+                exit(1);
+            }
+            break;
+        case MSG_TRIGGER_SERVICE3:
+            if (protocol_version < QREXEC_PROTOCOL_V3) {
+                fprintf(stderr, "agent sent (new) MSG_TRIGGER_SERVICE3 "
+                        "although it uses protocol %d\n", protocol_version);
+                exit(1);
+            }
+            if (untrusted_header->len < sizeof(struct trigger_service_params3)) {
+                fprintf(stderr, "agent sent invalid MSG_TRIGGER_SERVICE3 packet\n");
+                exit(1);
+            }
+            if (untrusted_header->len - sizeof(struct trigger_service_params3)
+                    > MAX_SERVICE_NAME_LEN) {
+                fprintf(stderr, "agent sent too large MSG_TRIGGER_SERVICE3 packet\n");
                 exit(1);
             }
             break;
@@ -777,6 +791,10 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
 static void handle_message_from_agent(void)
 {
     struct msg_header hdr, untrusted_hdr;
+    struct trigger_service_params untrusted_params, params;
+    struct trigger_service_params3 untrusted_params3, params3;
+    char *untrusted_service_name = NULL, *service_name = NULL;
+    size_t service_name_len;
 
     if (libvchan_recv(vchan, &untrusted_hdr, sizeof(untrusted_hdr)) < 0)
         handle_vchan_error("recv hdr");
@@ -790,7 +808,52 @@ static void handle_message_from_agent(void)
 
     switch (hdr.type) {
         case MSG_TRIGGER_SERVICE:
-            handle_execute_service();
+            if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params)) < 0)
+                handle_vchan_error("recv params");
+
+            /* sanitize start */
+            ENSURE_NULL_TERMINATED(untrusted_params.service_name);
+            ENSURE_NULL_TERMINATED(untrusted_params.target_domain);
+            ENSURE_NULL_TERMINATED(untrusted_params.request_id.ident);
+            sanitize_name(untrusted_params.service_name, "+");
+            sanitize_name(untrusted_params.target_domain, "@:");
+            sanitize_name(untrusted_params.request_id.ident, " ");
+            params = untrusted_params;
+            /* sanitize end */
+
+            handle_execute_service(remote_domain_id, remote_domain_name,
+                    params.target_domain,
+                    params.service_name,
+                    &params.request_id);
+            return;
+        case MSG_TRIGGER_SERVICE3:
+            service_name_len = hdr.len - sizeof(untrusted_params3);
+            untrusted_service_name = malloc(service_name_len);
+            if (!untrusted_service_name)
+                handle_vchan_error("malloc(service_name)");
+
+            if (libvchan_recv(vchan, &untrusted_params3, sizeof(untrusted_params3)) < 0)
+                handle_vchan_error("recv params3");
+            if (libvchan_recv(vchan, untrusted_service_name, service_name_len) < 0)
+                handle_vchan_error("recv params3(service_name)");
+
+            /* sanitize start */
+            ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
+            ENSURE_NULL_TERMINATED(untrusted_params3.request_id.ident);
+            untrusted_service_name[service_name_len-1] = 0;
+            sanitize_name(untrusted_params3.target_domain, "@:");
+            sanitize_name(untrusted_params3.request_id.ident, " ");
+            sanitize_name(untrusted_service_name, "+");
+            params3 = untrusted_params3;
+            service_name = untrusted_service_name;
+            untrusted_service_name = NULL;
+            /* sanitize end */
+
+            handle_execute_service(remote_domain_id, remote_domain_name,
+                    params3.target_domain,
+                    service_name,
+                    &params3.request_id);
+            free(service_name);
             return;
         case MSG_CONNECTION_TERMINATED:
             handle_connection_terminated();

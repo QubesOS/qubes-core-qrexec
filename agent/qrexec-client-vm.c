@@ -102,8 +102,11 @@ _Noreturn void usage(const char *argv0) {
 int main(int argc, char **argv)
 {
     int trigger_fd;
-    struct trigger_service_params params;
+    struct msg_header hdr;
+    struct trigger_service_params3 params;
     struct exec_params exec_params;
+    size_t service_name_len;
+    char *service_name;
     int ret, i;
     int start_local_process = 0;
     char *abs_exec_path;
@@ -132,10 +135,16 @@ int main(int argc, char **argv)
         start_local_process = 1;
     }
 
+    service_name = argv[optind + 1];
+
+    service_name_len = strlen(service_name) + 1;
+
     trigger_fd = connect_unix_socket(QREXEC_AGENT_TRIGGER_PATH);
 
+    hdr.type = MSG_TRIGGER_SERVICE3;
+    hdr.len = sizeof(params) + service_name_len;
+
     memset(&params, 0, sizeof(params));
-    strncpy(params.service_name, argv[optind + 1], sizeof(params.service_name) - 1);
 
     convert_target_name_keyword(argv[optind]);
     strncpy(params.target_domain, argv[optind],
@@ -144,8 +153,16 @@ int main(int argc, char **argv)
     snprintf(params.request_id.ident,
             sizeof(params.request_id.ident), "SOCKET");
 
-    if (write(trigger_fd, &params, sizeof(params)) < 0) {
-        perror("write to agent");
+    if (!write_all(trigger_fd, &hdr, sizeof(hdr))) {
+        perror("write(hdr) to agent");
+        exit(1);
+    }
+    if (!write_all(trigger_fd, &params, sizeof(params))) {
+        perror("write(params) to agent");
+        exit(1);
+    }
+    if (!write_all(trigger_fd, service_name, service_name_len)) {
+        perror("write(command) to agent");
         exit(1);
     }
     ret = read(trigger_fd, &exec_params, sizeof(exec_params));

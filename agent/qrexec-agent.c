@@ -868,28 +868,50 @@ int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
 void handle_trigger_io()
 {
     struct msg_header hdr;
-    struct trigger_service_params params;
-    int ret;
+    struct trigger_service_params3 params;
+    char *command = NULL;
+    size_t command_len;
     int client_fd;
 
     client_fd = do_accept(trigger_fd);
     if (client_fd < 0)
         return;
-    hdr.len = sizeof(params);
-    ret = read(client_fd, &params, sizeof(params));
-    if (ret == sizeof(params)) {
-        hdr.type = MSG_TRIGGER_SERVICE;
-        snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
-        if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) < 0)
-            handle_vchan_error("write hdr");
-        if (libvchan_send(ctrl_vchan, &params, sizeof(params)) < 0)
-            handle_vchan_error("write params");
+    if (!read_all(client_fd, &hdr, sizeof(hdr)))
+        goto error;
+    if (hdr.type != MSG_TRIGGER_SERVICE3 ||
+            hdr.len < sizeof(params) ||
+            hdr.len > sizeof(params) + MAX_SERVICE_NAME_LEN) {
+        fprintf(stderr, "Invalid request received from qrexec-client-vm, is it outdated?\n");
+        goto error;
     }
-    if (ret <= 0) {
-        close(client_fd);
-    }
+    if (!read_all(client_fd, &params, sizeof(params)))
+        goto error;
+    command_len = hdr.len - sizeof(params);
+    command = malloc(command_len);
+    if (!command)
+        goto error;
+    if (!read_all(client_fd, command, command_len))
+        goto error;
+    if (command[command_len-1] != '\0')
+        goto error;
+
+    snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
+    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) < 0)
+        handle_vchan_error("write hdr");
+    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) < 0)
+        handle_vchan_error("write params");
+    if (libvchan_send(ctrl_vchan, command, command_len) < 0)
+        handle_vchan_error("write command");
+
+    free(command);
     /* do not close client_fd - we'll need it to send the connection details
      * later (when dom0 accepts the request) */
+    return;
+error:
+    fprintf(stderr, "Failed to retrieve/execute request from qrexec-client-vm\n");
+    if (command)
+        free(command);
+    close(client_fd);
 }
 
 void handle_terminated_fork_client(fd_set *rdset) {
