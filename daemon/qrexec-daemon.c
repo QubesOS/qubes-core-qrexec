@@ -94,6 +94,7 @@ int opt_quiet = 0;
 volatile int children_count;
 
 libvchan_t *vchan;
+int protocol_version;
 
 void sigusr1_handler(int UNUSED(x))
 {
@@ -206,7 +207,7 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 
     actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
 
-    if (actual_version != QREXEC_PROTOCOL_VERSION) {
+    if (actual_version < 2) {
         fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
         incompatible_protocol_error_message(domain_name, info.version);
         return -1;
@@ -229,7 +230,7 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
         return -1;
     }
 
-    return 0;
+    return actual_version;
 }
 
 /* do the preparatory tasks, needed before entering the main event loop */
@@ -307,7 +308,9 @@ void init(int xid)
         perror("cannot connect to qrexec agent");
         exit(1);
     }
-    if (handle_agent_hello(vchan, remote_domain_name) < 0) {
+
+    protocol_version = handle_agent_hello(vchan, remote_domain_name);
+    if (protocol_version < 0) {
         exit(1);
     }
 
