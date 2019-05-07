@@ -553,7 +553,7 @@ static void handle_client_hello(int fd)
 /* handle data received from one of qrexec_client processes */
 static void handle_message_from_client(int fd)
 {
-    char buf[MAX_DATA_CHUNK];
+    char buf[1];
 
     switch (clients[fd].state) {
         case CLIENT_HELLO:
