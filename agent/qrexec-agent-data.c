@@ -24,6 +24,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -155,13 +156,13 @@ void send_exit_code(libvchan_t *data_vchan, int status)
 int handle_input(libvchan_t *vchan, int fd, int msg_type)
 {
     char buf[MAX_DATA_CHUNK];
-    int len;
+    ssize_t len;
     struct msg_header hdr;
 
     hdr.type = msg_type;
     while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
         len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
-        if (len > (int)sizeof(buf))
+        if ((size_t)len > sizeof(buf))
             len = sizeof(buf);
         len = read(fd, buf, len);
         if (len < 0) {
@@ -221,7 +222,7 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
         if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) < 0)
             return -1;
         if (hdr.len > MAX_DATA_CHUNK) {
-            fprintf(stderr, "Too big data chunk received: %d > %d\n",
+            fprintf(stderr, "Too big data chunk received: %" PRIu32 " > %zu\n",
                     hdr.len, MAX_DATA_CHUNK);
             return -1;
         }
