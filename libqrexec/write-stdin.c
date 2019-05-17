@@ -41,8 +41,6 @@ int flush_client_data(int fd, struct buffer *buffer)
         if (!len) {
             return WRITE_STDIN_OK;
         }
-        if (len > MAX_DATA_CHUNK)
-            len = MAX_DATA_CHUNK;
         ret = write(fd, buffer_data(buffer), len);
         if (ret == -1) {
             if (errno != EAGAIN) {
