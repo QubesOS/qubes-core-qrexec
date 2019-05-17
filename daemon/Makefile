@@ -1,5 +1,7 @@
 CC=gcc
 CFLAGS+=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC `pkg-config --cflags vchan-$(BACKEND_VMM)`
+CFLAGS += -I../libqrexec
+LIBS = -L../libqrexec
 LIBS=`pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils
 
 
