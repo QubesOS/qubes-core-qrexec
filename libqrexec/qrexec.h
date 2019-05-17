@@ -19,6 +19,9 @@
  *
  */
 
+#ifndef _QREXEC_H
+#define _QREXEC_H
+
 /* See also http://wiki.qubes-os.org/trac/wiki/Qrexec */
 
 #include <stdint.h>
@@ -119,3 +122,4 @@ enum {
 #define QUBES_RPC_MULTIPLEXER_PATH "/usr/lib/qubes/qubes-rpc-multiplexer"
 #define QREXEC_DAEMON_SOCKET_DIR "/var/run/qubes"
 
+#endif /* _QREXEC_H */

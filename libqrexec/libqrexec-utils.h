@@ -20,6 +20,8 @@
  *
  */
 
+#ifndef _LIBQREXEC_UTILS_H
+#define _LIBQREXEC_UTILS_H
 #include <sys/select.h>
 #include <libvchan.h>
 
@@ -68,3 +70,4 @@ int get_server_socket(const char *);
 int do_accept(int s);
 
 void set_nonblock(int fd);
+#endif /* _LIBQREXEC_UTILS_H */
