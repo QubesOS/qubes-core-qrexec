@@ -36,6 +36,28 @@
 #define NOGUI_CMD_PREFIX_LEN (sizeof(NOGUI_CMD_PREFIX)-1)
 #define VCHAN_BASE_PORT 512
 
+/* protocol version */
+enum {
+    /* legacy protocol, without version negotiation support
+     * Qubes < R3.0
+     */
+    QREXEC_PROTOCOL_V1 = 1,
+
+    /* Changes:
+     *  - separate data and control channels
+     *  - handshake with protocol version
+     * Qubes R3.0 - R4.0
+     */
+    QREXEC_PROTOCOL_V2 = 2,
+
+    /* Changes:
+     *  - MAX_DATA_CHUNK increased to 64k
+     *  - MSG_TRIGGER_SERVICE3
+     * Qubes >= R4.1
+     */
+    QREXEC_PROTOCOL_V3 = 3,
+};
+
 /* Messages sent over control vchan between daemon(dom0) and agent(vm).
  * The same are used between client(dom0) and daemon(dom0).
  */
