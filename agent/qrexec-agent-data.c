@@ -158,9 +158,16 @@ void send_exit_code(libvchan_t *data_vchan, int status)
 int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
 {
     const size_t max_len = max_data_chunk_size(data_protocol_version);
-    char buf[max_len];
+    char *buf;
     ssize_t len;
     struct msg_header hdr;
+    int rc = -1;
+
+    buf = malloc(max_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        return -1;
+    }
 
     hdr.type = msg_type;
     while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
@@ -170,16 +177,16 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_vers
         len = read(fd, buf, len);
         if (len < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
-                return 1;
-            else
-                return -1;
+                rc = 1;
+            /* otherwise keep rc = -1 */
+            goto out;
         }
         hdr.len = len;
         if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0)
-            return -1;
+            goto out;
 
         if (len && !write_vchan_all(vchan, buf, len))
-            return -1;
+            goto out;
 
         if (len == 0) {
             /* restore flags */
@@ -188,10 +195,14 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_vers
                 if (errno == ENOTSOCK)
                     close(fd);
             }
-            return 0;
+            rc = 0;
+            goto out;
         }
     }
-    return 1;
+    rc = 1;
+out:
+    free(buf);
+    return rc;
 }
 
 /* handle data from vchan and send it to specified FD
@@ -209,7 +220,8 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
 {
     struct msg_header hdr;
     const size_t max_len = max_data_chunk_size(data_protocol_version);
-    char buf[max_len];
+    char *buf;
+    int rc = -1;
 
     /* do not receive any data if we have something already buffered */
     switch (flush_client_data(stdin_fd, stdin_buf)) {
@@ -222,16 +234,22 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
             return 0;
     }
 
+    buf = malloc(max_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        return -1;
+    }
+
     while (libvchan_data_ready(data_vchan) > 0) {
         if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) < 0)
-            return -1;
+            goto out;
         if (hdr.len > max_len) {
             fprintf(stderr, "Too big data chunk received: %" PRIu32 " > %zu\n",
                     hdr.len, max_len);
-            return -1;
+            goto out;
         }
         if (!read_vchan_all(data_vchan, buf, hdr.len))
-            return -1;
+            goto out;
 
         switch (hdr.type) {
             /* handle both directions because this can be either server or client
@@ -250,13 +268,15 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                         close(stdin_fd);
                     }
                     stdin_fd = -1;
-                    return 0;
+                    rc = 0;
+                    goto out;
                 } else {
                     switch (write_stdin(stdin_fd, buf, hdr.len, stdin_buf)) {
                         case WRITE_STDIN_OK:
                             break;
                         case WRITE_STDIN_BUFFERED:
-                            return 1;
+                            rc = 1;
+                            goto out;
                         case WRITE_STDIN_ERROR:
                             if (errno == EPIPE || errno == ECONNRESET) {
                                 if (!child_process_pid || stdin_fd == 1 ||
@@ -268,7 +288,8 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                             } else {
                                 perror("write");
                             }
-                            return 0;
+                            rc = 0;
+                            goto out;
                     }
                 }
                 break;
@@ -286,10 +307,14 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                     *status = 255;
                 else
                     memcpy(status, buf, sizeof(*status));
-                return -2;
+                rc = -2;
+                goto out;
         }
     }
-    return 1;
+    rc = 1;
+out:
+    free(buf);
+    return rc;
 }
 
 int process_child_io(libvchan_t *data_vchan,

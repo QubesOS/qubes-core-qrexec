@@ -289,7 +289,7 @@ static void send_exit_code(libvchan_t *vchan, int status)
 static void handle_input(libvchan_t *vchan, int data_protocol_version)
 {
     const size_t data_chunk_size = max_data_chunk_size(data_protocol_version);
-    char buf[data_chunk_size];
+    char *buf;
     int ret;
     size_t max_len;
     struct msg_header hdr;
@@ -298,10 +298,17 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
     if (max_len < sizeof(hdr))
         return;
     max_len -= sizeof(hdr);
-    if (max_len > sizeof(buf))
-        max_len = sizeof(buf);
+    if (max_len > data_chunk_size)
+        max_len = data_chunk_size;
     if (max_len == 0)
         return;
+
+    buf = malloc(max_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        do_exit(1);
+    }
+
     ret = read(local_stdout_fd, buf, max_len);
     if (ret < 0) {
         perror("read");
@@ -349,6 +356,8 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
         } else
             perror("write agent");
     }
+
+    free(buf);
 }
 
 void do_replace_chars(char *buf, int len) {
@@ -373,7 +382,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
     int status;
     struct msg_header hdr;
     const size_t buf_len = max_data_chunk_size(data_protocol_version);
-    char buf[buf_len];
+    char *buf;
 
     if (local_stdin_fd != -1) {
         switch(flush_client_data(local_stdin_fd, stdin_buf)) {
@@ -388,6 +397,13 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
                 break;
         }
     }
+
+    buf = malloc(buf_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        do_exit(1);
+    }
+
     if (libvchan_recv(vchan, &hdr, sizeof hdr) < 0) {
         perror("read vchan");
         do_exit(1);
@@ -419,6 +435,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
             } else {
                 switch (write_stdin(local_stdin_fd, buf, hdr.len, stdin_buf)) {
                     case WRITE_STDIN_BUFFERED:
+                        free(buf);
                         return WRITE_STDIN_BUFFERED;
                     case WRITE_STDIN_ERROR:
                         if (errno == EPIPE) {
@@ -455,6 +472,8 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
             fprintf(stderr, "unknown msg %d\n", hdr.type);
             do_exit(1);
     }
+
+    free(buf);
     /* intentionally do not distinguish between _ERROR and _OK, because in case
      * of write error, we simply eat the data - no way to report it to the
      * other side */
