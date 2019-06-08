@@ -32,6 +32,7 @@ Vendor:		Invisible Things Lab
 License:	GPL
 URL:		http://www.qubes-os.org
 
+BuildRequires:	gcc
 BuildRequires:  python%{python3_pkgversion}-devel
 # for building documentation
 BuildRequires:	python%{python3_pkgversion}-sphinx
@@ -68,6 +69,7 @@ Development header and files for qubes-qrexec
 
 %build
 %{?set_build_flags}
+export BACKEND_VMM=@BACKEND_VMM@
 make all-base
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
 

@@ -32,10 +32,12 @@ Vendor:		Invisible Things Lab
 License:	GPL
 URL:		http://www.qubes-os.org
 
+BuildRequires:	gcc
 BuildRequires:  python3-devel
 # for building documentation
 BuildRequires:	python3-sphinx
 BuildRequires:	python3-dbus
+BuildRequires:	qubes-libvchan-devel
 BuildRequires:  qubes-core-qrexec-devel
 
 Requires:   python3
@@ -55,6 +57,7 @@ The Qubes qrexec files for installation on Dom0.
 
 %build
 %{?set_build_flags}
+export BACKEND_VMM=@BACKEND_VMM@
 make all-dom0
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
 
