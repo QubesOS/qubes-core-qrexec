@@ -1,3 +1,10 @@
+qubes-core-qrexec (4.1.1-1) wheezy; urgency=medium
+
+  * rpm: fix build with mock
+  * debian: add Build-Depends: lsb-release
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 01 Jul 2019 02:29:17 +0200
+
 qubes-core-qrexec (4.1.0-1) unstable; urgency=medium
 
   * Initial debian packaging
