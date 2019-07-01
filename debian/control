@@ -9,6 +9,7 @@ Build-Depends:
  pkg-config,
  dh-python,
  dh-systemd (>= 1.5),
+ lsb-release,
  python3-setuptools,
  pandoc,
 Standards-Version: 3.9.5
