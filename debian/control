@@ -6,6 +6,7 @@ Build-Depends:
  debhelper (>= 9),
  libpam0g-dev,
  libvchan-xen-dev,
+ lsb-release,
  pkg-config,
  dh-python,
  dh-systemd (>= 1.5),
