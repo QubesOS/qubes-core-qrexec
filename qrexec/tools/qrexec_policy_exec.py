@@ -112,37 +112,51 @@ argparser.add_argument('process_ident', metavar='process-ident',
 def main(args=None):
     args = argparser.parse_args(args)
 
-    # Add source domain information, required by qrexec-client for establishing
-    # connection
-    caller_ident = args.process_ident + "," + args.source + "," + args.domain_id
     log = logging.getLogger('policy')
     log.setLevel(logging.INFO)
     if not log.handlers:
         handler = logging.handlers.SysLogHandler(address='/dev/log')
         log.addHandler(handler)
+
+    return handle_request(
+        args.domain_id,
+        args.source,
+        args.intended_target,
+        args.service_and_arg,
+        args.process_ident,
+        log,
+        path=args.path,
+        just_evaluate=args.just_evaluate,
+        assume_yes_for_ask=args.assume_yes_for_ask)
+
+# pylint: disable=too-many-arguments
+def handle_request(domain_id, source, intended_target, service_and_arg,
+                   process_ident, log, path=POLICYPATH, just_evaluate=False,
+                   assume_yes_for_ask=False):
+    # Add source domain information, required by qrexec-client for establishing
+    # connection
+    caller_ident = process_ident + "," + source + "," + domain_id
     log_prefix = 'qrexec: {}: {} -> {}:'.format(
-        args.service_and_arg, args.source, args.intended_target)
+        service_and_arg, source, intended_target)
     try:
         system_info = utils.get_system_info()
     except exc.QubesMgmtException as err:
         log.error('%s error getting system info: %s', log_prefix, err)
         return 1
-
     try:
-        i = args.service_and_arg.index('+')
-        service, argument = args.service_and_arg[:i], args.service_and_arg[i:]
+        i = service_and_arg.index('+')
+        service, argument = service_and_arg[:i], service_and_arg[i:]
     except ValueError:
-        service, argument = args.service_and_arg, '+'
-
+        service, argument = service_and_arg, '+'
     try:
-        policy = parser.FilePolicy(policy_path=args.path)
+        policy = parser.FilePolicy(policy_path=path)
 
         request = parser.Request(
-            service, argument, args.source, args.intended_target,
+            service, argument, source, intended_target,
             system_info=system_info,
             **prepare_resolution_types(
-                just_evaluate=args.just_evaluate,
-                assume_yes_for_ask=args.assume_yes_for_ask))
+                just_evaluate=just_evaluate,
+                assume_yes_for_ask=assume_yes_for_ask))
         resolution = policy.evaluate(request)
         result = resolution.execute(caller_ident)
         if result is not None:
@@ -156,6 +170,7 @@ def main(args=None):
         log.info('%s denied: %s', log_prefix, err)
         return 1
     return 0
+
 
 if __name__ == '__main__':
     sys.exit(main())
