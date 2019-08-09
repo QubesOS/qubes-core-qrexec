@@ -5,3 +5,4 @@ pylint
 sphinx
 codecov
 pydbus
+pytest-asyncio
