@@ -488,12 +488,13 @@ class AllowResolution(AbstractResolution):
         target = self.target
 
         if target == '@adminvm':
-            cmd = ('QUBESRPC {request.service} {request.source} '
-                    '{request.target.type} {request.target}').format(
-                request=self.request)
+            cmd = ('QUBESRPC {request.service}{request.argument} '
+                   '{request.source} {request.target.type} {request.target}').\
+                format(request=self.request)
         else:
-            cmd = '{user}:QUBESRPC {request.service} {request.source}'.format(
-                user=(self.user or 'DEFAULT'), request=self.request)
+            cmd = '{user}:QUBESRPC {request.service}{request.argument} ' \
+                  '{request.source}'.format(
+                       user=(self.user or 'DEFAULT'), request=self.request)
 
         if target.startswith('@dispvm:'):
             target = self.spawn_dispvm()
