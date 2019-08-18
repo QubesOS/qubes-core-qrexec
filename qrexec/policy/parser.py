@@ -768,7 +768,7 @@ class Allow(ActionType):
                     self.rule.filepath, self.rule.lineno))
         if target == '@dispvm':
             target = target.get_dispvm_template(  # pylint: disable=no-member
-                self.rule.source, system_info=request.system_info)
+                request.source, system_info=request.system_info)
             if target is None:
                 raise AccessDenied(
                     'policy define \'allow\' action to @dispvm at {}:{} '
