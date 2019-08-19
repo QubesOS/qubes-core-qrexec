@@ -263,6 +263,11 @@ class VMToken(str, metaclass=VMTokenMeta):
         '''
         return 'keyword' if self.is_special_value() else 'name'
 
+    @property
+    def text(self):
+        '''Text of the token, without possibly '@' prefix '''
+        return self.lstrip('@')
+
 class Source(VMToken):
     # pylint: disable=missing-docstring
     pass
@@ -489,7 +494,7 @@ class AllowResolution(AbstractResolution):
 
         if target == '@adminvm':
             cmd = ('QUBESRPC {request.service}{request.argument} '
-                   '{request.source} {request.target.type} {request.target}').\
+                   '{request.source} {request.target.type} {request.target.text}').\
                 format(request=self.request)
         else:
             cmd = '{user}:QUBESRPC {request.service}{request.argument} ' \
