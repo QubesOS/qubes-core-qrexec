@@ -1026,104 +1026,150 @@ class TC_40_evaluate(unittest.TestCase):
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(_req('test-vm3', '@default'))
 
+    def test_038_eval_resolve_dispvm_from_any(self):
+        policy = parser.TestPolicy(policy='''\
+            * * @anyvm @dispvm allow''')
+        resolution = policy.evaluate(_req('test-vm3', '@dispvm'))
 
-    @unittest.skip('rewrite')
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, '@dispvm:default-dvm')
+        self.assertEqual(resolution.request.target, '@dispvm')
+
+    @unittest.expectedFailure
+    def test_039_eval_to_dom0(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 @adminvm allow''')
+        resolution = policy.evaluate(_req('test-vm3', 'dom0'))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, '@adminvm')
+        self.assertEqual(resolution.request.target, 'dom0')
+
+    def test_040_eval_to_dom0_keyword(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 @adminvm allow''')
+        resolution = policy.evaluate(_req('test-vm3', '@adminvm'))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, '@adminvm')
+        self.assertEqual(resolution.request.target, '@adminvm')
+
     def test_110_handle_user_response(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        action.handle_user_response(True, 'test-vm2')
-        self.assertEqual(action.action, parser.Action.allow)
-        self.assertEqual(action.target, 'test-vm2')
+        request = parser.Request('test.service', '+', 'test-vm1',
+            'test-vm2', system_info=SYSTEM_INFO)
+        resolution = parser.AskResolution(
+            rule, request, user=None,
+            targets_for_ask=['test-vm1', 'test-vm2'],
+            default_target=None)
+        resolution = resolution.handle_user_response(True, 'test-vm2')
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.target, 'test-vm2')
 
-    @unittest.skip('rewrite')
     def test_111_handle_user_response(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        with self.assertRaises(AssertionError):
-            action.handle_user_response(True, 'test-no-dvm')
-
-    @unittest.skip('rewrite')
-    def test_112_handle_user_response(self):
-        rule = parser.Rule.from_line('* * @anyvm @anyvm ask',
-            filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
+        request = parser.Request('test.service', '+', 'test-vm1',
+            'test-vm2', system_info=SYSTEM_INFO)
+        resolution = parser.AskResolution(
+            rule, request, user=None,
+            targets_for_ask=['test-vm2', 'test-vm3'],
+            default_target=None)
         with self.assertRaises(exc.AccessDenied):
-            action.handle_user_response(False, None)
-        self.assertEqual(action.action, parser.Action.deny)
+            resolution.handle_user_response(True, 'test-no-dvm')
 
-    @unittest.skip('rewrite')
+    def test_112_handle_user_response(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
+            filepath='filename', lineno=12)
+        request = _req('test-vm1', 'test-vm2')
+        resolution = parser.AskResolution(
+            rule, request, user=None,
+            targets_for_ask=['test-vm1', 'test-vm2'],
+            default_target=None)
+        with self.assertRaises(exc.AccessDenied):
+            resolution.handle_user_response(False, '')
+
     def test_113_handle_user_response_with_default_target(self):
-        rule = parser.Rule.from_line(
+        rule = parser.Rule.from_line(None,
             '* * @anyvm @anyvm ask default_target=test-vm2',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            None, rule, 'test-vm2', ['test-vm2', 'test-vm3'])
-        action.handle_user_response(True, 'test-vm2')
-        self.assertEqual(action.action, parser.Action.allow)
-        self.assertEqual(action.target, 'test-vm2')
+        request = _req('test-vm1', 'test-vm2')
+        resolution = parser.AskResolution(
+            rule, request, user=None,
+            targets_for_ask=['test-vm2', 'test-vm3'],
+            default_target='test-vm2')
+        resolution = resolution.handle_user_response(True, 'test-vm2')
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.target, 'test-vm2')
 
-    @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
     def test_120_execute(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
+        rule = parser.Rule.from_line(None,
+            '* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule, 'test-vm2')
-        action.execute('some-ident')
+        request = _req('test-vm1', 'test-vm2')
+        resolution = parser.AllowResolution(
+            rule, request, user=None, target='test-vm2')
+        resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
-             '-c', 'some-ident', 'DEFAULT:QUBESRPC test.service test-vm1'])])
+             '-c', 'some-ident',
+             'DEFAULT:QUBESRPC test.Service+argument test-vm1'])])
 
-    @unittest.skip('rewrite')
+    @unittest.expectedFailure
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
     def test_121_execute_dom0(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.Rule.from_line('* * @anyvm dom0 allow',
+        rule = parser.Rule.from_line(None,
+            '* * @anyvm dom0 allow',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'dom0', rule, 'dom0')
-        action.execute('some-ident')
+        request = _req('test-vm1', 'dom0')
+        resolution = parser.AllowResolution(
+            rule, request, user=None, target='dom0')
+        resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
              '-c', 'some-ident',
-             'QUBESRPC test.service test-vm1 name dom0'])])
+             'QUBESRPC test.Service+argument test-vm1 name dom0'])])
 
-    @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
     def test_121_execute_dom0_keyword(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.Rule.from_line('* * @anyvm dom0 allow',
+        rule = parser.Rule.from_line(None,
+            '* * @anyvm dom0 allow',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'dom0', rule, '@adminvm')
-        action.execute('some-ident')
+        request = _req('test-vm1', '@adminvm')
+        resolution = parser.AllowResolution(
+            rule, request, user=None, target='@adminvm')
+        resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
+            [unittest.mock.call([QREXEC_CLIENT, '-d', '@adminvm',
              '-c', 'some-ident',
-             'QUBESRPC test.service test-vm1 keyword adminvm'])])
+             'QUBESRPC test.Service+argument test-vm1 keyword adminvm'])])
 
-    @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
     def test_122_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
-        rule = parser.Rule.from_line('* * @anyvm @dispvm:default-dvm allow',
+        rule = parser.Rule.from_line(None,
+            '* * @anyvm @dispvm:default-dvm allow',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            '@dispvm:default-dvm', rule, '@dispvm:default-dvm')
+        request = _req('test-vm1', '@dispvm:default-dvm')
+        resolution = parser.AllowResolution(
+            rule, request, user=None,
+            target=parser.DispVMTemplate('@dispvm:default-dvm'))
         mock_qubesd_call.side_effect = (lambda target, call:
             b'dispvm-name' if call == 'admin.vm.CreateDisposable' else
             unittest.mock.DEFAULT)
-        action.execute('some-ident')
+        resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('default-dvm', 'admin.vm.CreateDisposable'),
              unittest.mock.call('dispvm-name', 'admin.vm.Start'),
@@ -1131,39 +1177,43 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call([QREXEC_CLIENT, '-d', 'dispvm-name',
              '-c', 'some-ident', '-W',
-             'DEFAULT:QUBESRPC test.service test-vm1'])])
+             'DEFAULT:QUBESRPC test.Service+argument test-vm1'])])
 
-    @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
     def test_123_execute_already_running(self, mock_subprocess,
             mock_qubesd_call):
-        rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
+        rule = parser.Rule.from_line(None,
+            '* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule, 'test-vm2')
+        request = _req('test-vm1', 'test-vm2')
+        resolution = parser.AllowResolution(
+            rule, request, user=None, target='test-vm2')
         mock_qubesd_call.side_effect = \
             exc.QubesMgmtException('QubesVMNotHaltedError')
-        action.execute('some-ident')
+        resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
-             '-c', 'some-ident', 'DEFAULT:QUBESRPC test.service test-vm1'])])
+             '-c', 'some-ident',
+             'DEFAULT:QUBESRPC test.Service+argument test-vm1'])])
 
-    @unittest.skip('rewrite')
     @unittest.mock.patch('qrexec.utils.qubesd_call')
     @unittest.mock.patch('subprocess.call')
     def test_124_execute_startup_error(self, mock_subprocess,
             mock_qubesd_call):
-        rule = parser.Rule.from_line('* * @anyvm @anyvm allow',
+        rule = parser.Rule.from_line(None,
+            '* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
-        action = parser.PolicyAction('test.service', 'test-vm1',
-            'test-vm2', rule, 'test-vm2')
+        request = parser.Request('test.service', '+', 'test-vm1',
+            'test-vm2', system_info=SYSTEM_INFO)
+        resolution = parser.AllowResolution(
+            rule, request, user=None, target='test-vm2')
         mock_qubesd_call.side_effect = \
             exc.QubesMgmtException('QubesVMError')
         with self.assertRaises(exc.QubesMgmtException):
-            action.execute('some-ident')
+            resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls, [])
