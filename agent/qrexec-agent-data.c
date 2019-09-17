@@ -48,6 +48,28 @@ int stdout_msg_type = MSG_DATA_STDOUT;
 pid_t child_process_pid;
 int remote_process_status = 0;
 
+/* whether qrexec-client should replace problematic bytes with _ before printing the output;
+ * positive value will enable the feature
+ */
+int replace_chars_stdout = -1;
+int replace_chars_stderr = -1;
+
+void do_replace_chars(char *buf, int len) {
+    int i;
+    unsigned char c;
+
+    for (i = 0; i < len; i++) {
+        c = buf[i];
+        if ((c < '\040' || c > '\176') &&  /* not printable ASCII */
+            (c != '\t') &&                 /* not tab */
+            (c != '\n') &&                 /* not newline */
+            (c != '\r') &&                 /* not return */
+            (c != '\b') &&                 /* not backspace */
+            (c != '\a'))                   /* not bell */
+            buf[i] = '_';
+    }
+}
+
 static void sigchld_handler(int __attribute__((__unused__))x)
 {
     child_exited = 1;
@@ -271,6 +293,8 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                     rc = 0;
                     goto out;
                 } else {
+                    if (replace_chars_stdout > 0)
+                        do_replace_chars(buf, hdr.len);
                     switch (write_stdin(stdin_fd, buf, hdr.len, stdin_buf)) {
                         case WRITE_STDIN_OK:
                             break;
@@ -294,6 +318,8 @@ int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                 }
                 break;
             case MSG_DATA_STDERR:
+                if (replace_chars_stderr > 0)
+                    do_replace_chars(buf, hdr.len);
                 /* stderr of remote service, log locally */
                 if (!write_all(2, buf, hdr.len)) {
                     perror("write");
