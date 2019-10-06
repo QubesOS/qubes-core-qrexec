@@ -75,6 +75,7 @@ disable=
  too-few-public-methods,
  duplicate-code,
  cyclic-import,
+ import-outside-toplevel,
  abstract-method,
  bad-continuation,
  bad-option-value,
