@@ -1,7 +1,7 @@
 sudo: required
 dist: bionic
 language: python
-python: '3.5'
+python: '3.6'
 virtualenv:
   system_site_packages: true
 services:
@@ -21,16 +21,14 @@ env:
 
 jobs:
   include:
-    - python: '3.5'
+    - python: '3.6'
       script: pylint qrexec
-    - python: '3.5'
+    - python: '3.6'
       script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
-#    - python: '3.6'
-#      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
 #    - python: '3.7'
 #      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
     - stage: deploy
-      python: '3.5'
+      python: '3.6'
       script: ~/qubes-builder/scripts/travis-deploy
 
 after_success:
