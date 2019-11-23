@@ -163,7 +163,7 @@ int create_qrexec_socket(int domid, const char *domname)
 
 #define MAX_STARTUP_TIME_DEFAULT 60
 
-static int incompatible_protocol_error_message(
+static void incompatible_protocol_error_message(
         const char *domain_name, int remote_version)
 {
     char text[1024];
@@ -211,7 +211,7 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 
     if (actual_version < QREXEC_MIN_VERSION) {
         fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
-        (void)incompatible_protocol_error_message(domain_name, info.version);
+        incompatible_protocol_error_message(domain_name, info.version);
         return -1;
     }
 
