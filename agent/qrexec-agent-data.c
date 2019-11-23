@@ -629,22 +629,46 @@ static char *parse_qrexec_argument_from_commandline(char *cmdline) {
     return end_user + RPC_REQUEST_COMMAND_LEN + 1;
 }
 
+static int qubes_connect(int s, const char *buffer, const size_t total_path_length) {
+    // Avoiding an extra copy is NOT worth it!
+    char buf[] = "/tmp/qrexec-XXXXXX\0qrexec-socket";
+    struct sockaddr_un remote = { .sun_family = AF_UNIX, .sun_path = { 0 } };
+    int result = -1, dummy_errno = -1;
+    socklen_t socket_len;
+    if (total_path_length != strlen(buffer))
+        abort();
+    if (sizeof remote.sun_path <= total_path_length) {
+        // sockaddr_un too small :(
+        if (NULL == mkdtemp(buf))
+            return -1;
+        buf[18] = '/';
+        if (symlink(buffer, buf)) {
+           dummy_errno = errno;
+           goto fail;
+        }
+        memcpy(remote.sun_path, buf, sizeof buf);
+        socket_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + sizeof buf);
+    } else {
+        memcpy(remote.sun_path, buffer, total_path_length);
+        remote.sun_path[total_path_length] = '\0';
+        socket_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + total_path_length + 1);
+    }
+
+    result = connect(s, (struct sockaddr *) &remote, socket_len);
+    dummy_errno = errno;
+    unlink(buf);
+fail:
+    buf[18] = '\0';
+    rmdir(buf);
+    errno = dummy_errno;
+    return result;
+}
 
 static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd) {
     int s = -1;
-    struct sockaddr_un remote = { .sun_family = AF_UNIX, .sun_path = { 0 } };
     char *realcmd, *remote_domain;
     size_t path_length;
-    // static_assert(sizeof remote.sun_path == QUBES_SOCKADDR_UN_MAX_PATH_LEN,
-    //               "I screwed up my math");
-#ifndef NDEBUG
-    fprintf(stderr, "%s\n", cmdline);
-#endif
     realcmd = parse_qrexec_argument_from_commandline(cmdline);
-#ifndef NDEBUG
-    if (realcmd)
-       fprintf(stderr, "%s\n", realcmd);
-#endif
     if (!realcmd) {
         do_fork_exec(cmdline, pid, stdin_fd, stdout_fd, stderr_fd);
         return 0;
@@ -688,7 +712,7 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
         return -1;
     }
 
-    for (int use_bare_path = 0; use_bare_path < 2; ++use_bare_path) {
+    for (unsigned use_bare_path = 0; use_bare_path < 2; ++use_bare_path) {
         for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); ++i) {
             char buffer[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
             size_t const directory_length = paths[i].length;
@@ -702,34 +726,7 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
             memcpy(buffer + directory_length, realcmd, path_length);
             buffer[total_path_length] = '\0';
 
-            // Avoiding an extra copy is NOT worth it!
-            char buf[] = "/tmp/qrexec-XXXXXX\0qrexec-socket";
-            if (sizeof remote.sun_path <= total_path_length) {
-                // sockaddr_un too small :(
-                if (NULL == mkdtemp(buf))
-                    goto fail;
-                buf[18] = '/';
-                if (symlink(buffer, buf)) {
-                    int e = errno;
-                    buf[18] = '\0';
-                    rmdir(buf);
-                    errno = e;
-                    goto fail;
-                }
-                memcpy(remote.sun_path, buf, sizeof buf);
-            } else {
-                memcpy(remote.sun_path, buffer, total_path_length);
-            }
-
-            socklen_t socket_len = (socklen_t)(
-                offsetof(struct sockaddr_un, sun_path) + total_path_length + 1);
-            int result = connect(s, (struct sockaddr *) &remote, socket_len);
-            int dummy_errno = errno;
-            unlink(buf);
-            buf[18] = '\0';
-            rmdir(buf);
-            errno = dummy_errno;
-            if (!result) {
+            if (!qubes_connect(s, buffer, total_path_length)) {
                 *stdout_fd = *stdin_fd = s;
                 *stderr_fd = -1;
                 *pid = -1;
@@ -749,31 +746,29 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
             case EALREADY:     // ditto
                 abort();
             // These should not happen
-            case EAGAIN:       // ditto
-#if EAGAIN != EWOULDBLOCK
-            case EWOULDBLOCK:  // ditto
-#endif
-                // Probably a misbehaving FUSE filesystem
-                break;
             case EINTR:
                 // Interrupted by a signal - retry
                 --i; // to retry loop iteration
                 continue;
             case ENOENT:
-            case EISDIR:
             case ENOTDIR:
-            case EIO:
                 // These errors could also happen with `execve()`
                 break;
             case EPROTOTYPE:
             case ETIMEDOUT:
-                // Socket server problem.  Fail the whole connection.
+            case EACCES:
+            case EPERM:
+            case EIO:
+            case EISDIR:
+            case EAGAIN:       // ditto
+#if EAGAIN != EWOULDBLOCK
+            case EWOULDBLOCK:  // ditto
+#endif
+                // Socket server problem and/or misconfiguration.  Fail the whole connection.
                 // (We do not want to fall back because the user may have
                 // overriden behavior for security reasons, and because
                 // fail-fast is much easier to debug).
                 goto fail;
-            case EACCES:
-            case EPERM:
             case ECONNREFUSED:
                 remote_domain[-1] = ' ';
                 fprintf(stderr, "Executing command as normal: '%s'\n", cmdline);
