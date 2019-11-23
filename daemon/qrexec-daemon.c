@@ -33,6 +33,8 @@
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 
+#define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
+
 enum client_state {
     CLIENT_INVALID = 0,	// table slot not used
     CLIENT_HELLO, // waiting for client hello
@@ -94,6 +96,7 @@ int opt_quiet = 0;
 volatile int children_count;
 
 libvchan_t *vchan;
+int protocol_version;
 
 void sigusr1_handler(int UNUSED(x))
 {
@@ -179,13 +182,15 @@ static int incompatible_protocol_error_message(
             domain_name, remote_version, QREXEC_PROTOCOL_VERSION, domain_name);
 #undef KDIALOG_CMD
 #undef ZENITY_CMD
-    return system(text);
+    /* silence -Wunused-result */
+    ret = system(text);
 }
 
 int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 {
     struct msg_header hdr;
     struct peer_info info;
+    int actual_version;
 
     if (libvchan_recv(ctrl, &hdr, sizeof(hdr)) != sizeof(hdr)) {
         fprintf(stderr, "Failed to read agent HELLO hdr\n");
@@ -202,7 +207,9 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
         return -1;
     }
 
-    if (info.version != QREXEC_PROTOCOL_VERSION) {
+    actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
+
+    if (actual_version < QREXEC_MIN_VERSION) {
         fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
         (void)incompatible_protocol_error_message(domain_name, info.version);
         return -1;
@@ -225,7 +232,7 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
         return -1;
     }
 
-    return 0;
+    return actual_version;
 }
 
 /* do the preparatory tasks, needed before entering the main event loop */
@@ -290,10 +297,9 @@ void init(int xid)
     dup2(logfd, 2);
 
     if (chdir("/var/run/qubes") < 0) {
-        perror("chdir(\"/var/run/qubes\")");
+        perror("chdir /var/run/qubes failed");
         exit(1);
     }
-
     if (setsid() < 0) {
         perror("setsid()");
         exit(1);
@@ -304,7 +310,9 @@ void init(int xid)
         perror("cannot connect to qrexec agent");
         exit(1);
     }
-    if (handle_agent_hello(vchan, remote_domain_name) < 0) {
+
+    protocol_version = handle_agent_hello(vchan, remote_domain_name);
+    if (protocol_version < 0) {
         exit(1);
     }
 
@@ -550,7 +558,7 @@ static void handle_client_hello(int fd)
 /* handle data received from one of qrexec_client processes */
 static void handle_message_from_client(int fd)
 {
-    char buf[MAX_DATA_CHUNK];
+    char buf[1];
 
     switch (clients[fd].state) {
         case CLIENT_HELLO:
@@ -587,7 +595,7 @@ static void sigchld_handler(int UNUSED(x))
     signal(SIGCHLD, sigchld_handler);
 }
 
-static void send_service_refused(libvchan_t *vchan, struct service_params *params) {
+static void send_service_refused(libvchan_t *vchan, const struct service_params *params) {
     struct msg_header hdr;
 
     hdr.type = MSG_SERVICE_REFUSED;
@@ -670,31 +678,22 @@ static void sanitize_name(char * untrusted_s_signed, char *extra_allowed_chars)
  * Called when agent sends a message asking to execute a predefined command.
  */
 
-static void handle_execute_service(void)
+static void handle_execute_service(
+        const int remote_domain_id,
+        const char *remote_domain_name,
+        const char *target_domain,
+        const char *service_name,
+        const struct service_params *request_id)
 {
     int i;
     int policy_pending_slot;
     pid_t pid;
-    struct trigger_service_params untrusted_params, params;
     char remote_domain_id_str[10];
-
-    if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params)) < 0)
-        handle_vchan_error("recv params");
-
-    /* sanitize start */
-    ENSURE_NULL_TERMINATED(untrusted_params.service_name);
-    ENSURE_NULL_TERMINATED(untrusted_params.target_domain);
-    ENSURE_NULL_TERMINATED(untrusted_params.request_id.ident);
-    sanitize_name(untrusted_params.service_name, "+");
-    sanitize_name(untrusted_params.target_domain, "@:");
-    sanitize_name(untrusted_params.request_id.ident, " ");
-    params = untrusted_params;
-    /* sanitize end */
 
     policy_pending_slot = find_policy_pending_slot();
     if (policy_pending_slot < 0) {
         fprintf(stderr, "Service request denied, too many pending requests\n");
-        send_service_refused(vchan, &untrusted_params.request_id);
+        send_service_refused(vchan, request_id);
         return;
     }
 
@@ -706,7 +705,7 @@ static void handle_execute_service(void)
             break;
         default:
             policy_pending[policy_pending_slot].pid = pid;
-            policy_pending[policy_pending_slot].params = untrusted_params.request_id;
+            policy_pending[policy_pending_slot].params = *request_id;
             return;
     }
     for (i = 3; i < MAX_FDS; i++)
@@ -715,9 +714,13 @@ static void handle_execute_service(void)
     signal(SIGPIPE, SIG_DFL);
     snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",
             remote_domain_id);
-    execl("/usr/bin/qrexec-policy", "qrexec-policy", "--",
-            remote_domain_id_str, remote_domain_name, params.target_domain,
-            params.service_name, params.request_id.ident, NULL);
+    execl("/usr/bin/qrexec-policy-exec", "qrexec-policy-exec", "--",
+            remote_domain_id_str,
+            remote_domain_name,
+            target_domain,
+            service_name,
+            request_id->ident,
+            NULL);
     perror("execl");
     _exit(1);
 }
@@ -746,8 +749,29 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
 {
     switch (untrusted_header->type) {
         case MSG_TRIGGER_SERVICE:
+            if (protocol_version >= QREXEC_PROTOCOL_V3) {
+                fprintf(stderr, "agent sent (old) MSG_TRIGGER_SERVICE "
+                        "although it uses protocol %d\n", protocol_version);
+                exit(1);
+            }
             if (untrusted_header->len != sizeof(struct trigger_service_params)) {
                 fprintf(stderr, "agent sent invalid MSG_TRIGGER_SERVICE packet\n");
+                exit(1);
+            }
+            break;
+        case MSG_TRIGGER_SERVICE3:
+            if (protocol_version < QREXEC_PROTOCOL_V3) {
+                fprintf(stderr, "agent sent (new) MSG_TRIGGER_SERVICE3 "
+                        "although it uses protocol %d\n", protocol_version);
+                exit(1);
+            }
+            if (untrusted_header->len < sizeof(struct trigger_service_params3)) {
+                fprintf(stderr, "agent sent invalid MSG_TRIGGER_SERVICE3 packet\n");
+                exit(1);
+            }
+            if (untrusted_header->len - sizeof(struct trigger_service_params3)
+                    > MAX_SERVICE_NAME_LEN) {
+                fprintf(stderr, "agent sent too large MSG_TRIGGER_SERVICE3 packet\n");
                 exit(1);
             }
             break;
@@ -767,6 +791,10 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
 static void handle_message_from_agent(void)
 {
     struct msg_header hdr, untrusted_hdr;
+    struct trigger_service_params untrusted_params, params;
+    struct trigger_service_params3 untrusted_params3, params3;
+    char *untrusted_service_name = NULL, *service_name = NULL;
+    size_t service_name_len;
 
     if (libvchan_recv(vchan, &untrusted_hdr, sizeof(untrusted_hdr)) < 0)
         handle_vchan_error("recv hdr");
@@ -780,7 +808,52 @@ static void handle_message_from_agent(void)
 
     switch (hdr.type) {
         case MSG_TRIGGER_SERVICE:
-            handle_execute_service();
+            if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params)) < 0)
+                handle_vchan_error("recv params");
+
+            /* sanitize start */
+            ENSURE_NULL_TERMINATED(untrusted_params.service_name);
+            ENSURE_NULL_TERMINATED(untrusted_params.target_domain);
+            ENSURE_NULL_TERMINATED(untrusted_params.request_id.ident);
+            sanitize_name(untrusted_params.service_name, "+");
+            sanitize_name(untrusted_params.target_domain, "@:");
+            sanitize_name(untrusted_params.request_id.ident, " ");
+            params = untrusted_params;
+            /* sanitize end */
+
+            handle_execute_service(remote_domain_id, remote_domain_name,
+                    params.target_domain,
+                    params.service_name,
+                    &params.request_id);
+            return;
+        case MSG_TRIGGER_SERVICE3:
+            service_name_len = hdr.len - sizeof(untrusted_params3);
+            untrusted_service_name = malloc(service_name_len);
+            if (!untrusted_service_name)
+                handle_vchan_error("malloc(service_name)");
+
+            if (libvchan_recv(vchan, &untrusted_params3, sizeof(untrusted_params3)) < 0)
+                handle_vchan_error("recv params3");
+            if (libvchan_recv(vchan, untrusted_service_name, service_name_len) < 0)
+                handle_vchan_error("recv params3(service_name)");
+
+            /* sanitize start */
+            ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
+            ENSURE_NULL_TERMINATED(untrusted_params3.request_id.ident);
+            untrusted_service_name[service_name_len-1] = 0;
+            sanitize_name(untrusted_params3.target_domain, "@:");
+            sanitize_name(untrusted_params3.request_id.ident, " ");
+            sanitize_name(untrusted_service_name, "+");
+            params3 = untrusted_params3;
+            service_name = untrusted_service_name;
+            untrusted_service_name = NULL;
+            /* sanitize end */
+
+            handle_execute_service(remote_domain_id, remote_domain_name,
+                    params3.target_domain,
+                    service_name,
+                    &params3.request_id);
+            free(service_name);
             return;
         case MSG_CONNECTION_TERMINATED:
             handle_connection_terminated();
@@ -794,10 +867,11 @@ static void handle_message_from_agent(void)
  * to (because its pipe is full) to write_fdset. Return the highest used file
  * descriptor number, needed for the first select() parameter.
  */
-static int fill_fdsets_for_select(fd_set * read_fdset, fd_set * write_fdset)
+static int fill_fdsets_for_select(int vchan_fd, fd_set * read_fdset, fd_set * write_fdset)
 {
     int i;
     int max = -1;
+
     FD_ZERO(read_fdset);
     FD_ZERO(write_fdset);
     for (i = 0; i <= max_client_fd; i++) {
@@ -806,17 +880,69 @@ static int fill_fdsets_for_select(fd_set * read_fdset, fd_set * write_fdset)
             max = i;
         }
     }
+
+    FD_SET(vchan_fd, read_fdset);
+    if (vchan_fd > max)
+        max = vchan_fd;
+
     FD_SET(qrexec_daemon_unix_socket_fd, read_fdset);
     if (qrexec_daemon_unix_socket_fd > max)
         max = qrexec_daemon_unix_socket_fd;
+
     return max;
+}
+
+/* qrexec-agent has disconnected, cleanup local state and try to connect again.
+ * If remote domain dies, terminate qrexec-daemon.
+ */
+static int handle_agent_restart(void) {
+    size_t i;
+
+    /* Close old (dead) vchan connection. */
+    libvchan_close(vchan);
+    vchan = NULL;
+
+    /* Disconnect all local clients. This will look like all the qrexec
+     * connections were terminated, which isn't necessary true (established
+     * qrexec connection may survive qrexec-agent and qrexec-daemon restart),
+     * but we won't be notified about its termination. This may kill DispVM
+     * prematurely (if anyone restarts qrexec-agent inside DispVM), but it's
+     * better than the alternative (leaking DispVMs).
+     *
+     * But, do not mark related vchan ports as unused. Since we won't get call
+     * end notification, we don't know when such ports will really be unused.
+     */
+    for (i = 0; i < MAX_CLIENTS; i++) {
+        if (clients[i].state != CLIENT_INVALID)
+            terminate_client(i);
+    }
+
+    /* Abort pending qrexec requests */
+    for (i = 0; i < MAX_CLIENTS; i++) {
+        if (policy_pending[i].pid != 0)
+            policy_pending[i].pid = 0;
+    }
+    policy_pending_max = -1;
+
+    vchan = libvchan_client_init(remote_domain_id, VCHAN_BASE_PORT);
+    if (!vchan) {
+        perror("cannot connect to qrexec agent");
+        return -1;
+    }
+    if (handle_agent_hello(vchan, remote_domain_name) < 0) {
+        libvchan_close(vchan);
+        vchan = NULL;
+        return -1;
+    }
+    fprintf(stderr, "qrexec-agent has reconnected\n");
+    return 0;
 }
 
 int main(int argc, char **argv)
 {
     fd_set read_fdset, write_fdset;
-    int i, opt;
-    int max;
+    int i, opt, ret;
+    int max, vchan_fd;
     sigset_t chld_set;
 
     while ((opt=getopt(argc, argv, "q")) != -1) {
@@ -849,15 +975,37 @@ int main(int argc, char **argv)
      * - child exited
      */
     for (;;) {
-        max = fill_fdsets_for_select(&read_fdset, &write_fdset);
+        struct timeval tv = { 0, 1000000 };
+
+        vchan_fd = libvchan_fd_for_select(vchan);
+        max = fill_fdsets_for_select(vchan_fd, &read_fdset, &write_fdset);
         if (libvchan_buffer_space(vchan) <= (int)sizeof(struct msg_header))
             FD_ZERO(&read_fdset);	// vchan full - don't read from clients
 
         sigprocmask(SIG_BLOCK, &chld_set, NULL);
         if (child_exited)
             reap_children();
-        wait_for_vchan_or_argfd(vchan, max, &read_fdset, &write_fdset);
+        ret = select(max+1, &read_fdset, &write_fdset, NULL, &tv);
+        if (ret < 0 && errno != EINTR) {
+            perror("select");
+            return 1;
+        }
         sigprocmask(SIG_UNBLOCK, &chld_set, NULL);
+
+        if (FD_ISSET(vchan_fd, &read_fdset))
+            // the following will never block; we need to do this to
+            // clear libvchan_fd pending state
+            libvchan_wait(vchan);
+
+        if (!libvchan_is_open(vchan)) {
+            fprintf(stderr, "qrexec-agent has disconnected\n");
+            if (handle_agent_restart() < 0) {
+                fprintf(stderr, "Failed to reconnect to qrexec-agent, terminating\n");
+                return 1;
+            }
+            /* read_fdset may be outdated at this point, calculate it again. */
+            continue;
+        }
 
         if (FD_ISSET(qrexec_daemon_unix_socket_fd, &read_fdset))
             handle_new_client();

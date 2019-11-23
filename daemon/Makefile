@@ -16,6 +16,8 @@ install: all
 	install -d $(DESTDIR)/usr/sbin $(DESTDIR)/usr/bin
 	install -t $(DESTDIR)/usr/sbin -m 755 qrexec-daemon
 	install -t $(DESTDIR)/usr/bin -m 755 qrexec-client
+	install -d $(DESTDIR)/usr/lib/qubes
+	ln -s ../../bin/qrexec-client $(DESTDIR)/usr/lib/qubes/qrexec-client
 .PHONY: all clean install
 
 %: %.o

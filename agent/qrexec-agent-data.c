@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stddef.h>
 #ifdef NDEBUG
@@ -51,11 +52,35 @@
 
 #define VCHAN_BUFFER_SIZE 65536
 
+#define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
+
 static volatile int child_exited;
 static volatile int stdio_socket_requested;
 int stdout_msg_type = MSG_DATA_STDOUT;
 pid_t child_process_pid;
 int remote_process_status = 0;
+
+/* whether qrexec-client should replace problematic bytes with _ before printing the output;
+ * positive value will enable the feature
+ */
+int replace_chars_stdout = -1;
+int replace_chars_stderr = -1;
+
+void do_replace_chars(char *buf, int len) {
+    int i;
+    unsigned char c;
+
+    for (i = 0; i < len; i++) {
+        c = buf[i];
+        if ((c < '\040' || c > '\176') &&  /* not printable ASCII */
+            (c != '\t') &&                 /* not tab */
+            (c != '\n') &&                 /* not newline */
+            (c != '\r') &&                 /* not return */
+            (c != '\b') &&                 /* not backspace */
+            (c != '\a'))                   /* not bell */
+            buf[i] = '_';
+    }
+}
 
 static void sigchld_handler(int __attribute__((__unused__))x)
 {
@@ -83,6 +108,7 @@ int handle_handshake(libvchan_t *ctrl)
 {
     struct msg_header hdr;
     struct peer_info info;
+    int actual_version;
 
     /* send own HELLO */
     hdr.type = MSG_HELLO;
@@ -115,13 +141,14 @@ int handle_handshake(libvchan_t *ctrl)
         return -1;
     }
 
-    if (info.version != QREXEC_PROTOCOL_VERSION) {
+    actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
+
+    if (actual_version < QREXEC_DATA_MIN_VERSION) {
         fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
         return -1;
     }
 
-
-    return 0;
+    return actual_version;
 }
 
 
@@ -162,34 +189,39 @@ static void send_exit_code(libvchan_t *data_vchan, int status)
  *  1 - some data processed, call it again when buffer space and more data
  *      available
  */
-static int handle_input(libvchan_t *vchan, int fd, int msg_type)
+static int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
 {
-    char buf[MAX_DATA_CHUNK];
+    const size_t max_len = max_data_chunk_size(data_protocol_version);
+    char *buf;
     ssize_t len;
     struct msg_header hdr;
+    int rc = -1;
+
+    buf = malloc(max_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        return -1;
+    }
 
     static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
     hdr.type = msg_type;
     while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
         len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
-        static_assert(sizeof(buf) <= SSIZE_MAX, "impossible");
-        static_assert(sizeof(buf) <= INT_MAX, "impossible");
-        static_assert(sizeof(buf) <= UINT32_MAX, "impossible");
-        if (len > (int)sizeof(buf))
-            len = sizeof(buf);
+        if ((size_t)len > max_len)
+            len = max_len;
         len = read(fd, buf, len);
         if (len < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
-                return 1;
-            else
-                return -1;
+                rc = 1;
+            /* otherwise keep rc = -1 */
+            goto out;
         }
         hdr.len = (uint32_t)len;
         if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0)
-            return -1;
+            goto out;
 
         if (len && !write_vchan_all(vchan, buf, len))
-            return -1;
+            goto out;
 
         if (len == 0) {
             /* restore flags */
@@ -198,10 +230,14 @@ static int handle_input(libvchan_t *vchan, int fd, int msg_type)
                 if (errno == ENOTSOCK)
                     close(fd);
             }
-            return 0;
+            rc = 0;
+            goto out;
         }
     }
-    return 1;
+    rc = 1;
+out:
+    free(buf);
+    return rc;
 }
 
 /* handle data from vchan and send it to specified FD
@@ -215,10 +251,12 @@ static int handle_input(libvchan_t *vchan, int fd, int msg_type)
  */
 
 static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
-        struct buffer *stdin_buf)
+        struct buffer *stdin_buf, int data_protocol_version)
 {
     struct msg_header hdr;
-    char buf[MAX_DATA_CHUNK];
+    const size_t max_len = max_data_chunk_size(data_protocol_version);
+    char *buf;
+    int rc = -1;
 
     /* do not receive any data if we have something already buffered */
     switch (flush_client_data(stdin_fd, stdin_buf)) {
@@ -231,16 +269,22 @@ static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
             return 0;
     }
 
+    buf = malloc(max_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        return -1;
+    }
+
     while (libvchan_data_ready(data_vchan) > 0) {
         if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) < 0)
-            return -1;
-        if (hdr.len > MAX_DATA_CHUNK) {
-            fprintf(stderr, "Too big data chunk received: %d > %d\n",
-                    hdr.len, MAX_DATA_CHUNK);
-            return -1;
+            goto out;
+        if (hdr.len > max_len) {
+            fprintf(stderr, "Too big data chunk received: %" PRIu32 " > %zu\n",
+                    hdr.len, max_len);
+            goto out;
         }
         if (!read_vchan_all(data_vchan, buf, hdr.len))
-            return -1;
+            goto out;
 
         switch (hdr.type) {
             /* handle both directions because this can be either server or client
@@ -259,13 +303,17 @@ static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                         close(stdin_fd);
                     }
                     stdin_fd = -1;
-                    return 0;
+                    rc = 0;
+                    goto out;
                 } else {
+                    if (replace_chars_stdout > 0)
+                        do_replace_chars(buf, hdr.len);
                     switch (write_stdin(stdin_fd, buf, hdr.len, stdin_buf)) {
                         case WRITE_STDIN_OK:
                             break;
                         case WRITE_STDIN_BUFFERED:
-                            return 1;
+                            rc = 1;
+                            goto out;
                         case WRITE_STDIN_ERROR:
                             if (errno == EPIPE || errno == ECONNRESET) {
                                 if (!child_process_pid || stdin_fd == 1 ||
@@ -277,11 +325,14 @@ static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                             } else {
                                 perror("write");
                             }
-                            return 0;
+                            rc = 0;
+                            goto out;
                     }
                 }
                 break;
             case MSG_DATA_STDERR:
+                if (replace_chars_stderr > 0)
+                    do_replace_chars(buf, hdr.len);
                 /* stderr of remote service, log locally */
                 if (!write_all(2, buf, hdr.len)) {
                     perror("write");
@@ -295,14 +346,19 @@ static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
                     *status = 255;
                 else
                     memcpy(status, buf, sizeof(*status));
-                return -2;
+                rc = -2;
+                goto out;
         }
     }
-    return 1;
+    rc = 1;
+out:
+    free(buf);
+    return rc;
 }
 
 static int process_child_io(libvchan_t *data_vchan,
-        int stdin_fd, int stdout_fd, int stderr_fd)
+        int stdin_fd, int stdout_fd, int stderr_fd,
+        int data_protocol_version)
 {
     fd_set rdset, wrset;
     int vchan_fd;
@@ -311,6 +367,7 @@ static int process_child_io(libvchan_t *data_vchan,
     int remote_process_status = -1;
     int ret, max_fd;
     struct timespec zero_timeout = { 0, 0 };
+    struct timespec normal_timeout = { 10, 0 };
     struct buffer stdin_buf;
 
     sigemptyset(&selectmask);
@@ -415,7 +472,7 @@ static int process_child_io(libvchan_t *data_vchan,
             /* check for other FDs, but exit immediately */
             ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &zero_timeout, &selectmask);
         } else
-            ret = pselect(max_fd + 1, &rdset, &wrset, NULL, NULL, &selectmask);
+            ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &normal_timeout, &selectmask);
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
@@ -433,7 +490,10 @@ static int process_child_io(libvchan_t *data_vchan,
         }
 
         /* handle_remote_data will check if any data is available */
-        switch (handle_remote_data(data_vchan, stdin_fd, &remote_process_status, &stdin_buf)) {
+        switch (handle_remote_data(data_vchan, stdin_fd,
+                    &remote_process_status,
+                    &stdin_buf,
+                    data_protocol_version)) {
             case -1:
                 handle_vchan_error("read");
                 break;
@@ -457,7 +517,8 @@ static int process_child_io(libvchan_t *data_vchan,
                 break;
         }
         if (stdout_fd >= 0 && FD_ISSET(stdout_fd, &rdset)) {
-            switch (handle_input(data_vchan, stdout_fd, stdout_msg_type)) {
+            switch (handle_input(data_vchan, stdout_fd, stdout_msg_type,
+                        data_protocol_version)) {
                 case -1:
                     handle_vchan_error("send");
                     break;
@@ -467,7 +528,8 @@ static int process_child_io(libvchan_t *data_vchan,
             }
         }
         if (stderr_fd >= 0 && FD_ISSET(stderr_fd, &rdset)) {
-            switch (handle_input(data_vchan, stderr_fd, MSG_DATA_STDERR)) {
+            switch (handle_input(data_vchan, stderr_fd, MSG_DATA_STDERR,
+                        data_protocol_version)) {
                 case -1:
                     handle_vchan_error("send");
                     break;
@@ -760,6 +822,7 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
     libvchan_t *data_vchan;
     int exit_code = 0;
     pid_t pid;
+    int data_protocol_version;
 
     if (type != MSG_SERVICE_CONNECT) {
         assert(cmdline != NULL);
@@ -782,7 +845,7 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
         fprintf(stderr, "Data vchan connection failed\n");
         exit(1);
     }
-    handle_handshake(data_vchan);
+    data_protocol_version = handle_handshake(data_vchan);
 
     prepare_child_env();
     /* TODO: use setresuid to allow child process to actually send the signal? */
@@ -796,13 +859,17 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
                 fputs("failed to spawn process\n", stderr);
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
             child_process_pid = pid;
-            exit_code = process_child_io(data_vchan, stdin_fd, stdout_fd, stderr_fd);
+            exit_code = process_child_io(
+                    data_vchan, stdin_fd, stdout_fd, stderr_fd,
+                    data_protocol_version);
             fprintf(stderr, "pid %d exited with %d\n", pid, exit_code);
             break;
         case MSG_SERVICE_CONNECT:
             child_process_pid = 0;
             stdout_msg_type = MSG_DATA_STDIN;
-            exit_code = process_child_io(data_vchan, stdin_fd, stdout_fd, stderr_fd);
+            exit_code = process_child_io(
+                    data_vchan, stdin_fd, stdout_fd, stderr_fd,
+                    data_protocol_version);
             break;
     }
     libvchan_close(data_vchan);

@@ -1,4 +1,4 @@
-/qrexec/__pycache__
+/qrexec/**/__pycache__
 /pkgs/
 *.o
 .*.sw[op]
@@ -18,3 +18,5 @@
 *.o.dep
 *~
 \#*#
+.mypy_cache/
+.coverage

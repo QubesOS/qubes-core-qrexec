@@ -1,3 +1,6 @@
+LIBDIR ?= /usr/lib
+INCLUDEDIR ?= /usr/include
+
 CC=gcc
 QUBES_CFLAGS:=-I. -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    `pkg-config --cflags vchan-$(BACKEND_VMM)` -fstack-protector \
@@ -14,16 +17,12 @@ VCHANLIBS = `pkg-config --libs vchan-$(BACKEND_VMM)`
 LIBDIR ?= /usr/lib
 INCLUDEDIR ?= /usr/include
 
-_XENSTORE_H=$(shell ls /usr/include/xenstore.h 2>/dev/null)
-ifneq "$(_XENSTORE_H)" ""
-QUBES_CFLAGS += -DUSE_XENSTORE_H
-endif
+all: libqrexec-utils.so libqrexec-utils.so.$(SO_VER)
+libqrexec-utils.so.$(SO_VER): unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o
+	$(CC) $(LDFLAGS) -Wl,-soname,$@ -o $@ $^ $(VCHANLIBS)
 
-
-all: libqrexec-utils.so
-libqrexec-utils.so: unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o
-	$(CC) $(QUBES_LDFLAGS) -Wl,-soname,$@.$(SO_VER) -o $@.$(SO_VER) $^ $(VCHANLIBS)
-	ln -sf $@.$(SO_VER) $@ 
+libqrexec-utils.so: libqrexec-utils.so.$(SO_VER)
+	ln -s libqrexec-utils.so.$(SO_VER) libqrexec-utils.so
 
 %.a:
 	$(AR) rcs $@ $^

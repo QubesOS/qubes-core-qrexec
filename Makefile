@@ -16,8 +16,9 @@ all-base:
 .PHONY: all-base
 
 install-base:
-	+$(MAKE) install -C libqrexec
-	$(PYTHON) setup.py install -O1 --skip-build --root $(DESTDIR)/
+	make install -C libqrexec
+	$(PYTHON) setup.py install -O1 $(PYTHON_PREFIX_ARG) --skip-build --root $(DESTDIR)
+	ln -s qrexec-policy-exec $(DESTDIR)/usr/bin/qrexec-policy
 	install -d $(DESTDIR)/usr/lib/qubes -m 755
 	install -t $(DESTDIR)/usr/lib/qubes -m 755 lib/*
 .PHONY: install-base
@@ -33,7 +34,15 @@ install-dom0: install-base all-dom0
 	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc-dom0/*
 	install -d $(DESTDIR)/etc/qubes-rpc/policy -m 775
 	install -d $(DESTDIR)/etc/qubes-rpc/policy/include -m 775
-	install -t $(DESTDIR)/etc/qubes-rpc/policy -m 664 qubes-rpc-policy/*
+	install -d $(DESTDIR)/etc/xdg/autostart -m 755
+	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
+		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
+	install -d $(DESTDIR)/etc/dbus-1/system.d
+	install -m 644 policy-agent-extra/dbus-org.qubesos.PolicyAgent.conf \
+		$(DESTDIR)/etc/dbus-1/system.d/org.qubesos.PolicyAgent.conf
+	install -d $(DESTDIR)/etc/qubes/policy.d -m 775
+	install -d $(DESTDIR)/etc/qubes/policy.d/include -m 775
+	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/*
 .PHONY: install-dom0
 
 
@@ -45,6 +54,7 @@ install-vm: install-base all-vm
 	+$(MAKE) install -C agent
 	install -d $(DESTDIR)/lib/systemd/system -m 755
 	install -t $(DESTDIR)/lib/systemd/system -m 644 systemd/*
-	install -d $(DESTDIR)/etc/qubes-rpc -m 755
-	#install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc/*
+	install -m 0644 -D qubes-rpc-config/README $(DESTDIR)/etc/qubes/rpc-config/README
+#	install -d $(DESTDIR)/etc/qubes-rpc -m 755
+#	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc/*
 .PHONY: install-vm

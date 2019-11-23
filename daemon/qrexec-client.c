@@ -40,6 +40,8 @@ int replace_chars_stderr = 0;
 
 #define VCHAN_BUFFER_SIZE 65536
 
+#define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
+
 int local_stdin_fd, local_stdout_fd;
 pid_t local_pid = 0;
 /* flag if this is "remote" end of service call. In this case swap STDIN/STDOUT
@@ -49,10 +51,12 @@ int child_exited = 0;
 
 extern char **environ;
 
+/* initialize data_protocol_version */
 static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
 {
     struct msg_header hdr;
     struct peer_info info;
+    int data_protocol_version = -1;
     int who = 0; // even - send to remote, odd - receive from remote
 
     while (who < 2) {
@@ -70,7 +74,9 @@ static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
                 return -1;
             }
 
-            if (info.version != QREXEC_PROTOCOL_VERSION) {
+            data_protocol_version = info.version < QREXEC_PROTOCOL_VERSION ?
+                                    info.version : QREXEC_PROTOCOL_VERSION;
+            if (data_protocol_version < QREXEC_DATA_MIN_VERSION) {
                 fprintf(stderr, "Incompatible daemon protocol version "
                         "(daemon %d, client %d)\n",
                         info.version, QREXEC_PROTOCOL_VERSION);
@@ -92,7 +98,7 @@ static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
         }
         who++;
     }
-    return 0;
+    return data_protocol_version;
 }
 
 static int handle_daemon_handshake(int fd)
@@ -253,7 +259,8 @@ static void send_service_connect(int s, char *conn_ident,
 
     exec_params.connect_domain = connect_domain;
     exec_params.connect_port = connect_port;
-    strncpy(srv_params.ident, conn_ident, sizeof(srv_params.ident));
+    strncpy(srv_params.ident, conn_ident, sizeof(srv_params.ident) - 1);
+    srv_params.ident[sizeof(srv_params.ident) - 1] = '\0';
 
     if (!write_all(s, &hdr, sizeof(hdr))
             || !write_all(s, &exec_params, sizeof(exec_params))
@@ -279,18 +286,29 @@ static void send_exit_code(libvchan_t *vchan, int status)
     }
 }
 
-static void handle_input(libvchan_t *vchan)
+static void handle_input(libvchan_t *vchan, int data_protocol_version)
 {
-    char buf[MAX_DATA_CHUNK];
+    const size_t data_chunk_size = max_data_chunk_size(data_protocol_version);
+    char *buf;
     int ret;
     size_t max_len;
     struct msg_header hdr;
 
-    max_len = libvchan_buffer_space(vchan)-sizeof(hdr);
-    if (max_len > sizeof(buf))
-        max_len = sizeof(buf);
+    max_len = libvchan_buffer_space(vchan);
+    if (max_len < sizeof(hdr))
+        return;
+    max_len -= sizeof(hdr);
+    if (max_len > data_chunk_size)
+        max_len = data_chunk_size;
     if (max_len == 0)
         return;
+
+    buf = malloc(max_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        do_exit(1);
+    }
+
     ret = read(local_stdout_fd, buf, max_len);
     if (ret < 0) {
         perror("read");
@@ -338,6 +356,8 @@ static void handle_input(libvchan_t *vchan)
         } else
             perror("write agent");
     }
+
+    free(buf);
 }
 
 void do_replace_chars(char *buf, int len) {
@@ -356,11 +376,13 @@ void do_replace_chars(char *buf, int len) {
 	}
 }
 
-static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf)
+static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
+        int data_protocol_version)
 {
     int status;
     struct msg_header hdr;
-    char buf[MAX_DATA_CHUNK];
+    const size_t buf_len = max_data_chunk_size(data_protocol_version);
+    char *buf;
 
     if (local_stdin_fd != -1) {
         switch(flush_client_data(local_stdin_fd, stdin_buf)) {
@@ -375,11 +397,18 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf)
                 break;
         }
     }
+
+    buf = malloc(buf_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        do_exit(1);
+    }
+
     if (libvchan_recv(vchan, &hdr, sizeof hdr) < 0) {
         perror("read vchan");
         do_exit(1);
     }
-    if (hdr.len > MAX_DATA_CHUNK) {
+    if (hdr.len > buf_len) {
         fprintf(stderr, "client_header.len=%d\n", hdr.len);
         do_exit(1);
     }
@@ -406,6 +435,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf)
             } else {
                 switch (write_stdin(local_stdin_fd, buf, hdr.len, stdin_buf)) {
                     case WRITE_STDIN_BUFFERED:
+                        free(buf);
                         return WRITE_STDIN_BUFFERED;
                     case WRITE_STDIN_ERROR:
                         if (errno == EPIPE) {
@@ -442,6 +472,8 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf)
             fprintf(stderr, "unknown msg %d\n", hdr.type);
             do_exit(1);
     }
+
+    free(buf);
     /* intentionally do not distinguish between _ERROR and _OK, because in case
      * of write error, we simply eat the data - no way to report it to the
      * other side */
@@ -465,7 +497,7 @@ static void check_child_status(libvchan_t *vchan)
     do_exit(status);
 }
 
-static void select_loop(libvchan_t *vchan)
+static void select_loop(libvchan_t *vchan, int data_protocol_version)
 {
     fd_set select_set;
     fd_set wr_set;
@@ -541,12 +573,13 @@ static void select_loop(libvchan_t *vchan)
             }
         }
         while (libvchan_data_ready(vchan))
-            if (handle_vchan_data(vchan, &stdin_buf) != WRITE_STDIN_OK)
+            if (handle_vchan_data(vchan, &stdin_buf, data_protocol_version)
+                    != WRITE_STDIN_OK)
                 break;
 
         if (local_stdout_fd != -1
                 && FD_ISSET(local_stdout_fd, &select_set))
-            handle_input(vchan);
+            handle_input(vchan, data_protocol_version);
     }
 }
 
@@ -671,6 +704,8 @@ int main(int argc, char **argv)
     int src_domain_id = 0; /* if not -c given, the process is run in dom0 */
     int connection_timeout = 5;
     struct service_params svc_params;
+    int data_protocol_version;
+
     while ((opt = getopt(argc, argv, "d:l:ec:tTw:W")) != -1) {
         switch (opt) {
             case 'd':
@@ -714,15 +749,17 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
-    if (strcmp(domname, "dom0") == 0 && !connect_existing) {
+    if ((strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) &&
+            !connect_existing) {
         fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
         usage(argv[0]);
     }
 
-    if (strcmp(domname, "dom0") == 0) {
+    if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
         if (connect_existing) {
             msg_type = MSG_SERVICE_CONNECT;
-            strncpy(svc_params.ident, request_id, sizeof(svc_params.ident));
+            strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
+            svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
         } else if (just_exec)
             msg_type = MSG_JUST_EXEC;
         else
@@ -758,9 +795,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "Failed to open data vchan connection\n");
             do_exit(1);
         }
-        if (handle_agent_handshake(data_vchan, connect_existing) < 0)
+        data_protocol_version = handle_agent_handshake(data_vchan, connect_existing);
+        if (data_protocol_version < 0)
             do_exit(1);
-        select_loop(data_vchan);
+        select_loop(data_vchan, data_protocol_version);
     } else {
         if (just_exec)
             msg_type = MSG_JUST_EXEC;
@@ -805,9 +843,10 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Failed to open data vchan connection\n");
                 do_exit(1);
             }
-            if (handle_agent_handshake(data_vchan, 0) < 0)
+            data_protocol_version = handle_agent_handshake(data_vchan, 0);
+            if (data_protocol_version < 0)
                 do_exit(1);
-            select_loop(data_vchan);
+            select_loop(data_vchan, data_protocol_version);
         }
     }
     return 0;

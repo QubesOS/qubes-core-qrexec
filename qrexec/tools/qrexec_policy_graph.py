@@ -21,28 +21,33 @@
 import argparse
 import json
 import os
+import pathlib
 
 import sys
 
-import qubespolicy
+from .. import POLICYPATH
+from .. import exc
+from .. import utils
+from ..policy import parser
 
-parser = argparse.ArgumentParser(description='Graph qrexec policy')
-parser.add_argument('--include-ask', action='store_true',
+argparser = argparse.ArgumentParser(description='Graph qrexec policy')
+argparser.add_argument('--include-ask', action='store_true',
     help='Include `ask` action in graph')
-parser.add_argument('--source', action='store', nargs='+',
+argparser.add_argument('--source', action='store', nargs='+',
     help='Limit graph to calls from *source*')
-parser.add_argument('--target', action='store', nargs='+',
+argparser.add_argument('--target', action='store', nargs='+',
     help='Limit graph to calls to *target*')
-parser.add_argument('--service', action='store', nargs='+',
+argparser.add_argument('--service', action='store', nargs='+',
     help='Limit graph to *service*')
-parser.add_argument('--output', action='store',
+argparser.add_argument('--output', action='store',
     help='Write to *output* instead of stdout')
-parser.add_argument('--policy-dir', action='store',
-    default=qubespolicy.POLICY_DIR,
+argparser.add_argument('--policy-dir', action='store',
+    type=pathlib.Path,
+    default=POLICYPATH,
     help='Look for policy in *policy-dir*')
-parser.add_argument('--system-info', action='store',
+argparser.add_argument('--system-info', action='store',
     help='Load system information from file instead of querying qubesd')
-parser.add_argument('--skip-labels', action='store_true',
+argparser.add_argument('--skip-labels', action='store_true',
     help='Do not include service names on the graph, also deduplicate '
          'connections.')
 
@@ -58,17 +63,17 @@ def handle_single_action(args, action):
         target = action.rule.override_target
     if args.target and target not in args.target:
         return ''
-    if action.action == qubespolicy.Action.ask:
+    if action.action == parser.Action.ask:
         if args.include_ask:
             return '  "{}" -> "{}" [label="{}" color=orange];\n'.format(
                 action.source, target, service)
-    elif action.action == qubespolicy.Action.allow:
+    elif action.action == parser.Action.allow:
         return '  "{}" -> "{}" [label="{}" color=red];\n'.format(
                 action.source, target, service)
     return ''
 
 def main(args=None):
-    args = parser.parse_args(args)
+    args = argparser.parse_args(args)
 
     output = sys.stdout
     if args.output:
@@ -78,7 +83,7 @@ def main(args=None):
         with open(args.system_info) as f_system_info:
             system_info = json.load(f_system_info)
     else:
-        system_info = qubespolicy.get_system_info()
+        system_info = utils.get_system_info()
 
     sources = list(system_info['domains'].keys())
     if args.source:
@@ -91,7 +96,9 @@ def main(args=None):
 
     connections = set()
 
+    policy = parser.FilePolicy(policy_path=args.policy_dir)
     output.write('digraph g {\n')
+    # TODO: list defined services and arguments
     for service in os.listdir(args.policy_dir):
         if os.path.isdir(os.path.join(args.policy_dir, service)):
             continue
@@ -99,18 +106,20 @@ def main(args=None):
                 not any(service.startswith(srv + '+') for srv in args.service):
             continue
 
-        policy = qubespolicy.Policy(service, args.policy_dir)
         for source in sources:
             for target in targets:
                 try:
-                    action = policy.evaluate(system_info, source, target)
+                    request = parser.Request(
+                         service, '+', source, target,
+                         system_info=system_info)
+                    action = policy.evaluate(request)
                     line = handle_single_action(args, action)
                     if line in connections:
                         continue
                     if line:
                         output.write(line)
                     connections.add(line)
-                except qubespolicy.AccessDenied:
+                except exc.AccessDenied:
                     continue
 
     output.write('}\n')

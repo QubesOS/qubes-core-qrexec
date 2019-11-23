@@ -38,16 +38,20 @@ else
 endif
 
 
-install: all
-	install -d $(DESTDIR)/etc/qubes-rpc $(DESTDIR)/usr/lib/qubes \
-		$(DESTDIR)/usr/bin $(DESTDIR)/usr/share/man/man1
+install:
+	install -d $(DESTDIR)/etc/qubes-rpc
+	install -d $(DESTDIR)/usr/lib/qubes $(DESTDIR)/usr/bin
+	install -d $(DESTDIR)/usr/share/man/man1
 	install qrexec-agent $(DESTDIR)/usr/lib/qubes
 	install qrexec-client-vm $(DESTDIR)/usr/bin
+	install -d $(DESTDIR)/usr/share/man/man1
 	install qrexec-client-vm.1.gz $(DESTDIR)/usr/share/man/man1
 	ln -sf ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec-client-vm
 	ln -sf ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec_client_vm
 	install qrexec-fork-server $(DESTDIR)/usr/bin
 ifeq ($(DISTRO),Debian)
+	install -D -m 0644 qrexec.pam.debian $(DESTDIR)/etc/pam.d/qrexec
+else ifeq ($(DISTRO),Ubuntu)
 	install -D -m 0644 qrexec.pam.debian $(DESTDIR)/etc/pam.d/qrexec
 else ifeq ($(DISTRO),Arch)
 	install -D -m 0644 qrexec.pam.archlinux $(DESTDIR)/etc/pam.d/qrexec

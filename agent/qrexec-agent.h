@@ -35,6 +35,10 @@ void prepare_child_env(void);
 /* true in qrexec-fork-server, false in qrexec-agent */
 extern const bool qrexec_is_fork_server;
 
+// whether qrexec-client should replace problematic bytes with _ before printing the output
+extern int replace_chars_stdout;
+extern int replace_chars_stderr;
+
 pid_t handle_new_process(int type,
         int connect_domain, int connect_port,
         char *cmdline, size_t cmdline_len);

@@ -22,11 +22,8 @@
 #
 #
 
-# debug_package hack should be removed when BuildArch:noarch is enabled below
-%define debug_package %{nil}
-
-Name:		qubes-qrexec-vm
-Version:	%{version}
+Name:		qubes-core-qrexec-vm
+Version:	@VERSION@
 Release:	1%{dist}
 Summary:	The Qubes qrexec files (qube side)
 
@@ -35,10 +32,15 @@ Vendor:		Invisible Things Lab
 License:	GPL
 URL:		http://www.qubes-os.org
 
+BuildRequires:	gcc
 BuildRequires:	pam-devel
+BuildRequires:	pandoc
+BuildRequires:	qubes-libvchan-devel
+BuildRequires:	qubes-core-qrexec-devel
+BuildRequires:	lsb-core-noarch
 
-Requires:   python3
-Requires:   qubes-qrexec-base
+Requires:   python%{python3_pkgversion}
+Requires:   qubes-core-qrexec
 
 Provides:   qubes-core-agent-qrexec = 4.1.0-1
 Obsoletes:  qubes-core-agent-qrexec < 4.1.0-1
@@ -49,10 +51,11 @@ Source0: qubes-core-qrexec-%{version}.tar.gz
 The Qubes qrexec files for installation on a qube.
 
 %prep
-%setup -q
+%setup -qn qubes-core-qrexec-%{version}
 
 %build
-
+%{?set_build_flags}
+export BACKEND_VMM=@BACKEND_VMM@
 make all-vm
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
 
@@ -77,9 +80,20 @@ rm -f %{name}-%{version}
 %preun
 %systemd_preun qubes-qrexec-agent.service
 
+%posttrans
+# when upgrading from R4.0, %%postun of qubes-core-agent-qrexec will revert
+# %%post of this package. Redo the action in %%posttrans
+%systemd_post qubes-qrexec-agent.service
+# and then start it back
+if systemctl is-enabled qubes-qrexec-agent.service >/dev/null 2>&1; then
+    systemctl start qubes-qrexec-agent.service
+fi
+
 %files
 %defattr(-,root,root,-)
 %config(noreplace) /etc/pam.d/qrexec
+%dir /etc/qubes/rpc-config
+/etc/qubes/rpc-config/README
 
 %{_bindir}/qrexec-client-vm
 %{_bindir}/qrexec-fork-server

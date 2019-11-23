@@ -19,19 +19,51 @@
  *
  */
 
+#ifndef _QREXEC_H
+#define _QREXEC_H
+
 /* See also http://wiki.qubes-os.org/trac/wiki/Qrexec */
 
 #include <stdint.h>
 
-#define QREXEC_PROTOCOL_VERSION 2
+#define QREXEC_PROTOCOL_VERSION 3
 #define MAX_FDS 256
-#define MAX_DATA_CHUNK 4096
+/* protocol version 2 */
+#define MAX_DATA_CHUNK_V2 4096
+/* protocol version 3+ */
+#define MAX_DATA_CHUNK_V3 65536
+
+/* large, but arbitrary; make it fit in vchan buffer (64k), together with
+ * message header */
+#define MAX_SERVICE_NAME_LEN 65000
 
 #define RPC_REQUEST_COMMAND "QUBESRPC"
 #define RPC_REQUEST_COMMAND_LEN (sizeof(RPC_REQUEST_COMMAND)-1)
 #define NOGUI_CMD_PREFIX "nogui:"
 #define NOGUI_CMD_PREFIX_LEN (sizeof(NOGUI_CMD_PREFIX)-1)
 #define VCHAN_BASE_PORT 512
+
+/* protocol version */
+enum {
+    /* legacy protocol, without version negotiation support
+     * Qubes < R3.0
+     */
+    QREXEC_PROTOCOL_V1 = 1,
+
+    /* Changes:
+     *  - separate data and control channels
+     *  - handshake with protocol version
+     * Qubes R3.0 - R4.0
+     */
+    QREXEC_PROTOCOL_V2 = 2,
+
+    /* Changes:
+     *  - MAX_DATA_CHUNK increased to 64k
+     *  - MSG_TRIGGER_SERVICE3
+     * Qubes >= R4.1
+     */
+    QREXEC_PROTOCOL_V3 = 3,
+};
 
 /* Messages sent over control vchan between daemon(dom0) and agent(vm).
  * The same are used between client(dom0) and daemon(dom0).
@@ -57,7 +89,7 @@ enum {
     MSG_SERVICE_REFUSED,
 
     /* agent->daemon messages */
-    /* call Qubes RPC service
+    /* call Qubes RPC service (protocol 2)
      * struct trigger_service_params passed as data */
     MSG_TRIGGER_SERVICE = 0x210,
 
@@ -65,6 +97,11 @@ enum {
     /* connection was terminated, struct exec_params passed as data (with empty
      * cmdline field) informs about released vchan port */
     MSG_CONNECTION_TERMINATED,
+
+    /* agent->daemon messages */
+    /* call Qubes RPC service (protocol 3+)
+     * struct trigger_service_params3 passed as data */
+    MSG_TRIGGER_SERVICE3,
 
     /* common messages */
     /* initialize connection, struct peer_info passed as data
@@ -95,6 +132,12 @@ struct trigger_service_params {
     struct service_params request_id; /* service request id */
 };
 
+struct trigger_service_params3 {
+    char target_domain[64];           /* null terminated ASCII string */
+    struct service_params request_id; /* service request id */
+    // char service_name[0];          /* null terminated ASCII string, size = msg_header.len - sizeof(struct trigger_service_params3) */
+};
+
 struct peer_info {
     uint32_t version; /* qrexec protocol version */
 };
@@ -119,3 +162,4 @@ enum {
 #define QUBES_RPC_MULTIPLEXER_PATH "/usr/lib/qubes/qubes-rpc-multiplexer"
 #define QREXEC_DAEMON_SOCKET_DIR "/var/run/qubes"
 
+#endif /* _QREXEC_H */

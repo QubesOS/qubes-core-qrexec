@@ -1,0 +1,26 @@
+qubes-core-qrexec (4.1.2-1) unstable; urgency=medium
+
+  * policy: fix dropped call argument
+  * policy: fix @dispvm default template evaluation
+  * tests: revive qrexec-policy-exec tests
+  * policy: fix keyword-based intended target argument for actual
+    service call
+  * policy: revive some more tests, add few policy eval tests
+  * qrexec-client-vm: add option to replace control characters on
+    stdout/err
+  * Make pylint happy
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 09 Oct 2019 04:12:00 +0200
+
+qubes-core-qrexec (4.1.1-1) wheezy; urgency=medium
+
+  * rpm: fix build with mock
+  * debian: add Build-Depends: lsb-release
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 01 Jul 2019 02:29:17 +0200
+
+qubes-core-qrexec (4.1.0-1) unstable; urgency=medium
+
+  * Initial debian packaging
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 05 Apr 2019 03:51:22 +0200

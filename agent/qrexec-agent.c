@@ -47,7 +47,7 @@
 #ifdef HAVE_PAM
 #include <security/pam_appl.h>
 #endif
-#include "qrexec.h"
+#include <qrexec.h>
 #include <libvchan.h>
 #include "libqrexec-utils.h"
 #include "qrexec-agent.h"
@@ -319,7 +319,43 @@ _Noreturn void handle_vchan_error(const char *op)
     exit(1);
 }
 
-static void init(void)
+int my_sd_notify(int unset_environment, const char *state) {
+    struct sockaddr_un addr;
+    int fd;
+    int ret = -1;
+
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, getenv("NOTIFY_SOCKET"), sizeof(addr.sun_path)-1);
+    addr.sun_path[sizeof(addr.sun_path)-1] = '\0';
+    if (addr.sun_path[0] == '@')
+        addr.sun_path[0] = '\0';
+
+    if (unset_environment)
+        unsetenv("NOTIFY_SOCKET");
+
+    fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (fd == -1) {
+        perror("sd_notify socket");
+        return -1;
+    }
+
+    if (connect(fd, &addr, sizeof(addr)) == -1) {
+        perror("sd_notify connect");
+        goto out;
+    }
+
+    if (send(fd, state, strlen(state), 0) == -1) {
+        perror("sd_notify send");
+        goto out;
+    }
+
+    ret = 0;
+out:
+    close(fd);
+    return ret;
+}
+
+static void init()
 {
     mode_t old_umask;
     /* FIXME: This 0 is remote domain ID */
@@ -336,6 +372,10 @@ static void init(void)
     /* wait for qrexec daemon */
     while (!libvchan_is_open(ctrl_vchan))
         libvchan_wait(ctrl_vchan);
+
+    if (getenv("NOTIFY_SOCKET")) {
+        my_sd_notify(1, "READY=1");
+    }
 }
 
 #if 0
@@ -902,28 +942,50 @@ static int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
 static void handle_trigger_io()
 {
     struct msg_header hdr;
-    struct trigger_service_params params;
-    ssize_t ret;
+    struct trigger_service_params3 params;
+    char *command = NULL;
+    size_t command_len;
     int client_fd;
 
     client_fd = do_accept(trigger_fd);
     if (client_fd < 0)
         return;
-    hdr.len = sizeof(params);
-    ret = read(client_fd, &params, sizeof(params));
-    if (ret == sizeof(params)) {
-        hdr.type = MSG_TRIGGER_SERVICE;
-        snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
-        if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) < 0)
-            handle_vchan_error("write hdr");
-        if (libvchan_send(ctrl_vchan, &params, sizeof(params)) < 0)
-            handle_vchan_error("write params");
+    if (!read_all(client_fd, &hdr, sizeof(hdr)))
+        goto error;
+    if (hdr.type != MSG_TRIGGER_SERVICE3 ||
+            hdr.len < sizeof(params) ||
+            hdr.len > sizeof(params) + MAX_SERVICE_NAME_LEN) {
+        fprintf(stderr, "Invalid request received from qrexec-client-vm, is it outdated?\n");
+        goto error;
     }
-    if (ret <= 0) {
-        close(client_fd);
-    }
+    if (!read_all(client_fd, &params, sizeof(params)))
+        goto error;
+    command_len = hdr.len - sizeof(params);
+    command = malloc(command_len);
+    if (!command)
+        goto error;
+    if (!read_all(client_fd, command, command_len))
+        goto error;
+    if (command[command_len-1] != '\0')
+        goto error;
+
+    snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
+    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) < 0)
+        handle_vchan_error("write hdr");
+    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) < 0)
+        handle_vchan_error("write params");
+    if (libvchan_send(ctrl_vchan, command, command_len) < 0)
+        handle_vchan_error("write command");
+
+    free(command);
     /* do not close client_fd - we'll need it to send the connection details
      * later (when dom0 accepts the request) */
+    return;
+error:
+    fprintf(stderr, "Failed to retrieve/execute request from qrexec-client-vm\n");
+    if (command)
+        free(command);
+    close(client_fd);
 }
 
 static void handle_terminated_fork_client(fd_set *rdset) {

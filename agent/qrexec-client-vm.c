@@ -89,26 +89,42 @@ static void convert_target_name_keyword(char *target)
             target[i] = '@';
 }
 
+enum {
+    opt_no_filter_stdout = 't'+128,
+    opt_no_filter_stderr = 'T'+128,
+};
+
 static struct option longopts[] = {
     { "buffer-size", required_argument, 0,  'b' },
+    { "filter-escape-chars-stdout", no_argument, 0, 't'},
+    { "filter-escape-chars-stderr", no_argument, 0, 'T'},
+    { "no-filter-escape-chars-stdout", no_argument, 0, opt_no_filter_stdout},
+    { "no-filter-escape-chars-stderr", no_argument, 0, opt_no_filter_stderr},
     { NULL, 0, 0, 0},
 };
 
 _Noreturn static void usage(const char *argv0) {
     fprintf(stderr,
-            "usage: %s [--buffer-size=BUFFER_SIZE] target_vmname program_ident [local_program [local program arguments]]\n",
+            "usage: %s [options] target_vmname program_ident [local_program [local program arguments]]\n",
             argv0);
-    fprintf(stderr, "BUFFER_SIZE is minimum vchan buffer size (default: 64k)\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  --buffer-size=BUFFER_SIZE - minimum vchan buffer size (default: 64k)\n");
+    fprintf(stderr, "  -t, --filter-escape-chars-stdout - filter non-ASCII and control characters on stdout (default if stdout is a terminal)\n");
+    fprintf(stderr, "  -T, --filter-escape-chars-stderr - filter non-ASCII and control characters on stderr (default if stderr is a terminal)\n");
+    fprintf(stderr, "  --no-filter-escape-chars-stdout - opposite to --filter-escape-chars-stdout\n");
+    fprintf(stderr, "  --no-filter-escape-chars-stderr - opposite to --filter-escape-chars-stderr\n");
     exit(2);
 }
 
 int main(int argc, char **argv)
 {
     int trigger_fd;
-    struct trigger_service_params params;
+    struct msg_header hdr;
+    struct trigger_service_params3 params;
     struct exec_params exec_params;
-    ssize_t ret;
-    int i;
+    size_t service_name_len;
+    char *service_name;
+    int ret, i;
     int start_local_process = 0;
     char *abs_exec_path;
     pid_t child_pid = 0;
@@ -117,12 +133,24 @@ int main(int argc, char **argv)
     int opt;
 
     while (1) {
-        opt = getopt_long(argc, argv, "+", longopts, NULL);
+        opt = getopt_long(argc, argv, "+tT", longopts, NULL);
         if (opt == -1)
             break;
         switch (opt) {
             case 'b':
                 buffer_size = atoi(optarg);
+                break;
+            case 't':
+                replace_chars_stdout = 1;
+                break;
+            case 'T':
+                replace_chars_stderr = 1;
+                break;
+            case opt_no_filter_stdout:
+                replace_chars_stdout = 0;
+                break;
+            case opt_no_filter_stderr:
+                replace_chars_stderr = 0;
                 break;
             case '?':
                 usage(argv[0]);
@@ -136,11 +164,23 @@ int main(int argc, char **argv)
         start_local_process = 1;
     }
 
+    if (!start_local_process) {
+        if (replace_chars_stdout == -1 && isatty(1))
+            replace_chars_stdout = 1;
+    }
+    if (replace_chars_stderr == -1 && isatty(2))
+        replace_chars_stderr = 1;
+
+    service_name = argv[optind + 1];
+
+    service_name_len = strlen(service_name) + 1;
+
     trigger_fd = connect_unix_socket(QREXEC_AGENT_TRIGGER_PATH);
 
+    hdr.type = MSG_TRIGGER_SERVICE3;
+    hdr.len = sizeof(params) + service_name_len;
+
     memset(&params, 0, sizeof(params));
-    strncpy(params.service_name, argv[optind + 1],
-            sizeof(params.service_name) - 1);
 
     convert_target_name_keyword(argv[optind]);
     strncpy(params.target_domain, argv[optind],
@@ -149,8 +189,16 @@ int main(int argc, char **argv)
     snprintf(params.request_id.ident,
             sizeof(params.request_id.ident), "SOCKET");
 
-    if (write(trigger_fd, &params, sizeof(params)) < 0) {
-        perror("write to agent");
+    if (!write_all(trigger_fd, &hdr, sizeof(hdr))) {
+        perror("write(hdr) to agent");
+        exit(1);
+    }
+    if (!write_all(trigger_fd, &params, sizeof(params))) {
+        perror("write(params) to agent");
+        exit(1);
+    }
+    if (!write_all(trigger_fd, service_name, service_name_len)) {
+        perror("write(command) to agent");
         exit(1);
     }
     ret = read(trigger_fd, &exec_params, sizeof(exec_params));
