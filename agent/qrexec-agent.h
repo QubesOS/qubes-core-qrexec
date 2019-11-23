@@ -26,6 +26,7 @@
 // support only very small configuration files,
 #define MAX_CONFIG_SIZE 4096
 
+#include <stdbool.h>
 int handle_handshake(libvchan_t *ctrl);
 void handle_vchan_error(const char *op);
 _Noreturn void do_exec(char *cmd);

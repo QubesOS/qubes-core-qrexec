@@ -19,10 +19,10 @@ INCLUDEDIR ?= /usr/include
 
 all: libqrexec-utils.so libqrexec-utils.so.$(SO_VER)
 libqrexec-utils.so.$(SO_VER): unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o
-	$(CC) $(LDFLAGS) -Wl,-soname,$@ -o $@ $^ $(VCHANLIBS)
+	$(CC) $(LDFLAGS) -shared -Wl,-soname,$@ -o $@ $^ $(VCHANLIBS)
 
 libqrexec-utils.so: libqrexec-utils.so.$(SO_VER)
-	ln -s libqrexec-utils.so.$(SO_VER) libqrexec-utils.so
+	ln -sf libqrexec-utils.so.$(SO_VER) libqrexec-utils.so
 
 %.a:
 	$(AR) rcs $@ $^
