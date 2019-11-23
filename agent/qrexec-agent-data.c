@@ -631,8 +631,12 @@ static char *parse_qrexec_argument_from_commandline(char *cmdline) {
 
 static int qubes_connect(int s, const char *buffer, const size_t total_path_length) {
     // Avoiding an extra copy is NOT worth it!
-    char buf[] = "/tmp/qrexec-XXXXXX\0qrexec-socket";
+#define QUBES_TMP_DIRECTORY "/tmp/qrexec-XXXXXX"
+    char buf[] = QUBES_TMP_DIRECTORY "\0qrexec-socket";
     struct sockaddr_un remote = { .sun_family = AF_UNIX, .sun_path = { 0 } };
+    static_assert(sizeof buf <= sizeof remote.sun_path,
+                  "maximum path length of AF_UNIX sockets too small");
+    static const size_t path_separator_offset = sizeof QUBES_TMP_DIRECTORY - 1;
     int result = -1, dummy_errno = -1;
     socklen_t socket_len;
     if (total_path_length != strlen(buffer))
@@ -641,7 +645,7 @@ static int qubes_connect(int s, const char *buffer, const size_t total_path_leng
         // sockaddr_un too small :(
         if (NULL == mkdtemp(buf))
             return -1;
-        buf[18] = '/';
+        buf[path_separator_offset] = '/';
         if (symlink(buffer, buf)) {
            dummy_errno = errno;
            goto fail;
@@ -658,7 +662,7 @@ static int qubes_connect(int s, const char *buffer, const size_t total_path_leng
     dummy_errno = errno;
     unlink(buf);
 fail:
-    buf[18] = '\0';
+    buf[path_separator_offset] = '\0';
     rmdir(buf);
     errno = dummy_errno;
     return result;
