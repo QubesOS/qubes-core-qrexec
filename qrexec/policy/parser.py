@@ -32,6 +32,7 @@ import logging
 import pathlib
 import string
 import subprocess
+import asyncio
 
 from typing import (
     Iterable,
@@ -459,7 +460,7 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         self.user = user
 
     @abc.abstractmethod
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         '''
         Execute the action. For allow, this runs the qrexec. For ask, it asks
         user and then (depending on verdict) runs the call.
@@ -486,7 +487,7 @@ class AllowResolution(AbstractResolution):
             user=ask_resolution.user,
             target=target)
 
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         '''Execute the allowed action'''
         assert self.target is not None
 
@@ -512,7 +513,9 @@ class AllowResolution(AbstractResolution):
         if dispvm:
             qrexec_opts.append('-W')
         try:
-            subprocess.call([QREXEC_CLIENT] + qrexec_opts + [cmd])
+            command = [QREXEC_CLIENT] + qrexec_opts + [cmd]
+            process = await asyncio.create_subprocess_exec(*command)
+            await process.communicate()
         finally:
             if dispvm:
                 self.cleanup_dispvm(target)
@@ -614,7 +617,7 @@ class AskResolution(AbstractResolution):
         return self.request.allow_resolution_type.from_ask_resolution(self,
             target=target)
 
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         '''Ask the user for permission.
 
         This method should be overloaded in children classes. This
@@ -1357,7 +1360,7 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
     ...     'qrexec.Service', '+argument', 'source-name', 'target-name',
     ...     system_info=qrexec.utils.get_system_info())
     >>> resolution = policy.evaluate(request)
-    >>> resolution.execute('process-ident')
+    >>> await resolution.execute('process-ident')  # asynchroneous method
     '''
 
     def handle_compat40(self, *, filepath, lineno):

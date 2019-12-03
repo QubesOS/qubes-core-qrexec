@@ -23,6 +23,8 @@ import logging
 import logging.handlers
 import pathlib
 import sys
+import asyncio
+import functools
 
 from .. import DEFAULT_POLICY, POLICYPATH
 from .. import exc
@@ -34,20 +36,20 @@ def create_default_policy(service_name):
         policy.write(DEFAULT_POLICY)
 
 class JustEvaluateAllowResolution(parser.AllowResolution):
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         sys.exit(0)
 
 class JustEvaluateAskResolution(parser.AskResolution):
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         sys.exit(1)
 
 class AssumeYesForAskResolution(parser.AskResolution):
-    def execute(self, caller_ident):
-        return self.handle_user_response(True, self.request.target).execute(
+    async def execute(self, caller_ident):
+        return await self.handle_user_response(True, self.request.target).execute(
             caller_ident)
 
 class DBusAskResolution(parser.AskResolution):
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         import pydbus
         bus = pydbus.SystemBus()
         proxy = bus.get('org.qubesos.PolicyAgent',
@@ -70,14 +72,30 @@ class DBusAskResolution(parser.AskResolution):
             self.targets_for_ask, self.default_target or '', icons)
 
         if response:
-            return self.handle_user_response(True, response).execute(
+            return await self.handle_user_response(True, response).execute(
                 caller_ident)
         return self.handle_user_response(False, None)
 
-def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask):
+
+class LogAllowedResolution(parser.AllowResolution):
+    def __init__(self, log, *args, **kwargs):
+        super(LogAllowedResolution, self).__init__(*args, **kwargs)
+        self.log = log
+
+    async def execute(self, caller_ident):
+        log_prefix = 'qrexec: {request.service}{request.argument}: ' \
+                     '{request.source} -> {request.target}:'.format(
+                      request=self.request)
+        self.log.info('%s allowed to %s', log_prefix, self.target)
+
+        await super(LogAllowedResolution, self).execute(caller_ident)
+
+
+def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask,
+                             allow_resolution_type):
     ret = {
         'ask_resolution_type': DBusAskResolution,
-        'allow_resolution_type': parser.AllowResolution}
+        'allow_resolution_type': allow_resolution_type}
     if just_evaluate:
         ret['ask_resolution_type'] = JustEvaluateAskResolution
         ret['allow_resolution_type'] = JustEvaluateAllowResolution
@@ -118,7 +136,7 @@ def main(args=None):
         handler = logging.handlers.SysLogHandler(address='/dev/log')
         log.addHandler(handler)
 
-    return handle_request(
+    return asyncio.run(handle_request(
         args.domain_id,
         args.source,
         args.intended_target,
@@ -127,12 +145,12 @@ def main(args=None):
         log,
         path=args.path,
         just_evaluate=args.just_evaluate,
-        assume_yes_for_ask=args.assume_yes_for_ask)
+        assume_yes_for_ask=args.assume_yes_for_ask))
 
 # pylint: disable=too-many-arguments
-def handle_request(domain_id, source, intended_target, service_and_arg,
+async def handle_request(domain_id, source, intended_target, service_and_arg,
                    process_ident, log, path=POLICYPATH, just_evaluate=False,
-                   assume_yes_for_ask=False):
+                   assume_yes_for_ask=False, daemon_execution=None):
     # Add source domain information, required by qrexec-client for establishing
     # connection
     caller_ident = process_ident + "," + source + "," + domain_id
@@ -151,17 +169,25 @@ def handle_request(domain_id, source, intended_target, service_and_arg,
     try:
         policy = parser.FilePolicy(policy_path=path)
 
+        if daemon_execution:
+            allow_resolution_type = daemon_execution
+        else:
+            allow_resolution_type = functools.partial(LogAllowedResolution, log)
+
         request = parser.Request(
             service, argument, source, intended_target,
             system_info=system_info,
             **prepare_resolution_types(
                 just_evaluate=just_evaluate,
-                assume_yes_for_ask=assume_yes_for_ask))
+                assume_yes_for_ask=assume_yes_for_ask,
+                allow_resolution_type=allow_resolution_type))
         resolution = policy.evaluate(request)
-        result = resolution.execute(caller_ident)
+        # await resolution.execute(caller_ident)
+        result = await resolution.execute(caller_ident)
         if result is not None:
             resolution = result
-        log.info('%s allowed to %s', log_prefix, resolution.target)
+        if not daemon_execution:
+            log.info('%s allowed to %s', log_prefix, str(resolution.target))
 
     except exc.PolicySyntaxError as err:
         log.error('%s error loading policy: %s', log_prefix, err)

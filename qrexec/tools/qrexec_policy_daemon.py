@@ -23,10 +23,12 @@ import functools
 import pathlib
 import asyncio
 import logging
+import os
 
 from .. import POLICYPATH, POLICYSOCKET
 
 from .qrexec_policy_exec import handle_request
+from qrexec.policy.parser import AllowResolution
 
 argparser = argparse.ArgumentParser(description='Evaluate qrexec policy daemon')
 
@@ -44,6 +46,25 @@ OPTIONAL_REQUEST_ARGUMENTS = ('assume_yes_for_ask', 'just_evaluate')
 
 ALLOWED_REQUEST_ARGUMENTS = REQUIRED_REQUEST_ARGUMENTS + \
                             OPTIONAL_REQUEST_ARGUMENTS
+
+
+class DaemonResolution(AllowResolution):
+    def __init__(self, log, writer, *args, **kwargs):
+        self.log = log
+        self.writer = writer
+        super(DaemonResolution, self).__init__(*args, **kwargs)
+
+    async def execute(self, caller_ident):
+
+        log_prefix = 'qrexec: {request.service}+{request.argument}: ' \
+                     '{request.source} -> {request.target}:'.format(
+                      request=self.request)
+        self.log.info('%s allowed to %s', log_prefix, self.target)
+
+        self.writer.write(b"result=allow\n")
+        await self.writer.drain()
+
+        await super(DaemonResolution, self).execute(caller_ident)
 
 
 async def handle_client_connection(log, policy_path, reader, writer):
@@ -88,11 +109,14 @@ async def handle_client_connection(log, policy_path, reader, writer):
                 'error parsing policy request: required argument missing')
             return
 
-        result = handle_request(**args, log=log, path=policy_path)
+        resolution_handler = functools.partial(DaemonResolution, log, writer)
 
-        writer.write(b"result=deny\n" if result else b"result=allow\n")
+        result = await handle_request(**args, log=log, path=policy_path,
+                                      daemon_execution=resolution_handler)
 
-        await writer.drain()
+        if result:
+            writer.write(b"result=deny\n")
+            await writer.drain()
 
     finally:
         writer.close()
@@ -101,15 +125,14 @@ async def handle_client_connection(log, policy_path, reader, writer):
 async def start_serving(args=None):
     args = argparser.parse_args(args)
 
+    logging.basicConfig(format="%(message)s")
     log = logging.getLogger('policy')
     log.setLevel(logging.INFO)
-    if not log.handlers:
-        handler = logging.handlers.SysLogHandler(address='/dev/log')
-        log.addHandler(handler)
 
     server = await asyncio.start_unix_server(
         functools.partial(handle_client_connection, log, args.policy_path),
         path=args.socket_path)
+    os.chmod(args.socket_path, 0o660)
 
     await server.serve_forever()
 
