@@ -18,17 +18,19 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
-import os
 import tempfile
 import unittest.mock
 from pathlib import PosixPath
+import asynctest
 
-from .. import utils
 from ..policy import parser
 from ..tools import qrexec_policy_exec
 
 
 class TC_00_qrexec_policy(unittest.TestCase):
+    async def async_none(self, *_args, **_kwargs):
+        pass
+
     def setUp(self):
         super(TC_00_qrexec_policy, self).setUp()
         self.system_info = {
@@ -41,7 +43,8 @@ class TC_00_qrexec_policy(unittest.TestCase):
             'qrexec.policy.parser.FilePolicy')
         self.policy_mock = self.policy_patch.start()
         self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.execute.return_value': None
+            'return_value.evaluate.return_value.execute.side_effect':
+                self.async_none
         })
 
         self.request_patch = unittest.mock.patch(
@@ -53,6 +56,7 @@ class TC_00_qrexec_policy(unittest.TestCase):
             'return_value.service': 'service',
             'return_value.argument': 'argument',
             'return_value.system_info': self.system_info,
+            'return_value.allow_resolution_type.from_ask_resolution.return_value.execute.side_effect': asynctest.CoroutineMock(**{"return_value.target":unittest.mock.Mock()}),
         })
 
         self.system_info_patch = unittest.mock.patch(
@@ -87,6 +91,8 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ['--path=' + self.policy_dir.name,
              'source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
+
+        print(self.policy_mock.mock_calls)
         self.assertEqual(self.policy_mock.mock_calls, [
             ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
             ('().evaluate', (self.request_mock(),), {}),
@@ -99,10 +105,9 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ('', ('service', '+', 'source', 'target'), {
                 'system_info': self.system_info,
                 'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': parser.AllowResolution,
+                'allow_resolution_type':  qrexec_policy_exec.LogAllowedResolution,
             })
         ])
-        self.assertEqual(self.dbus_mock.mock_calls, [])
 
     def test_010_ask_allow(self):
         rule_mock = unittest.mock.Mock()
@@ -130,13 +135,12 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ('', ('service', '+', 'source', 'target'), {
                 'system_info': self.system_info,
                 'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': parser.AllowResolution,
+                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
             }),
             ('().allow_resolution_type.from_ask_resolution',
                 (unittest.mock.ANY, ), {'target': 'test-vm1'}),
             ('().allow_resolution_type.from_ask_resolution().execute',
                 ('process_ident,source,source-id', ), {}),
-            ('().allow_resolution_type.from_ask_resolution().execute().target.__str__', (), {})
         ])
         icons = {
             'dom0': 'black',
@@ -179,7 +183,7 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ('', ('service', '+', 'source', 'target'), {
                 'system_info': self.system_info,
                 'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': parser.AllowResolution,
+                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
             }),
         ])
         icons = {
@@ -223,13 +227,12 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ('', ('service', '+', 'source', 'target'), {
                 'system_info': self.system_info,
                 'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': parser.AllowResolution,
+                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
             }),
             ('().allow_resolution_type.from_ask_resolution',
                 (unittest.mock.ANY, ), {'target': 'test-vm1'}),
             ('().allow_resolution_type.from_ask_resolution().execute',
                 ('process_ident,source,source-id', ), {}),
-            ('().allow_resolution_type.from_ask_resolution().execute().target.__str__', (), {})
         ])
         icons = {
             'dom0': 'black',
@@ -268,7 +271,7 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ('', ('service', '+', 'source', 'target'), {
                 'system_info': self.system_info,
                 'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': parser.AllowResolution,
+                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
             }),
         ])
         self.assertEqual(self.dbus_mock.mock_calls, [])

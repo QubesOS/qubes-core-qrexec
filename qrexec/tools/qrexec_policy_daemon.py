@@ -27,8 +27,8 @@ import os
 
 from .. import POLICYPATH, POLICYSOCKET
 
-from .qrexec_policy_exec import handle_request
 from qrexec.policy.parser import AllowResolution
+from .qrexec_policy_exec import handle_request
 
 argparser = argparse.ArgumentParser(description='Evaluate qrexec policy daemon')
 
@@ -49,20 +49,18 @@ ALLOWED_REQUEST_ARGUMENTS = REQUIRED_REQUEST_ARGUMENTS + \
 
 
 class DaemonResolution(AllowResolution):
-    def __init__(self, log, writer, *args, **kwargs):
-        self.log = log
-        self.writer = writer
-        super(DaemonResolution, self).__init__(*args, **kwargs)
-
     async def execute(self, caller_ident):
 
         log_prefix = 'qrexec: {request.service}+{request.argument}: ' \
                      '{request.source} -> {request.target}:'.format(
                       request=self.request)
-        self.log.info('%s allowed to %s', log_prefix, self.target)
 
-        self.writer.write(b"result=allow\n")
-        await self.writer.drain()
+        log = logging.getLogger('policy')
+        log.info('%s allowed to %s', log_prefix, self.target)
+
+        if hasattr(self.request, "origin_writer"):
+            self.request.origin_writer.write(b"result=allow\n")
+            await self.request.origin_writer.drain()
 
         await super(DaemonResolution, self).execute(caller_ident)
 
@@ -109,10 +107,11 @@ async def handle_client_connection(log, policy_path, reader, writer):
                 'error parsing policy request: required argument missing')
             return
 
-        resolution_handler = functools.partial(DaemonResolution, log, writer)
+        resolution_handler = DaemonResolution
 
         result = await handle_request(**args, log=log, path=policy_path,
-                                      daemon_execution=resolution_handler)
+                                      allow_resolution_type=resolution_handler,
+                                      origin_writer=writer)
 
         if result:
             writer.write(b"result=deny\n")

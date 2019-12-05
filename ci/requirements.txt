@@ -6,3 +6,4 @@ sphinx
 codecov
 pydbus
 pytest-asyncio
+asynctest

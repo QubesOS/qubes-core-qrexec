@@ -20,12 +20,9 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
 import functools
-import os
-import shutil
 import socket
 import unittest.mock
-
-#import qubes.tests
+import asyncio
 
 from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
@@ -93,6 +90,11 @@ SYSTEM_INFO = {
 # a generic request helper
 _req = functools.partial(parser.Request, 'test.Service', '+argument',
     system_info=SYSTEM_INFO)
+
+# async mock
+class AsyncMock(unittest.mock.MagicMock):
+    async def __call__(self, *args, **kwargs):
+        return super(AsyncMock, self).__call__(*args, **kwargs)
 
 
 class TC_00_VMToken(unittest.TestCase):
@@ -1107,33 +1109,40 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.target, 'test-vm2')
 
     @unittest.mock.patch('qrexec.utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_120_execute(self, mock_subprocess, mock_qubesd_call):
+    def test_120_execute(self, mock_qubesd_call):
+        with unittest.mock.patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess:
+            asyncio.run(self._test_120_execute(mock_subprocess, mock_qubesd_call))
+
+    async def _test_120_execute(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line(None,
             '* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
         request = _req('test-vm1', 'test-vm2')
         resolution = parser.AllowResolution(
             rule, request, user=None, target='test-vm2')
-        resolution.execute('some-ident')
+        await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
+            [unittest.mock.call(QREXEC_CLIENT, '-d', 'test-vm2',
              '-c', 'some-ident',
-             'DEFAULT:QUBESRPC test.Service+argument test-vm1'])])
+             'DEFAULT:QUBESRPC test.Service+argument test-vm1'),
+             unittest.mock.call().communicate()])
 
     @unittest.expectedFailure
     @unittest.mock.patch('qrexec.utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_121_execute_dom0(self, mock_subprocess, mock_qubesd_call):
+    def test_121_execute_dom0(self, mock_qubesd_call):
+        with unittest.mock.patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess:
+            asyncio.run(self._test_121_execute_dom0(mock_subprocess, mock_qubesd_call))
+
+    async def _test_121_execute_dom0(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line(None,
             '* * @anyvm dom0 allow',
             filepath='filename', lineno=12)
         request = _req('test-vm1', 'dom0')
         resolution = parser.AllowResolution(
             rule, request, user=None, target='dom0')
-        resolution.execute('some-ident')
+        await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
@@ -1141,24 +1150,31 @@ class TC_40_evaluate(unittest.TestCase):
              'QUBESRPC test.Service+argument test-vm1 name dom0'])])
 
     @unittest.mock.patch('qrexec.utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_121_execute_dom0_keyword(self, mock_subprocess, mock_qubesd_call):
+    def test_121_execute_dom0_keyword(self, mock_qubesd_call):
+        with unittest.mock.patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess:
+            asyncio.run(self._test_121_execute_dom0_keyword(mock_subprocess, mock_qubesd_call))
+
+    async def _test_121_execute_dom0_keyword(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line(None,
             '* * @anyvm dom0 allow',
             filepath='filename', lineno=12)
         request = _req('test-vm1', '@adminvm')
         resolution = parser.AllowResolution(
             rule, request, user=None, target='@adminvm')
-        resolution.execute('some-ident')
+        await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', '@adminvm',
+            [unittest.mock.call(QREXEC_CLIENT, '-d', '@adminvm',
              '-c', 'some-ident',
-             'QUBESRPC test.Service+argument test-vm1 keyword adminvm'])])
+             'QUBESRPC test.Service+argument test-vm1 keyword adminvm'),
+             unittest.mock.call().communicate()])
 
     @unittest.mock.patch('qrexec.utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_122_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
+    def test_122_execute_dispvm(self, mock_qubesd_call):
+        with unittest.mock.patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess:
+            asyncio.run(self._test_122_execute_dispvm(mock_subprocess, mock_qubesd_call))
+
+    async def _test_122_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
         rule = parser.Rule.from_line(None,
             '* * @anyvm @dispvm:default-dvm allow',
             filepath='filename', lineno=12)
@@ -1169,19 +1185,23 @@ class TC_40_evaluate(unittest.TestCase):
         mock_qubesd_call.side_effect = (lambda target, call:
             b'dispvm-name' if call == 'admin.vm.CreateDisposable' else
             unittest.mock.DEFAULT)
-        resolution.execute('some-ident')
+        await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('default-dvm', 'admin.vm.CreateDisposable'),
              unittest.mock.call('dispvm-name', 'admin.vm.Start'),
              unittest.mock.call('dispvm-name', 'admin.vm.Kill')])
         self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'dispvm-name',
+            [unittest.mock.call(QREXEC_CLIENT, '-d', 'dispvm-name',
              '-c', 'some-ident', '-W',
-             'DEFAULT:QUBESRPC test.Service+argument test-vm1'])])
+             'DEFAULT:QUBESRPC test.Service+argument test-vm1'),
+             unittest.mock.call().communicate()])
 
     @unittest.mock.patch('qrexec.utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_123_execute_already_running(self, mock_subprocess,
+    def test_123_execute_already_running(self, mock_qubesd_call):
+        with unittest.mock.patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess:
+            asyncio.run(self._test_123_execute_already_running(mock_subprocess, mock_qubesd_call))
+
+    async def _test_123_execute_already_running(self, mock_subprocess,
             mock_qubesd_call):
         rule = parser.Rule.from_line(None,
             '* * @anyvm @anyvm allow',
@@ -1191,17 +1211,21 @@ class TC_40_evaluate(unittest.TestCase):
             rule, request, user=None, target='test-vm2')
         mock_qubesd_call.side_effect = \
             exc.QubesMgmtException('QubesVMNotHaltedError')
-        resolution.execute('some-ident')
+        await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls,
-            [unittest.mock.call([QREXEC_CLIENT, '-d', 'test-vm2',
+            [unittest.mock.call(QREXEC_CLIENT, '-d', 'test-vm2',
              '-c', 'some-ident',
-             'DEFAULT:QUBESRPC test.Service+argument test-vm1'])])
+             'DEFAULT:QUBESRPC test.Service+argument test-vm1'),
+             unittest.mock.call().communicate()])
 
     @unittest.mock.patch('qrexec.utils.qubesd_call')
-    @unittest.mock.patch('subprocess.call')
-    def test_124_execute_startup_error(self, mock_subprocess,
+    def test_124_execute_startup_error(self, mock_qubesd_call):
+        with unittest.mock.patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess:
+            asyncio.run(self._test_124_execute_startup_error(mock_subprocess, mock_qubesd_call))
+
+    async def _test_124_execute_startup_error(self, mock_subprocess,
             mock_qubesd_call):
         rule = parser.Rule.from_line(None,
             '* * @anyvm @anyvm allow',
@@ -1213,7 +1237,7 @@ class TC_40_evaluate(unittest.TestCase):
         mock_qubesd_call.side_effect = \
             exc.QubesMgmtException('QubesVMError')
         with self.assertRaises(exc.QubesMgmtException):
-            resolution.execute('some-ident')
+            await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls, [])

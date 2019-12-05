@@ -22,6 +22,7 @@ import asyncio
 from contextlib import suppress
 
 import pytest
+import asynctest
 from unittest.mock import Mock
 import functools
 
@@ -33,7 +34,7 @@ from ..tools import qrexec_policy_daemon
 class TestPolicyDaemon:
     @pytest.fixture
     def mock_request(self, monkeypatch):
-        mock_request = Mock()
+        mock_request = asynctest.CoroutineMock()
         monkeypatch.setattr('qrexec.tools.qrexec_policy_daemon.handle_request',
                             mock_request)
         return mock_request
@@ -79,7 +80,9 @@ class TestPolicyDaemon:
         mock_request.assert_called_once_with(
             domain_id='a', source='b', intended_target='c',
             service_and_arg='d', process_ident='1 9', log=unittest.mock.ANY,
-            path="path")
+            path="path",
+            allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
+            origin_writer=unittest.mock.ANY)
 
     @pytest.mark.asyncio
     async def test_complex_request(self, mock_request, async_server, tmp_path):
@@ -97,7 +100,9 @@ class TestPolicyDaemon:
         mock_request.assert_called_once_with(
             domain_id='a', source='b', intended_target='c',
             service_and_arg='d', process_ident='9', log=unittest.mock.ANY,
-            assume_yes_for_ask=True, just_evaluate=True, path="path")
+            assume_yes_for_ask=True, just_evaluate=True, path="path",
+            allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
+            origin_writer=unittest.mock.ANY)
 
     @pytest.mark.asyncio
     async def test_complex_request2(self, mock_request, async_server, tmp_path):
@@ -115,7 +120,9 @@ class TestPolicyDaemon:
         mock_request.assert_called_once_with(
             domain_id='a', source='b', intended_target='c',
             service_and_arg='d', process_ident='9', log=unittest.mock.ANY,
-            assume_yes_for_ask=False, just_evaluate=False, path="path")
+            assume_yes_for_ask=False, just_evaluate=False, path="path",
+            allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
+            origin_writer=unittest.mock.ANY)
 
     @pytest.mark.asyncio
     async def test_unfinished_request(
@@ -128,7 +135,7 @@ class TestPolicyDaemon:
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(task, timeout=2)
 
-        for task in asyncio.Task.all_tasks():
+        for task in asyncio.all_tasks():
             task.cancel()
 
         with suppress(asyncio.CancelledError):

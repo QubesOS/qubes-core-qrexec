@@ -31,7 +31,6 @@ import itertools
 import logging
 import pathlib
 import string
-import subprocess
 import asyncio
 
 from typing import (
@@ -631,7 +630,7 @@ class AskResolution(AbstractResolution):
 #
 # request
 #
-
+#pylint: disable=too-many-instance-attributes
 class Request:
     '''Qrexec request
 
