@@ -29,23 +29,29 @@ from .. import DEFAULT_POLICY, POLICYPATH
 from .. import exc
 from .. import utils
 from ..policy import parser
+from ..policy.utils import PolicyCache
+
 
 def create_default_policy(service_name):
     with open(str(POLICYPATH / service_name), 'w') as policy:
         policy.write(DEFAULT_POLICY)
 
+
 class JustEvaluateAllowResolution(parser.AllowResolution):
     async def execute(self, caller_ident):
         sys.exit(0)
+
 
 class JustEvaluateAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
         sys.exit(1)
 
+
 class AssumeYesForAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
-        return await self.handle_user_response(True, self.request.target).execute(
-            caller_ident)
+        return await self.handle_user_response(
+            True, self.request.target).execute(caller_ident)
+
 
 class DBusAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
@@ -78,7 +84,7 @@ class DBusAskResolution(parser.AskResolution):
 
 class LogAllowedResolution(parser.AllowResolution):
     async def execute(self, caller_ident):
-        log_prefix = '[LOGALLOWEDRES]qrexec: {request.service}{request.argument}: ' \
+        log_prefix = 'qrexec: {request.service}{request.argument}: ' \
                      '{request.source} -> {request.target}:'.format(
                       request=self.request)
 
@@ -99,6 +105,7 @@ def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask,
     if assume_yes_for_ask:
         ret['ask_resolution_type'] = AssumeYesForAskResolution
     return ret
+
 
 argparser = argparse.ArgumentParser(description='Evaluate qrexec policy')
 
@@ -124,6 +131,7 @@ argparser.add_argument('service_and_arg', metavar='SERVICE+ARGUMENT',
 argparser.add_argument('process_ident', metavar='process-ident',
     help='Qrexec process identifier - for connecting data channel')
 
+
 def main(args=None):
     args = argparser.parse_args(args)
 
@@ -133,6 +141,8 @@ def main(args=None):
         handler = logging.handlers.SysLogHandler(address='/dev/log')
         log.addHandler(handler)
 
+    policy_cache = PolicyCache(args.path)
+
     return asyncio.run(handle_request(
         args.domain_id,
         args.source,
@@ -140,15 +150,16 @@ def main(args=None):
         args.service_and_arg,
         args.process_ident,
         log,
-        path=args.path,
         just_evaluate=args.just_evaluate,
-        assume_yes_for_ask=args.assume_yes_for_ask))
+        assume_yes_for_ask=args.assume_yes_for_ask,
+        policy_cache=policy_cache))
+
 
 # pylint: disable=too-many-arguments,too-many-locals
 async def handle_request(
         domain_id, source, intended_target, service_and_arg, process_ident,
-        log, path=POLICYPATH, just_evaluate=False, assume_yes_for_ask=False,
-        allow_resolution_type=None, origin_writer=None):
+        log, just_evaluate=False, assume_yes_for_ask=False,
+        allow_resolution_type=None, origin_writer=None, policy_cache=None):
     # Add source domain information, required by qrexec-client for establishing
     # connection
     caller_ident = process_ident + "," + source + "," + domain_id
@@ -165,7 +176,10 @@ async def handle_request(
     except ValueError:
         service, argument = service_and_arg, '+'
     try:
-        policy = parser.FilePolicy(policy_path=path)
+        if policy_cache:
+            policy = policy_cache.get_policy()
+        else:
+            policy = parser.FilePolicy(policy_path=POLICYPATH)
 
         if allow_resolution_type is None:
             allow_resolution_class = LogAllowedResolution

@@ -30,6 +30,7 @@ import unittest
 import unittest.mock
 
 from ..tools import qrexec_policy_daemon
+from qrexec.policy.utils import PolicyCache
 
 class TestPolicyDaemon:
     @pytest.fixture
@@ -42,9 +43,10 @@ class TestPolicyDaemon:
     @pytest.fixture
     async def async_server(self, tmp_path, request):
         log = unittest.mock.Mock()
+
         server = await asyncio.start_unix_server(
             functools.partial(qrexec_policy_daemon.handle_client_connection,
-                              log, "path"),
+                              log, Mock()),
             path=str(tmp_path / "socket.d"))
 
         yield server
@@ -80,7 +82,7 @@ class TestPolicyDaemon:
         mock_request.assert_called_once_with(
             domain_id='a', source='b', intended_target='c',
             service_and_arg='d', process_ident='1 9', log=unittest.mock.ANY,
-            path="path",
+            policy_cache=unittest.mock.ANY,
             allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
             origin_writer=unittest.mock.ANY)
 
@@ -100,7 +102,8 @@ class TestPolicyDaemon:
         mock_request.assert_called_once_with(
             domain_id='a', source='b', intended_target='c',
             service_and_arg='d', process_ident='9', log=unittest.mock.ANY,
-            assume_yes_for_ask=True, just_evaluate=True, path="path",
+            assume_yes_for_ask=True, just_evaluate=True,
+            policy_cache=unittest.mock.ANY,
             allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
             origin_writer=unittest.mock.ANY)
 
@@ -120,7 +123,8 @@ class TestPolicyDaemon:
         mock_request.assert_called_once_with(
             domain_id='a', source='b', intended_target='c',
             service_and_arg='d', process_ident='9', log=unittest.mock.ANY,
-            assume_yes_for_ask=False, just_evaluate=False, path="path",
+            assume_yes_for_ask=False, just_evaluate=False,
+            policy_cache=unittest.mock.ANY,
             allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
             origin_writer=unittest.mock.ANY)
 

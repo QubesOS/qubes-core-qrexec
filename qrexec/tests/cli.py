@@ -91,13 +91,10 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ['--path=' + self.policy_dir.name,
              'source-id', 'source', 'target', 'service', 'process_ident'])
         self.assertEqual(retval, 0)
-
-        print(self.policy_mock.mock_calls)
         self.assertEqual(self.policy_mock.mock_calls, [
             ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
             ('().evaluate', (self.request_mock(),), {}),
             ('().evaluate().execute', ('process_ident,source,source-id', ), {}),
-            ('().evaluate().target.__str__', (), {}),
         ])
         # remove call used above:
         del self.request_mock.mock_calls[-1]
@@ -290,7 +287,6 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
             ('().evaluate', (self.request_mock(),), {}),
             ('().evaluate().execute', ('process_ident,source,source-id',), {}),
-            ('().evaluate().target.__str__', (), {}),
         ])
         # remove call used above:
         del self.request_mock.mock_calls[-1]
@@ -378,6 +374,5 @@ class TC_00_qrexec_policy(unittest.TestCase):
             ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
             ('().evaluate', (self.request_mock(),), {}),
             ('().evaluate().execute', ('process_ident,source,source-id', ), {}),
-            ('().evaluate().target.__str__', (), {}),
         ])
         self.assertEqual(self.dbus_mock.mock_calls, [])

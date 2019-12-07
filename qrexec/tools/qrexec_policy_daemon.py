@@ -25,10 +25,10 @@ import asyncio
 import logging
 import os
 
-from .. import POLICYPATH, POLICYSOCKET
-
-from qrexec.policy.parser import AllowResolution
 from .qrexec_policy_exec import handle_request
+from .. import POLICYPATH, POLICYSOCKET
+from ..policy.parser import AllowResolution
+from ..policy.utils import PolicyCache
 
 argparser = argparse.ArgumentParser(description='Evaluate qrexec policy daemon')
 
@@ -65,7 +65,8 @@ class DaemonResolution(AllowResolution):
         await super(DaemonResolution, self).execute(caller_ident)
 
 
-async def handle_client_connection(log, policy_path, reader, writer):
+async def handle_client_connection(log, policy_cache,
+                                   reader, writer):
 
     args = {}
 
@@ -109,9 +110,10 @@ async def handle_client_connection(log, policy_path, reader, writer):
 
         resolution_handler = DaemonResolution
 
-        result = await handle_request(**args, log=log, path=policy_path,
+        result = await handle_request(**args, log=log,
                                       allow_resolution_type=resolution_handler,
-                                      origin_writer=writer)
+                                      origin_writer=writer,
+                                      policy_cache=policy_cache)
 
         if result:
             writer.write(b"result=deny\n")
@@ -128,8 +130,12 @@ async def start_serving(args=None):
     log = logging.getLogger('policy')
     log.setLevel(logging.INFO)
 
+    policy_cache = PolicyCache(args.policy_path)
+    policy_cache.initialize_watcher()
+
     server = await asyncio.start_unix_server(
-        functools.partial(handle_client_connection, log, args.policy_path),
+        functools.partial(
+            handle_client_connection, log, policy_cache),
         path=args.socket_path)
     os.chmod(args.socket_path, 0o660)
 
