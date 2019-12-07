@@ -30,7 +30,7 @@ import unittest
 import unittest.mock
 
 from ..tools import qrexec_policy_daemon
-from qrexec.policy.utils import PolicyCache
+
 
 class TestPolicyDaemon:
     @pytest.fixture
