@@ -83,7 +83,7 @@ class TestPolicyDaemon:
             domain_id='a', source='b', intended_target='c',
             service_and_arg='d', process_ident='1 9', log=unittest.mock.ANY,
             policy_cache=unittest.mock.ANY,
-            allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
+            allow_resolution_type=qrexec_policy_daemon.DaemonAllowResolution,
             origin_writer=unittest.mock.ANY)
 
     @pytest.mark.asyncio
@@ -104,7 +104,7 @@ class TestPolicyDaemon:
             service_and_arg='d', process_ident='9', log=unittest.mock.ANY,
             assume_yes_for_ask=True, just_evaluate=True,
             policy_cache=unittest.mock.ANY,
-            allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
+            allow_resolution_type=qrexec_policy_daemon.DaemonAllowResolution,
             origin_writer=unittest.mock.ANY)
 
     @pytest.mark.asyncio
@@ -125,7 +125,7 @@ class TestPolicyDaemon:
             service_and_arg='d', process_ident='9', log=unittest.mock.ANY,
             assume_yes_for_ask=False, just_evaluate=False,
             policy_cache=unittest.mock.ANY,
-            allow_resolution_type=qrexec_policy_daemon.DaemonResolution,
+            allow_resolution_type=qrexec_policy_daemon.DaemonAllowResolution,
             origin_writer=unittest.mock.ANY)
 
     @pytest.mark.asyncio
@@ -176,7 +176,7 @@ class TestPolicyDaemon:
     @pytest.mark.asyncio
     async def test_wrong_arg(self, mock_request, async_server, tmp_path):
 
-        data = b'domains_id=a\n' \
+        data = b'tremendous_domain_id=a\n' \
                b'source=b\n' \
                b'intended_target=c\n' \
                b'service_and_arg=d\n' \

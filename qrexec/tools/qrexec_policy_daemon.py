@@ -48,7 +48,7 @@ ALLOWED_REQUEST_ARGUMENTS = REQUIRED_REQUEST_ARGUMENTS + \
                             OPTIONAL_REQUEST_ARGUMENTS
 
 
-class DaemonResolution(AllowResolution):
+class DaemonAllowResolution(AllowResolution):
     async def execute(self, caller_ident):
 
         log_prefix = 'qrexec: {request.service}+{request.argument}: ' \
@@ -62,7 +62,7 @@ class DaemonResolution(AllowResolution):
             self.request.origin_writer.write(b"result=allow\n")
             await self.request.origin_writer.drain()
 
-        await super(DaemonResolution, self).execute(caller_ident)
+        await super(DaemonAllowResolution, self).execute(caller_ident)
 
 
 async def handle_client_connection(log, policy_cache,
@@ -108,7 +108,7 @@ async def handle_client_connection(log, policy_cache,
                 'error parsing policy request: required argument missing')
             return
 
-        resolution_handler = DaemonResolution
+        resolution_handler = DaemonAllowResolution
 
         result = await handle_request(**args, log=log,
                                       allow_resolution_type=resolution_handler,
