@@ -79,6 +79,7 @@ int write_all(int fd, const void *buf, int size);
 void fix_fds(int fdin, int fdout, int fderr);
 void set_nonblock(int fd);
 void set_block(int fd);
+int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd, int cmdline_has_user_name);
 
 int get_server_socket(const char *);
 int do_accept(int s);

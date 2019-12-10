@@ -207,8 +207,7 @@ static void prepare_local_fds(char *cmdline)
         return;
     }
     signal(SIGCHLD, sigchld_handler);
-    do_fork_exec(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
-            NULL);
+    execute_qubes_rpc_command(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd, NULL, 0);
 }
 
 /* ask the daemon to allocate vchan port */
