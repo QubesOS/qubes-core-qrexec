@@ -66,9 +66,10 @@ void fix_fds(int fdin, int fdout, int fderr)
     for (i = 3; i < 256; i++)
         if (i != fdin && i != fdout && i != fderr)
             close(i);
-    if (dup2(fdin, 0) || dup2(fdout, 1) || dup2(fderr, 2) ||
-        close(fdin) || close(fdout) || (fderr != 2 && close(fderr)))
+    if (dup2(fdin, 0) == -1 || dup2(fdout, 1) == -1 || dup2(fderr, 2) == -1 ||
+        close(fdin) || close(fdout) || (fderr != 2 && close(fderr))) {
         abort();
+    }
 }
 
 int do_fork_exec(char *cmdline,
@@ -94,7 +95,7 @@ int do_fork_exec(char *cmdline,
             exit(-1);
         case 0: {
             int status;
-            if (signal(SIGPIPE, SIG_DFL))
+            if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)
                 abort();
             if (stderr_fd) {
                 fix_fds(inpipe[0], outpipe[1], errpipe[1]);

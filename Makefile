@@ -28,7 +28,7 @@ all-dom0: all-base
 	+$(MAKE) all -C daemon
 .PHONY: all-dom0
 
-install-dom0: install-base all-dom0
+install-dom0: all-dom0
 	+$(MAKE) install -C daemon
 	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc-dom0/*
@@ -50,7 +50,7 @@ all-vm: all-base
 	+$(MAKE) all -C agent
 .PHONY: all-vm
 
-install-vm: install-base all-vm
+install-vm: all-vm
 	+$(MAKE) install -C agent
 	install -d $(DESTDIR)/lib/systemd/system -m 755
 	install -t $(DESTDIR)/lib/systemd/system -m 644 systemd/*

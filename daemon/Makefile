@@ -7,7 +7,7 @@ QUBES_CFLAGS:=-I. -I../libqrexec -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    -Wl,-z,relro,-z,now,-E
 
 QUBES_LDFLAGS := -pie -Wl,-z,relro,-z,now,-E $(LDFLAGS)
-QUBES_LDLIBS:=`pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils $(LDLIBS)
+QUBES_LDLIBS:=`pkg-config --libs vchan-$(BACKEND_VMM)` -L../libqrexec -lqrexec-utils $(LDLIBS)
 
 all: qrexec-daemon qrexec-client 
 clean:

@@ -760,7 +760,6 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
                 break;
             case EPROTOTYPE:
             case ETIMEDOUT:
-            case EACCES:
             case EPERM:
             case EIO:
             case EISDIR:
@@ -774,6 +773,7 @@ static int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd, int
                 // fail-fast is much easier to debug).
                 goto fail;
             case ECONNREFUSED:
+            case EACCES:
                 remote_domain[-1] = ' ';
                 fprintf(stderr, "Executing command as normal: '%s'\n", cmdline);
                 close(s);

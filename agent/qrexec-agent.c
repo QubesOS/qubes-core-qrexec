@@ -510,12 +510,13 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
         perror("write");
         goto fail;
     }
-    free(username);
-    username = NULL;
     if (!write_all(s, colon+1, info.cmdline_len)) {
         perror("write");
         goto fail;
     }
+
+    free(username);
+    username = NULL;
 
     return s;
 fail:
