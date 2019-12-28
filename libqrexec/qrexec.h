@@ -22,7 +22,10 @@
 #ifndef _QREXEC_H
 #define _QREXEC_H
 
-/* See also http://wiki.qubes-os.org/trac/wiki/Qrexec */
+/* For information on qrexec, see:
+ * - https://www.qubes-os.org/doc/qrexec/
+ * - https://www.qubes-os.org/doc/qrexec-internals/
+*/
 
 #include <stdint.h>
 
