@@ -68,12 +68,14 @@ int fork_and_flush_stdin(int fd, struct buffer *buffer);
  * stderr.
  * @param strip_username True if the username needs to be stripped from the
  * command.  Only the fork server should set this to false.
+ * @param buffer This buffer will need to be prepended to the child process’s
+ * stdin.
  * @return 0 if it spawned (or might have spawned) an external process,
  * a (positive) errno value otherwise.
  */
 int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd,
                               int *stdout_fd, int *stderr_fd,
-                              bool strip_username);
+                              bool strip_username, struct buffer *buffer);
 void wait_for_vchan_or_argfd(libvchan_t *vchan, int max, fd_set *rdset,
                              fd_set *wrset);
 int read_vchan_all(libvchan_t *vchan, void *data, size_t size);

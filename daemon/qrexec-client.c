@@ -247,8 +247,10 @@ static void do_exit(int code)
 }
 
 
-static void prepare_local_fds(char *cmdline)
+static void prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
 {
+    if (stdin_buffer == NULL)
+        abort();
     if (!cmdline) {
         local_stdin_fd = 1;
         local_stdout_fd = 0;
@@ -256,7 +258,7 @@ static void prepare_local_fds(char *cmdline)
     }
     signal(SIGCHLD, sigchld_handler);
     execute_qubes_rpc_command(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
-            NULL, false);
+            NULL, false, stdin_buffer);
 }
 
 /* ask the daemon to allocate vchan port */
@@ -536,7 +538,7 @@ static void check_child_status(libvchan_t *vchan)
     do_exit(status);
 }
 
-static void select_loop(libvchan_t *vchan, int data_protocol_version)
+static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buffer *stdin_buf)
 {
     fd_set select_set;
     fd_set wr_set;
@@ -546,13 +548,11 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
     sigset_t selectmask;
     struct timespec zero_timeout = { 0, 0 };
     struct timespec select_timeout = { 10, 0 };
-    struct buffer stdin_buf;
 
     sigemptyset(&selectmask);
     sigaddset(&selectmask, SIGCHLD);
     sigprocmask(SIG_BLOCK, &selectmask, NULL);
     sigemptyset(&selectmask);
-    buffer_init(&stdin_buf);
     /* remember to set back to blocking mode before closing the FD - this may
      * be not the only copy and some processes may misbehave when get
      * nonblocking FD for input/output
@@ -573,12 +573,12 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
         }
         if (child_exited && local_stdout_fd == -1)
             check_child_status(vchan);
-        if (local_stdin_fd != -1 && buffer_len(&stdin_buf)) {
+        if (local_stdin_fd != -1 && buffer_len(stdin_buf)) {
             FD_SET(local_stdin_fd, &wr_set);
             if (local_stdin_fd > max_fd)
                 max_fd = local_stdin_fd;
         }
-        if ((local_stdin_fd == -1 || buffer_len(&stdin_buf) == 0) &&
+        if ((local_stdin_fd == -1 || buffer_len(stdin_buf) == 0) &&
                 libvchan_data_ready(vchan) > 0) {
             /* check for other FDs, but exit immediately */
             ret = pselect(max_fd + 1, &select_set, &wr_set, NULL,
@@ -602,17 +602,17 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
         }
         if (FD_ISSET(vchan_fd, &select_set))
             libvchan_wait(vchan);
-        if (buffer_len(&stdin_buf) &&
+        if (buffer_len(stdin_buf) &&
                 local_stdin_fd != -1 &&
                 FD_ISSET(local_stdin_fd, &wr_set)) {
-            if (flush_client_data(local_stdin_fd, &stdin_buf) == WRITE_STDIN_ERROR) {
+            if (flush_client_data(local_stdin_fd, stdin_buf) == WRITE_STDIN_ERROR) {
                 perror("write stdin");
                 close(local_stdin_fd);
                 local_stdin_fd = -1;
             }
         }
         while (libvchan_data_ready(vchan))
-            if (handle_vchan_data(vchan, &stdin_buf, data_protocol_version)
+            if (handle_vchan_data(vchan, stdin_buf, data_protocol_version)
                     != WRITE_STDIN_OK)
                 break;
 
@@ -825,7 +825,9 @@ int main(int argc, char **argv)
                 &data_domain,
                 &data_port);
 
-        prepare_local_fds(remote_cmdline);
+        struct buffer stdin_buffer;
+        buffer_init(&stdin_buffer);
+        prepare_local_fds(remote_cmdline, &stdin_buffer);
         if (connect_existing) {
             void (*old_handler)(int);
 
@@ -848,7 +850,7 @@ int main(int argc, char **argv)
         data_protocol_version = handle_agent_handshake(data_vchan, connect_existing);
         if (data_protocol_version < 0)
             do_exit(1);
-        select_loop(data_vchan, data_protocol_version);
+        select_loop(data_vchan, data_protocol_version, &stdin_buffer);
     } else {
         msg_type = just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE;
         s = connect_unix_socket(domname);
@@ -866,7 +868,9 @@ int main(int argc, char **argv)
         else
             close(s);
         set_remote_domain(domname);
-        prepare_local_fds(local_cmdline);
+        struct buffer stdin_buffer;
+        buffer_init(&stdin_buffer);
+        prepare_local_fds(local_cmdline, &stdin_buffer);
         if (connect_existing) {
             s = connect_unix_socket(src_domain_name);
             send_service_connect(s, request_id, data_domain, data_port);
@@ -893,7 +897,7 @@ int main(int argc, char **argv)
             data_protocol_version = handle_agent_handshake(data_vchan, 0);
             if (data_protocol_version < 0)
                 do_exit(1);
-            select_loop(data_vchan, data_protocol_version);
+            select_loop(data_vchan, data_protocol_version, &stdin_buffer);
         }
     }
     return 0;

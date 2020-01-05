@@ -209,14 +209,14 @@ struct qrexec_parsed_command {
     size_t const service_descriptor_length;
 };
 
-static int execute_parsed_qubes_rpc_command(const struct qrexec_parsed_command *const command, int *const pid, int *const stdin_fd, int *const stdout_fd, int *const stderr_fd);
+static int execute_parsed_qubes_rpc_command(const struct qrexec_parsed_command *const command, int *const pid, int *const stdin_fd, int *const stdout_fd, int *const stderr_fd, struct buffer *stdin_buffer);
 
 static const char *skip_nogui(const char *cmdline) {
     return strncmp(cmdline, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) ? cmdline : cmdline + NOGUI_CMD_PREFIX_LEN;
 }
 
 int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd,
-        int *stdout_fd, int *stderr_fd, bool strip_username) {
+        int *stdout_fd, int *stderr_fd, bool strip_username, struct buffer *stdin_buffer) {
     const char *service_descriptor;
     char *realcmd;
     size_t service_descriptor_length;
@@ -259,12 +259,12 @@ int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd,
        .service_descriptor = service_descriptor,
        .service_descriptor_length = service_descriptor_length,
     };
-    return execute_parsed_qubes_rpc_command(&command, pid, stdin_fd, stdout_fd, stderr_fd);
+    return execute_parsed_qubes_rpc_command(&command, pid, stdin_fd, stdout_fd, stderr_fd, stdin_buffer);
 }
 
 static int execute_parsed_qubes_rpc_command(
         const struct qrexec_parsed_command *const command, int *const pid, int *const stdin_fd,
-        int *const stdout_fd, int *const stderr_fd) {
+        int *const stdout_fd, int *const stderr_fd, struct buffer *stdin_buffer) {
     char const *const delimiter = memchr(command->service_descriptor, '+', command->service_descriptor_length);
     size_t const service_length = delimiter ?
         (size_t)(delimiter - command->service_descriptor) : command->service_descriptor_length;
@@ -310,6 +310,7 @@ static int execute_parsed_qubes_rpc_command(
                 }
                 *pid = -1;
                 set_nonblock(s);
+                buffer_append(stdin_buffer, command->service_descriptor, strlen(command->service_descriptor) + 1);
                 return 0;
             }
             switch (errno) {

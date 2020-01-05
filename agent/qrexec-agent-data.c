@@ -362,7 +362,7 @@ out:
 
 static int process_child_io(libvchan_t *data_vchan,
         int stdin_fd, int stdout_fd, int stderr_fd,
-        int data_protocol_version)
+        int data_protocol_version, struct buffer *stdin_buf)
 {
     fd_set rdset, wrset;
     int vchan_fd;
@@ -372,7 +372,6 @@ static int process_child_io(libvchan_t *data_vchan,
     int ret, max_fd;
     struct timespec zero_timeout = { 0, 0 };
     struct timespec normal_timeout = { 10, 0 };
-    struct buffer stdin_buf;
 
     sigemptyset(&selectmask);
     sigaddset(&selectmask, SIGCHLD);
@@ -387,7 +386,6 @@ static int process_child_io(libvchan_t *data_vchan,
     if (stderr_fd >= 0)
         set_nonblock(stderr_fd);
 
-    buffer_init(&stdin_buf);
     while (1) {
         if (child_exited) {
             int status;
@@ -424,7 +422,7 @@ static int process_child_io(libvchan_t *data_vchan,
          * is no sense of processing further data */
         if (!libvchan_data_ready(data_vchan) &&
                 !libvchan_is_open(data_vchan) &&
-                !buffer_len(&stdin_buf)) {
+                !buffer_len(stdin_buf)) {
             break;
         }
         /* child signaled desire to use single socket for both stdin and stdout */
@@ -470,13 +468,13 @@ static int process_child_io(libvchan_t *data_vchan,
             max_fd = vchan_fd;
         /* if we have something buffered for the child process, wake also on
          * writable stdin */
-        if (stdin_fd > -1 && buffer_len(&stdin_buf)) {
+        if (stdin_fd > -1 && buffer_len(stdin_buf)) {
             FD_SET(stdin_fd, &wrset);
             if (stdin_fd > max_fd)
                 max_fd = stdin_fd;
         }
 
-        if (!buffer_len(&stdin_buf) && libvchan_data_ready(data_vchan) > 0) {
+        if (!buffer_len(stdin_buf) && libvchan_data_ready(data_vchan) > 0) {
             /* check for other FDs, but exit immediately */
             ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &zero_timeout, &selectmask);
         } else
@@ -500,7 +498,7 @@ static int process_child_io(libvchan_t *data_vchan,
         /* handle_remote_data will check if any data is available */
         switch (handle_remote_data(data_vchan, stdin_fd,
                     &remote_process_status,
-                    &stdin_buf,
+                    stdin_buf,
                     data_protocol_version)) {
             case -1:
                 handle_vchan_error("read");
@@ -639,23 +637,30 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
         case MSG_JUST_EXEC:
             send_exit_code(data_vchan, handle_just_exec(cmdline));
             break;
-        case MSG_EXEC_CMDLINE:
-            if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd, !qrexec_is_fork_server) < 0)
+        case MSG_EXEC_CMDLINE: {
+            struct buffer stdin_buf;
+            buffer_init(&stdin_buf);
+            if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd, !qrexec_is_fork_server, &stdin_buf) < 0) {
                 fputs("failed to spawn process\n", stderr);
+            }
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
             child_process_pid = pid;
             exit_code = process_child_io(
                     data_vchan, stdin_fd, stdout_fd, stderr_fd,
-                    data_protocol_version);
+                    data_protocol_version, &stdin_buf);
             fprintf(stderr, "pid %d exited with %d\n", pid, exit_code);
             break;
-        case MSG_SERVICE_CONNECT:
+        }
+        case MSG_SERVICE_CONNECT: {
+            struct buffer stdin_buf;
+            buffer_init(&stdin_buf);
             child_process_pid = 0;
             stdout_msg_type = MSG_DATA_STDIN;
             exit_code = process_child_io(
                     data_vchan, stdin_fd, stdout_fd, stderr_fd,
-                    data_protocol_version);
+                    data_protocol_version, &stdin_buf);
             break;
+        }
     }
     libvchan_close(data_vchan);
     return exit_code;
