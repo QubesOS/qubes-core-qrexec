@@ -22,7 +22,17 @@ jobs:
   include:
     - python: '3.7'
       script: pylint qrexec
-    - install: 
+    - python: '3.7'
+      env: VCHAN_SOCKET_TESTS=1
+      install:
+        - sudo apt-get -y install pandoc
+        - pip install --quiet -r ci/requirements.txt
+        - git clone https://github.com/QubesOS/qubes-core-vchan-socket ~/qubes-core-vchan-socket
+        - make -C ~/qubes-core-vchan-socket all
+        - sudo make -C ~/qubes-core-vchan-socket install
+      script:
+        ./run-tests
+    - install:
        - pip install --quiet codecov
        - docker build -t qrexec-test ci
       env: DOCKER_RUN="docker run -v $TRAVIS_BUILD_DIR:$TRAVIS_BUILD_DIR -v /tmp/.X11-unix:/tmp/.X11-unix -w $TRAVIS_BUILD_DIR -e DISPLAY=$DISPLAY -- qrexec-test"

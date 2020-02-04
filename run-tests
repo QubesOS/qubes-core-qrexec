@@ -1,0 +1,9 @@
+#!/bin/sh -ex
+
+# make -C libqrexec clean
+# make -C agent clean
+
+make -C libqrexec BACKEND_VMM=socket
+make -C agent BACKEND_VMM=socket
+
+python3 -m unittest discover -p 'test_*.py' -v "$@"
