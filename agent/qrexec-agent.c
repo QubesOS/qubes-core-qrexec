@@ -34,6 +34,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <string.h>
+#include <getopt.h>
 #include <pwd.h>
 #include <grp.h>
 #include <sys/stat.h>
@@ -76,6 +77,9 @@ pid_t wait_for_session_pid = -1;
 int trigger_fd;
 
 int meminfo_write_started = 0;
+
+static const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
+static const char *fork_server_path = QREXEC_FORK_SERVER_SOCKET;
 
 void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline);
 
@@ -355,7 +359,7 @@ void init()
     if (handle_handshake(ctrl_vchan) < 0)
         exit(1);
     old_umask = umask(0);
-    trigger_fd = get_server_socket(QREXEC_AGENT_TRIGGER_PATH);
+    trigger_fd = get_server_socket(agent_trigger_path);
     umask(old_umask);
     register_exec_func(do_exec);
 
@@ -409,13 +413,16 @@ int try_fork_server(int type, int connect_domain, int connect_port,
     struct sockaddr_un remote;
     struct qrexec_cmd_info info;
 
+    if (!fork_server_path)
+        return -1;
+
     strncpy(username, cmdline, cmdline_len);
     colon = index(username, ':');
     if (!colon)
         return -1;
     *colon = '\0';
 
-    if (asprintf(&fork_server_socket_path, QREXEC_FORK_SERVER_SOCKET, username) < 0) {
+    if (asprintf(&fork_server_socket_path, fork_server_path, username) < 0) {
         fprintf(stderr, "Memory allocation failed\n");
         return -1;
     }
@@ -934,11 +941,54 @@ void handle_terminated_fork_client(fd_set *rdset) {
     }
 }
 
-int main()
+struct option longopts[] = {
+    { "help", no_argument, 0, 'h' },
+    { "agent-socket", required_argument, 0, 'a' },
+    { "fork-server-socket", optional_argument, 0, 's' },
+    { "no-fork-server", no_argument, 0, 'S' },
+    { NULL, 0, 0, 0 },
+};
+
+_Noreturn void usage(const char *argv0)
+{
+    fprintf(stderr, "usage: %s [options]\n", argv0);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -h, --help - display usage\n");
+    fprintf(stderr, "  --agent-socket=PATH - path to listen at, default: %s\n",
+            QREXEC_AGENT_TRIGGER_PATH);
+    fprintf(stderr, "  --fork-server-socket=PATH - where to find the fork server, default: %s\n",
+            QREXEC_FORK_SERVER_SOCKET);
+    fprintf(stderr, "    (set empty to disable, use %%s as username)\n");
+    fprintf(stderr, "  --no-fork-server - don't try to connect to fork server\n");
+    exit(2);
+}
+
+int main(int argc, char **argv)
 {
     fd_set rdset, wrset;
     int max;
     sigset_t chld_set;
+
+    int opt;
+    while (1) {
+        opt = getopt_long(argc, argv, "ha:s:S", longopts, NULL);
+        if (opt == -1)
+            break;
+        switch (opt) {
+            case 'a':
+                agent_trigger_path = strdup(optarg);
+                break;
+            case 's':
+                fork_server_path = strdup(optarg);
+                break;
+            case 'S':
+                fork_server_path = NULL;
+                break;
+            case 'h':
+            case '?':
+                usage(argv[0]);
+        }
+    }
 
     init();
     signal(SIGCHLD, sigchld_handler);
