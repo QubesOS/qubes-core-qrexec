@@ -164,6 +164,21 @@ void do_exec(char *cmd)
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
 
+    pw = getpwuid(geteuid());
+    if (!pw) {
+        perror("getpwuid");
+        exit(1);
+    }
+    if (!strcmp(pw->pw_name, user)) {
+        /* call QUBESRPC if requested */
+        exec_qubes_rpc_if_requested(realcmd, environ);
+
+        /* otherwise exec shell */
+        execl("/bin/sh", "sh", "-c", realcmd, NULL);
+        perror("execl");
+        exit(1);
+    }
+
 #ifdef HAVE_PAM
     pw = getpwnam (user);
     if (! (pw && pw->pw_name && pw->pw_name[0] && pw->pw_dir && pw->pw_dir[0]
