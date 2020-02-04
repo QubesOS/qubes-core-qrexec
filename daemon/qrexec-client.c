@@ -523,18 +523,20 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
 
 static void check_child_status(libvchan_t *vchan)
 {
-    pid_t pid;
-    int status;
-
-    pid = waitpid(local_pid, &status, WNOHANG);
-    if (pid < 0) {
-        perror("waitpid");
-        do_exit(1);
+    int status = 0;
+    if (local_pid >= 0) {
+        /* this is not a socket-based service */
+        pid_t pid = waitpid(local_pid, &status, WNOHANG);
+        if (pid < 0) {
+            perror("waitpid");
+            do_exit(1);
+        }
+        if (pid == 0 || !WIFEXITED(status))
+            return;
+        status = WEXITSTATUS(status);
     }
-    if (pid == 0 || !WIFEXITED(status))
-        return;
     if (is_service)
-        send_exit_code(vchan, WEXITSTATUS(status));
+        send_exit_code(vchan, status);
     do_exit(status);
 }
 
@@ -571,7 +573,8 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
             if (local_stdout_fd > max_fd)
                 max_fd = local_stdout_fd;
         }
-        if (child_exited && local_stdout_fd == -1)
+        if (local_stdout_fd == -1 &&
+            (child_exited || (local_stdin_fd == -1 && local_pid == -1)))
             check_child_status(vchan);
         if (local_stdin_fd != -1 && buffer_len(stdin_buf)) {
             FD_SET(local_stdin_fd, &wr_set);
