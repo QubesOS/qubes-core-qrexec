@@ -22,6 +22,7 @@
 
 import sys
 import unittest
+import os
 
 from qrexec.tests.gtkhelpers import GtkTestCase, FocusStealingHelperMock
 from qrexec.tests.gtkhelpers import mock_domains_info, mock_whitelist
@@ -89,6 +90,7 @@ class MockRPCConfirmationWindow(RPCConfirmationWindow):
         return domains
 
 
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class RPCConfirmationWindowTestBase(GtkTestCase):
     def __init__(self, test_method, source_name="test-source",
                  rpc_operation="test.Operation", whitelist=mock_whitelist,
@@ -240,6 +242,7 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
             self.assertFalse(self.window._focus_helper.can_perform_action())
 
 
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
     def __init__(self, test_method):
         RPCConfirmationWindowTestBase.__init__(self, test_method,
@@ -268,6 +271,7 @@ class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
         self.assertIsNotNone(self.window._target_name)
 
 
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class RPCConfirmationWindowTestWithDispVMTarget(RPCConfirmationWindowTestBase):
     def __init__(self, test_method):
         RPCConfirmationWindowTestBase.__init__(self, test_method,
@@ -292,6 +296,7 @@ class RPCConfirmationWindowTestWithDispVMTarget(RPCConfirmationWindowTestBase):
             self.assertFalse(self.window._focus_helper.can_perform_action())
 
 
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class RPCConfirmationWindowTestWithTargetInvalid(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
@@ -311,6 +316,7 @@ class RPCConfirmationWindowTestWithTargetInvalid(unittest.TestCase):
         self.assertEquals(expect, rpcWindow.is_error_visible())
 
 
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class RPCConfirmationWindowTestWhitelist(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)

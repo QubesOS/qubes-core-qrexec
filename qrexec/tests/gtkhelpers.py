@@ -55,6 +55,7 @@ class MockComboEntry:
         return self._text
 
 
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class GtkTestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
@@ -83,7 +84,7 @@ class GtkTestCase(unittest.TestCase):
         return iterations, time_length
 
 
-@unittest.skipUnless('DISPLAY' in os.environ, 'no DISPLAY variable')
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class VMListModelerTest(unittest.TestCase):
     def setUp(self):
         self.modeler = VMListModeler(mock_domains_info)
@@ -210,6 +211,7 @@ class GtkOneTimerHelperMock(GtkOneTimerHelper):
         self._run_timers.append(timer_id)
 
 
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class GtkOneTimerHelperTest(GtkTestCase):
     def setUp(self):
         self._test_time = 0.1
@@ -312,7 +314,7 @@ class FocusStealingHelperMock(FocusStealingHelper):
         self._window_changed_focus(focused)
 
 
-@unittest.skipUnless('DISPLAY' in os.environ, 'no DISPLAY variable')
+@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
 class FocusStealingHelperTest(GtkTestCase):
     def setUp(self):
         self._test_time = 0.1
