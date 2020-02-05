@@ -18,6 +18,8 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
+# pylint:disable=protected-access
+
 import sys
 import unittest
 
@@ -46,6 +48,29 @@ class MockRPCConfirmationWindow(RPCConfirmationWindow):
             self, mock_domains_info, source, rpc_operation, whitelist,
             target)
 
+        self.test_called_close = False
+        self.test_called_show = False
+
+        self.test_clicked_ok = False
+        self.test_clicked_cancel = False
+
+    def _can_perform_action(self):
+        return True
+
+    def _close(self):
+        self.test_called_close = True
+
+    def _show(self):
+        self.test_called_show = True
+
+    def _clicked_ok(self, button):
+        super()._clicked_ok(button)
+        self.test_clicked_ok = True
+
+    def _clicked_cancel(self, button):
+        super()._clicked_cancel(button)
+        self.test_clicked_cancel = True
+
     def is_error_visible(self):
         return self._error_bar.get_visible()
 
@@ -64,7 +89,7 @@ class MockRPCConfirmationWindow(RPCConfirmationWindow):
         return domains
 
 
-class RPCConfirmationWindowTestBase(MockRPCConfirmationWindow, GtkTestCase):
+class RPCConfirmationWindowTestBase(GtkTestCase):
     def __init__(self, test_method, source_name="test-source",
                  rpc_operation="test.Operation", whitelist=mock_whitelist,
                  target_name=None):
@@ -73,71 +98,51 @@ class RPCConfirmationWindowTestBase(MockRPCConfirmationWindow, GtkTestCase):
         self.test_rpc_operation = rpc_operation
         self.test_target_name = target_name
 
+        self.whitelist = whitelist
+
         self._test_time = 0.1
 
-        self.test_called_close = False
-        self.test_called_show = False
-
-        self.test_clicked_ok = False
-        self.test_clicked_cancel = False
-
-        MockRPCConfirmationWindow.__init__(self,
-                                       self.test_source_name,
-                                       self.test_rpc_operation,
-                                       whitelist,
-                                       self.test_target_name,
-                                       focus_stealing_seconds=self._test_time)
-
-    def _can_perform_action(self):
-        return True
-
-    def _close(self):
-        self.test_called_close = True
-
-    def _show(self):
-        self.test_called_show = True
-
-    def _clicked_ok(self, button):
-        MockRPCConfirmationWindow._clicked_ok(self, button)
-        self.test_clicked_ok = True
-
-    def _clicked_cancel(self, button):
-        MockRPCConfirmationWindow._clicked_cancel(self, button)
-        self.test_clicked_cancel = True
+    def setUp(self):
+        self.window = MockRPCConfirmationWindow(
+            self.test_source_name,
+            self.test_rpc_operation,
+            self.whitelist,
+            self.test_target_name,
+            focus_stealing_seconds=self._test_time)
 
     def test_has_linked_the_fields(self):
-        self.assertIsNotNone(self._rpc_window)
-        self.assertIsNotNone(self._rpc_ok_button)
-        self.assertIsNotNone(self._rpc_cancel_button)
-        self.assertIsNotNone(self._rpc_label)
-        self.assertIsNotNone(self._source_entry)
-        self.assertIsNotNone(self._rpc_combo_box)
-        self.assertIsNotNone(self._error_bar)
-        self.assertIsNotNone(self._error_message)
+        self.assertIsNotNone(self.window._rpc_window)
+        self.assertIsNotNone(self.window._rpc_ok_button)
+        self.assertIsNotNone(self.window._rpc_cancel_button)
+        self.assertIsNotNone(self.window._rpc_label)
+        self.assertIsNotNone(self.window._source_entry)
+        self.assertIsNotNone(self.window._rpc_combo_box)
+        self.assertIsNotNone(self.window._error_bar)
+        self.assertIsNotNone(self.window._error_message)
 
     def test_is_showing_source(self):
-        self.assertTrue(self.test_source_name in self._source_entry.get_text())
+        self.assertTrue(self.test_source_name in self.window._source_entry.get_text())
 
     def test_is_showing_operation(self):
-        self.assertTrue(self.test_rpc_operation in self._rpc_label.get_text())
+        self.assertTrue(self.test_rpc_operation in self.window._rpc_label.get_text())
 
     def test_escape_and_format_rpc_text(self):
         self.assertEquals("qubes.<b>Test</b>",
-                          self._escape_and_format_rpc_text("qubes.Test"))
+                          self.window._escape_and_format_rpc_text("qubes.Test"))
         self.assertEquals("custom.<b>Domain</b>",
-                          self._escape_and_format_rpc_text("custom.Domain"))
+                          self.window._escape_and_format_rpc_text("custom.Domain"))
         self.assertEquals("<b>nodomain</b>",
-                          self._escape_and_format_rpc_text("nodomain"))
+                          self.window._escape_and_format_rpc_text("nodomain"))
         self.assertEquals("domain.<b>Sub.Operation</b>",
-                          self._escape_and_format_rpc_text("domain.Sub.Operation"))
+                          self.window._escape_and_format_rpc_text("domain.Sub.Operation"))
         self.assertEquals("<b></b>",
-                          self._escape_and_format_rpc_text(""))
+                          self.window._escape_and_format_rpc_text(""))
         self.assertEquals("<b>.</b>",
-                          self._escape_and_format_rpc_text("."))
+                          self.window._escape_and_format_rpc_text("."))
         self.assertEquals("inject.<b>&lt;script&gt;</b>",
-                          self._escape_and_format_rpc_text("inject.<script>"))
+                          self.window._escape_and_format_rpc_text("inject.<script>"))
         self.assertEquals("&lt;script&gt;.<b>inject</b>",
-                          self._escape_and_format_rpc_text("<script>.inject"))
+                          self.window._escape_and_format_rpc_text("<script>.inject"))
 
     def test_lifecycle_open_select_ok(self):
         self._lifecycle_start(select_target=True)
@@ -161,78 +166,78 @@ class RPCConfirmationWindowTestBase(MockRPCConfirmationWindow, GtkTestCase):
 
     def _lifecycle_click(self, click_type):
         if click_type == "ok":
-            self._rpc_ok_button.clicked()
+            self.window._rpc_ok_button.clicked()
 
-            self.assertTrue(self.test_clicked_ok)
-            self.assertFalse(self.test_clicked_cancel)
-            self.assertTrue(self._confirmed)
-            self.assertIsNotNone(self._target_name)
+            self.assertTrue(self.window.test_clicked_ok)
+            self.assertFalse(self.window.test_clicked_cancel)
+            self.assertTrue(self.window._confirmed)
+            self.assertIsNotNone(self.window._target_name)
         elif click_type == "cancel":
-            self._rpc_cancel_button.clicked()
+            self.window._rpc_cancel_button.clicked()
 
-            self.assertFalse(self.test_clicked_ok)
-            self.assertTrue(self.test_clicked_cancel)
-            self.assertFalse(self._confirmed)
+            self.assertFalse(self.window.test_clicked_ok)
+            self.assertTrue(self.window.test_clicked_cancel)
+            self.assertFalse(self.window._confirmed)
         elif click_type == "exit":
-            self._close()
+            self.window._close()
 
-            self.assertFalse(self.test_clicked_ok)
-            self.assertFalse(self.test_clicked_cancel)
-            self.assertIsNone(self._confirmed)
+            self.assertFalse(self.window.test_clicked_ok)
+            self.assertFalse(self.window.test_clicked_cancel)
+            self.assertIsNone(self.window._confirmed)
 
-        self.assertTrue(self.test_called_close)
+        self.assertTrue(self.window.test_called_close)
 
 
     def _lifecycle_start(self, select_target):
-        self.assertFalse(self.test_called_close)
-        self.assertFalse(self.test_called_show)
+        self.assertFalse(self.window.test_called_close)
+        self.assertFalse(self.window.test_called_show)
 
         self.assert_initial_state(False)
-        self.assertTrue(isinstance(self._focus_helper, FocusStealingHelperMock))
+        self.assertTrue(isinstance(self.window._focus_helper, FocusStealingHelperMock))
 
         # Need the following because of pylint's complaints
-        if isinstance(self._focus_helper, FocusStealingHelperMock):
-            FocusStealingHelperMock.simulate_focus(self._focus_helper)
+        if isinstance(self.window._focus_helper, FocusStealingHelperMock):
+            FocusStealingHelperMock.simulate_focus(self.window._focus_helper)
 
         self.flush_gtk_events(self._test_time*2)
         self.assert_initial_state(True)
 
         try:
             # We expect the call to exit immediately, since no window is opened
-            self.confirm_rpc()
+            self.window.confirm_rpc()
         except Exception:
             pass
 
-        self.assertFalse(self.test_called_close)
-        self.assertTrue(self.test_called_show)
+        self.assertFalse(self.window.test_called_close)
+        self.assertTrue(self.window.test_called_show)
 
         self.assert_initial_state(True)
 
         if select_target:
-            self._rpc_combo_box.set_active(1)
+            self.window._rpc_combo_box.set_active(1)
 
-            self.assertTrue(self._rpc_ok_button.get_sensitive())
+            self.assertTrue(self.window._rpc_ok_button.get_sensitive())
 
-            self.assertIsNotNone(self._target_name)
+            self.assertIsNotNone(self.window._target_name)
 
-        self.assertFalse(self.test_called_close)
-        self.assertTrue(self.test_called_show)
-        self.assertFalse(self.test_clicked_ok)
-        self.assertFalse(self.test_clicked_cancel)
-        self.assertFalse(self._confirmed)
+        self.assertFalse(self.window.test_called_close)
+        self.assertTrue(self.window.test_called_show)
+        self.assertFalse(self.window.test_clicked_ok)
+        self.assertFalse(self.window.test_clicked_cancel)
+        self.assertFalse(self.window._confirmed)
 
     def assert_initial_state(self, after_focus_timer):
-        self.assertIsNone(self._target_name)
-        self.assertFalse(self.test_clicked_ok)
-        self.assertFalse(self.test_clicked_cancel)
-        self.assertFalse(self._confirmed)
-        self.assertFalse(self._rpc_ok_button.get_sensitive())
-        self.assertFalse(self._error_bar.get_visible())
+        self.assertIsNone(self.window._target_name)
+        self.assertFalse(self.window.test_clicked_ok)
+        self.assertFalse(self.window.test_clicked_cancel)
+        self.assertFalse(self.window._confirmed)
+        self.assertFalse(self.window._rpc_ok_button.get_sensitive())
+        self.assertFalse(self.window._error_bar.get_visible())
 
         if after_focus_timer:
-            self.assertTrue(self._focus_helper.can_perform_action())
+            self.assertTrue(self.window._focus_helper.can_perform_action())
         else:
-            self.assertFalse(self._focus_helper.can_perform_action())
+            self.assertFalse(self.window._focus_helper.can_perform_action())
 
 
 class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
@@ -246,21 +251,21 @@ class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
         self._lifecycle_click(click_type="ok")
 
     def assert_initial_state(self, after_focus_timer):
-        self.assertIsNotNone(self._target_name)
-        self.assertFalse(self.test_clicked_ok)
-        self.assertFalse(self.test_clicked_cancel)
-        self.assertFalse(self._confirmed)
+        self.assertIsNotNone(self.window._target_name)
+        self.assertFalse(self.window.test_clicked_ok)
+        self.assertFalse(self.window.test_clicked_cancel)
+        self.assertFalse(self.window._confirmed)
         if after_focus_timer:
-            self.assertTrue(self._rpc_ok_button.get_sensitive())
-            self.assertTrue(self._focus_helper.can_perform_action())
-            self.assertEqual(self._target_name, 'test-target')
+            self.assertTrue(self.window._rpc_ok_button.get_sensitive())
+            self.assertTrue(self.window._focus_helper.can_perform_action())
+            self.assertEqual(self.window._target_name, 'test-target')
         else:
-            self.assertFalse(self._rpc_ok_button.get_sensitive())
-            self.assertFalse(self._focus_helper.can_perform_action())
+            self.assertFalse(self.window._rpc_ok_button.get_sensitive())
+            self.assertFalse(self.window._focus_helper.can_perform_action())
 
     def _lifecycle_click(self, click_type):
         RPCConfirmationWindowTestBase._lifecycle_click(self, click_type)
-        self.assertIsNotNone(self._target_name)
+        self.assertIsNotNone(self.window._target_name)
 
 
 class RPCConfirmationWindowTestWithDispVMTarget(RPCConfirmationWindowTestBase):
@@ -274,17 +279,17 @@ class RPCConfirmationWindowTestWithDispVMTarget(RPCConfirmationWindowTestBase):
         self._lifecycle_click(click_type="ok")
 
     def assert_initial_state(self, after_focus_timer):
-        self.assertIsNotNone(self._target_name)
-        self.assertFalse(self.test_clicked_ok)
-        self.assertFalse(self.test_clicked_cancel)
-        self.assertFalse(self._confirmed)
+        self.assertIsNotNone(self.window._target_name)
+        self.assertFalse(self.window.test_clicked_ok)
+        self.assertFalse(self.window.test_clicked_cancel)
+        self.assertFalse(self.window._confirmed)
         if after_focus_timer:
-            self.assertTrue(self._rpc_ok_button.get_sensitive())
-            self.assertTrue(self._focus_helper.can_perform_action())
-            self.assertEqual(self._target_name, '@dispvm:test-disp6')
+            self.assertTrue(self.window._rpc_ok_button.get_sensitive())
+            self.assertTrue(self.window._focus_helper.can_perform_action())
+            self.assertEqual(self.window._target_name, '@dispvm:test-disp6')
         else:
-            self.assertFalse(self._rpc_ok_button.get_sensitive())
-            self.assertFalse(self._focus_helper.can_perform_action())
+            self.assertFalse(self.window._rpc_ok_button.get_sensitive())
+            self.assertFalse(self.window._focus_helper.can_perform_action())
 
 
 class RPCConfirmationWindowTestWithTargetInvalid(unittest.TestCase):
