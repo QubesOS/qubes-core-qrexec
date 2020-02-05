@@ -95,8 +95,8 @@ class QrexecClient:
 
 class QrexecServer(QrexecClient):
     def __init__(self, server_conn):
+        super().__init__(None)
         self.server_conn = server_conn
-        self.conn = None
 
     def close(self):
         if self.server_conn:

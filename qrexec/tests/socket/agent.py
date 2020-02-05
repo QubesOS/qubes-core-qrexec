@@ -20,20 +20,24 @@
 import unittest
 import subprocess
 import os.path
+import os
 import tempfile
 import shutil
 import time
 import struct
-import psutil
 import getpass
+import psutil
+
 
 from . import qrexec
 
 
-ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                         '..', '..', '..'))
 
 
-
+@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
+                 'socket tests not set up')
 class TestAgent(unittest.TestCase):
     agent = None
     domain = 42
@@ -201,6 +205,8 @@ class TestAgent(unittest.TestCase):
                          (self.target_domain, self.target_port))
 
 
+@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
+                 'socket tests not set up')
 class TestClientVm(unittest.TestCase):
     client = None
     domain = 42
