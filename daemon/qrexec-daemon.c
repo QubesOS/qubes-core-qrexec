@@ -295,7 +295,7 @@ void init(int xid)
 
     close(0);
 
-    if (getuid() == 0) {
+    if (!opt_direct) {
         snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
                  "/var/log/qubes/qrexec.%s.log", remote_domain_name);
         umask(0007);        // make the log readable by the "qubes" group
@@ -981,7 +981,7 @@ _Noreturn void usage(const char *argv0)
             QREXEC_DAEMON_SOCKET_DIR);
     fprintf(stderr, "  -p, --policy-program=PATH - program to execute to check policy, default: %s\n",
             QREXEC_POLICY_PROGRAM);
-    fprintf(stderr, "  -D, --direct - run directly, don't daemonize\n");
+    fprintf(stderr, "  -D, --direct - run directly, don't daemonize, log to stderr\n");
     exit(1);
 }
 
