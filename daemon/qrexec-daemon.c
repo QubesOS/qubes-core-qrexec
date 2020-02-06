@@ -158,12 +158,16 @@ int create_qrexec_socket(int domid, const char *domname)
     snprintf(link_to_socket_name, sizeof link_to_socket_name,
              "%s/qrexec.%s", socket_dir, domname);
     unlink(link_to_socket_name);
+
+    /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
+    umask(0);
     if (symlink(socket_address, link_to_socket_name)) {
         fprintf(stderr, "symlink(%s,%s) failed: %s\n", socket_address,
                 link_to_socket_name, strerror (errno));
     }
-    atexit(unlink_qrexec_socket);
-    return get_server_socket(socket_address);
+    int fd = get_server_socket(socket_address);
+    umask(0077);
+    return fd;
 }
 
 #define MAX_STARTUP_TIME_DEFAULT 60
@@ -345,11 +349,10 @@ void init(int xid)
         vchan_port_notify_client[i] = VCHAN_PORT_UNUSED;
     }
 
-    /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
-    umask(0);
+    atexit(unlink_qrexec_socket);
     qrexec_daemon_unix_socket_fd =
         create_qrexec_socket(xid, remote_domain_name);
-    umask(0077);
+
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, sigchld_handler);
     signal(SIGUSR1, SIG_DFL);
@@ -909,8 +912,12 @@ static int fill_fdsets_for_select(int vchan_fd, fd_set * read_fdset, fd_set * wr
 /* qrexec-agent has disconnected, cleanup local state and try to connect again.
  * If remote domain dies, terminate qrexec-daemon.
  */
-static int handle_agent_restart(void) {
+static int handle_agent_restart(int xid) {
     size_t i;
+
+    // Stop listening.
+    unlink_qrexec_socket();
+    close(qrexec_daemon_unix_socket_fd);
 
     /* Close old (dead) vchan connection. */
     libvchan_close(vchan);
@@ -949,6 +956,9 @@ static int handle_agent_restart(void) {
         return -1;
     }
     fprintf(stderr, "qrexec-agent has reconnected\n");
+
+    qrexec_daemon_unix_socket_fd =
+        create_qrexec_socket(xid, remote_domain_name);
     return 0;
 }
 
@@ -1044,7 +1054,7 @@ int main(int argc, char **argv)
 
         if (!libvchan_is_open(vchan)) {
             fprintf(stderr, "qrexec-agent has disconnected\n");
-            if (handle_agent_restart() < 0) {
+            if (handle_agent_restart(remote_domain_id) < 0) {
                 fprintf(stderr, "Failed to reconnect to qrexec-agent, terminating\n");
                 return 1;
             }
