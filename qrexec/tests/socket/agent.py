@@ -173,25 +173,8 @@ class TestAgent(unittest.TestCase):
         dom0.handshake()
 
         client = self.connect_client()
-        client.send_message(
-            qrexec.MSG_TRIGGER_SERVICE3,
-            struct.pack('<64s32s',
-                        target_domain_name, b'SOCKET') +
-            b'qubes.ServiceName\0'
-        )
-
-        message_type, data = dom0.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
-
-        target, ident = struct.unpack('<64s32s', data[:96])
-        target = target[:target.find(b'\0')]
-        ident = ident[:ident.find(b'\0')]
-        self.assertEqual(target, target_domain_name)
-        self.assertTrue(ident.startswith(b'SOCKET'),
-                        'wrong ident: {}'.format(ident))
-
-        service_name = data[96:]
-        self.assertEqual(service_name, b'qubes.ServiceName\0')
+        ident = self.trigger_service(
+            dom0, client, target_domain_name, b'qubes.ServiceName')
 
         dom0.send_message(
             qrexec.MSG_SERVICE_CONNECT,
@@ -203,6 +186,53 @@ class TestAgent(unittest.TestCase):
         data = client.recvall(8)
         self.assertEqual(struct.unpack('<LL', data),
                          (self.target_domain, self.target_port))
+
+    def test_trigger_service_refused(self):
+        self.start_agent()
+
+        target_domain_name = b'target_domain'
+
+        dom0 = self.connect_dom0()
+        dom0.handshake()
+
+        client = self.connect_client()
+        ident = self.trigger_service(
+            dom0, client, target_domain_name, b'qubes.ServiceName')
+
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED,
+            struct.pack('<32s', ident))
+
+        # agent should close connection to client
+        data = client.recvall(8)
+        self.assertEqual(data, b'')
+
+    def trigger_service(self, dom0, client, target_domain_name, service_name):
+        source_params = (
+            struct.pack('<64s32s',
+                        target_domain_name, b'SOCKET') +
+            service_name + b'\0'
+        )
+
+        client.send_message(
+            qrexec.MSG_TRIGGER_SERVICE3,
+            source_params,
+        )
+
+        message_type, target_params = dom0.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+
+        ident = target_params[64:96]
+        ident = ident[:ident.find(b'\0')]
+        self.assertTrue(ident.startswith(b'SOCKET'),
+                        'wrong ident: {}'.format(ident))
+
+        # The params should be the same except for ident.
+        self.assertEqual(
+            target_params,
+            source_params[:64] + ident + source_params[64+len(ident):])
+
+        return ident
 
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
@@ -228,21 +258,18 @@ class TestClientVm(unittest.TestCase):
             os.path.join(ROOT_PATH, 'agent', 'qrexec-client-vm'),
             '--agent-socket=' + os.path.join(self.tempdir, 'agent.sock'),
         ] + args
-        if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-f'] + cmd
         self.client = subprocess.Popen(
             cmd,
             env=env,
             stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         self.addCleanup(self.stop_client)
 
     def stop_client(self):
         if self.client:
-            self.client.stdout.read()
-            self.client.stdout.close()
             self.client.terminate()
-            self.client.wait()
+            self.client.communicate()
             self.client = None
 
     def connect_server(self):
@@ -281,3 +308,17 @@ class TestClientVm(unittest.TestCase):
                                    struct.pack('<L', 42))
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
+
+    def test_run_client_refused(self):
+        server = self.connect_server()
+        self.start_client([self.target_domain_name, 'qubes.ServiceName'])
+        server.accept()
+
+        message_type, __data = server.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+
+        server.conn.close()
+        self.client.wait()
+        self.assertEqual(self.client.stdout.read(), b'')
+        self.assertEqual(self.client.stderr.read(), b'Request refused\n')
+        self.assertEqual(self.client.returncode, 126)
