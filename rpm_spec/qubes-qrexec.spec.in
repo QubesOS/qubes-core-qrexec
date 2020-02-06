@@ -147,6 +147,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/socket/__pycache__/*
 %{python3_sitelib}/qrexec/tests/socket/__init__.py
 %{python3_sitelib}/qrexec/tests/socket/agent.py
+%{python3_sitelib}/qrexec/tests/socket/daemon.py
 %{python3_sitelib}/qrexec/tests/socket/qrexec.py
 
 

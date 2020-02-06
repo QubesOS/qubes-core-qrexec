@@ -53,7 +53,6 @@ class TestAgent(unittest.TestCase):
         env['LD_LIBRARY_PATH'] = os.path.join(ROOT_PATH, 'libqrexec')
         env['VCHAN_DOMAIN'] = str(self.domain)
         env['VCHAN_SOCKET_DIR'] = self.tempdir
-        env['QREXEC_NO_ROOT'] = '1'
         cmd = [
             os.path.join(ROOT_PATH, 'agent', 'qrexec-agent'),
             '--no-fork-server',
