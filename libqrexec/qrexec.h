@@ -164,5 +164,6 @@ enum {
 #define MEMINFO_WRITER_PIDFILE "/var/run/meminfo-writer.pid"
 #define QUBES_RPC_MULTIPLEXER_PATH "/usr/lib/qubes/qubes-rpc-multiplexer"
 #define QREXEC_DAEMON_SOCKET_DIR "/var/run/qubes"
+#define QREXEC_POLICY_PROGRAM "/usr/bin/qrexec-policy-exec"
 
 #endif /* _QREXEC_H */
