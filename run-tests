@@ -1,0 +1,14 @@
+#!/bin/sh -e
+
+if pkg-config vchan-socket; then
+    make -C libqrexec BACKEND_VMM=socket
+    make -C agent BACKEND_VMM=socket
+    make -C daemon BACKEND_VMM=socket
+else
+    echo "libvchan-socket not available, skipping socket tests"
+    export SKIP_SOCKET_TESTS=1
+fi
+
+set -x
+
+python3 -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v "$@"

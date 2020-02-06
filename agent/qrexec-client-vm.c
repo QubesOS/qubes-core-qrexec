@@ -43,7 +43,7 @@ void do_exec(char *cmd __attribute__((__unused__))) {
     exit(1);
 }
 
-int connect_unix_socket(char *path)
+int connect_unix_socket(const char *path)
 {
     int s, len;
     struct sockaddr_un remote;
@@ -97,6 +97,7 @@ struct option longopts[] = {
     { "filter-escape-chars-stderr", no_argument, 0, 'T'},
     { "no-filter-escape-chars-stdout", no_argument, 0, opt_no_filter_stdout},
     { "no-filter-escape-chars-stderr", no_argument, 0, opt_no_filter_stderr},
+    { "agent-socket", required_argument, 0, 'a'},
     { NULL, 0, 0, 0},
 };
 
@@ -110,6 +111,8 @@ _Noreturn void usage(const char *argv0) {
     fprintf(stderr, "  -T, --filter-escape-chars-stderr - filter non-ASCII and control characters on stderr (default if stderr is a terminal)\n");
     fprintf(stderr, "  --no-filter-escape-chars-stdout - opposite to --filter-escape-chars-stdout\n");
     fprintf(stderr, "  --no-filter-escape-chars-stderr - opposite to --filter-escape-chars-stderr\n");
+    fprintf(stderr, "  --agent-socket=PATH - path to connect to, default: %s\n",
+            QREXEC_AGENT_TRIGGER_PATH);
     exit(2);
 }
 
@@ -128,9 +131,10 @@ int main(int argc, char **argv)
     int inpipe[2], outpipe[2];
     int buffer_size = 0;
     int opt;
+    const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
 
     while (1) {
-        opt = getopt_long(argc, argv, "+tT", longopts, NULL);
+        opt = getopt_long(argc, argv, "+tTa:", longopts, NULL);
         if (opt == -1)
             break;
         switch (opt) {
@@ -148,6 +152,9 @@ int main(int argc, char **argv)
                 break;
             case opt_no_filter_stderr:
                 replace_chars_stderr = 0;
+                break;
+            case 'a':
+                agent_trigger_path = strdup(optarg);
                 break;
             case '?':
                 usage(argv[0]);
@@ -172,7 +179,7 @@ int main(int argc, char **argv)
 
     service_name_len = strlen(service_name) + 1;
 
-    trigger_fd = connect_unix_socket(QREXEC_AGENT_TRIGGER_PATH);
+    trigger_fd = connect_unix_socket(agent_trigger_path);
 
     hdr.type = MSG_TRIGGER_SERVICE3;
     hdr.len = sizeof(params) + service_name_len;
