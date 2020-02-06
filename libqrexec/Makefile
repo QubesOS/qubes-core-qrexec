@@ -18,7 +18,7 @@ libqrexec-utils.so: libqrexec-utils.so.$(SO_VER)
 %.a:
 	$(AR) rcs $@ $^
 clean:
-	rm -f *.o *~ *.a *.so.*
+	rm -f *.o *~ *.a *.so *.so.*
 
 install:
 	mkdir -p $(DESTDIR)$(LIBDIR)
@@ -27,4 +27,3 @@ install:
 	mkdir -p $(DESTDIR)$(INCLUDEDIR)
 	cp libqrexec-utils.h $(DESTDIR)$(INCLUDEDIR)
 	cp qrexec.h $(DESTDIR)$(INCLUDEDIR)
-

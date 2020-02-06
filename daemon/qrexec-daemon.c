@@ -30,6 +30,7 @@
 #include <sys/wait.h>
 #include <string.h>
 #include <assert.h>
+#include <getopt.h>
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 
@@ -86,6 +87,10 @@ const char default_user_keyword[] = "DEFAULT:";
 #define default_user_keyword_len_without_colon (sizeof(default_user_keyword)-2)
 
 int opt_quiet = 0;
+int opt_direct = 0;
+
+const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
+const char *policy_program = QREXEC_POLICY_PROGRAM;
 
 #ifdef __GNUC__
 #  define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
@@ -129,9 +134,9 @@ void unlink_qrexec_socket()
     char link_to_socket_name[strlen(remote_domain_name) + sizeof(socket_address)];
 
     snprintf(socket_address, sizeof(socket_address),
-            QREXEC_DAEMON_SOCKET_DIR "/qrexec.%d", remote_domain_id);
+             "%s/qrexec.%d", socket_dir, remote_domain_id);
     snprintf(link_to_socket_name, sizeof link_to_socket_name,
-            QREXEC_DAEMON_SOCKET_DIR "/qrexec.%s", remote_domain_name);
+             "%s/qrexec.%s", socket_dir, remote_domain_name);
     unlink(socket_address);
     unlink(link_to_socket_name);
 }
@@ -149,9 +154,9 @@ int create_qrexec_socket(int domid, const char *domname)
     char link_to_socket_name[strlen(domname) + sizeof(socket_address)];
 
     snprintf(socket_address, sizeof(socket_address),
-            QREXEC_DAEMON_SOCKET_DIR "/qrexec.%d", domid);
+             "%s/qrexec.%d", socket_dir, domid);
     snprintf(link_to_socket_name, sizeof link_to_socket_name,
-            QREXEC_DAEMON_SOCKET_DIR "/qrexec.%s", domname);
+             "%s/qrexec.%s", socket_dir, domname);
     unlink(link_to_socket_name);
     if (symlink(socket_address, link_to_socket_name)) {
         fprintf(stderr, "symlink(%s,%s) failed: %s\n", socket_address,
@@ -256,53 +261,60 @@ void init(int xid)
             // invalid or negative number
             startup_timeout = MAX_STARTUP_TIME_DEFAULT;
     }
-    signal(SIGUSR1, sigusr1_handler);
-    signal(SIGCHLD, sigchld_parent_handler);
-    switch (pid=fork()) {
-    case -1:
-        perror("fork");
-        exit(1);
-    case 0:
-        break;
-    default:
-        if (getenv("QREXEC_STARTUP_NOWAIT"))
-            exit(0);
-        if (!opt_quiet)
-            fprintf(stderr, "Waiting for VM's qrexec agent.");
-        for (i=0;i<startup_timeout;i++) {
-            sleep(1);
-            if (!opt_quiet)
-                fprintf(stderr, ".");
-            if (i==startup_timeout-1) {
+
+    if (!opt_direct) {
+        signal(SIGUSR1, sigusr1_handler);
+        signal(SIGCHLD, sigchld_parent_handler);
+        switch (pid=fork()) {
+            case -1:
+                perror("fork");
+                exit(1);
+            case 0:
                 break;
-            }
+            default:
+                if (getenv("QREXEC_STARTUP_NOWAIT"))
+                    exit(0);
+                if (!opt_quiet)
+                    fprintf(stderr, "Waiting for VM's qrexec agent.");
+                for (i=0;i<startup_timeout;i++) {
+                    sleep(1);
+                    if (!opt_quiet)
+                        fprintf(stderr, ".");
+                    if (i==startup_timeout-1) {
+                        break;
+                    }
+                }
+                fprintf(stderr, "Cannot connect to '%s' qrexec agent for %d seconds, giving up\n", remote_domain_name, startup_timeout);
+                exit(3);
         }
-        fprintf(stderr, "Cannot connect to '%s' qrexec agent for %d seconds, giving up\n", remote_domain_name, startup_timeout);
-        exit(3);
     }
+
     close(0);
-    snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
-         "/var/log/qubes/qrexec.%s.log", remote_domain_name);
-    umask(0007);        // make the log readable by the "qubes" group
-    logfd =
-        open(qrexec_error_log_name, O_WRONLY | O_CREAT | O_TRUNC,
-         0660);
 
-    if (logfd < 0) {
-        perror("open");
-        exit(1);
-    }
+    if (!opt_direct) {
+        snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
+                 "/var/log/qubes/qrexec.%s.log", remote_domain_name);
+        umask(0007);        // make the log readable by the "qubes" group
+        logfd =
+            open(qrexec_error_log_name, O_WRONLY | O_CREAT | O_TRUNC,
+                 0660);
 
-    dup2(logfd, 1);
-    dup2(logfd, 2);
+        if (logfd < 0) {
+            perror("open");
+            exit(1);
+        }
 
-    if (chdir("/var/run/qubes") < 0) {
-        perror("chdir /var/run/qubes failed");
-        exit(1);
-    }
-    if (setsid() < 0) {
-        perror("setsid()");
-        exit(1);
+        dup2(logfd, 1);
+        dup2(logfd, 2);
+
+        if (chdir("/var/run/qubes") < 0) {
+            perror("chdir /var/run/qubes failed");
+            exit(1);
+        }
+        if (setsid() < 0) {
+            perror("setsid()");
+            exit(1);
+        }
     }
 
     vchan = libvchan_client_init(xid, VCHAN_BASE_PORT);
@@ -341,7 +353,9 @@ void init(int xid)
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, sigchld_handler);
     signal(SIGUSR1, SIG_DFL);
-    kill(getppid(), SIGUSR1);   // let the parent know we are ready
+
+    if (!opt_direct)
+        kill(getppid(), SIGUSR1);   // let the parent know we are ready
 }
 
 static int send_client_hello(int fd)
@@ -714,7 +728,7 @@ static void handle_execute_service(
     signal(SIGPIPE, SIG_DFL);
     snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",
             remote_domain_id);
-    execl("/usr/bin/qrexec-policy-exec", "qrexec-policy-exec", "--",
+    execl(policy_program, "qrexec-policy-exec", "--",
             remote_domain_id_str,
             remote_domain_name,
             target_domain,
@@ -938,6 +952,29 @@ static int handle_agent_restart(void) {
     return 0;
 }
 
+struct option longopts[] = {
+    { "help", no_argument, 0, 'h' },
+    { "quiet", no_argument, 0, 'q' },
+    { "socket-dir", required_argument, 0, 'd' },
+    { "policy-program", required_argument, 0, 'p' },
+    { "direct", no_argument, 0, 'D' },
+    { NULL, 0, 0, 0 },
+};
+
+_Noreturn void usage(const char *argv0)
+{
+    fprintf(stderr, "usage: %s [options] domainid domain-name [default user]\n", argv0);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -h, --help - display usage\n");
+    fprintf(stderr, "  -q, --quiet - quiet mode\n");
+    fprintf(stderr, "  -d, --socket-dir=PATH - directory for qrexec socket, default: %s\n",
+            QREXEC_DAEMON_SOCKET_DIR);
+    fprintf(stderr, "  -p, --policy-program=PATH - program to execute to check policy, default: %s\n",
+            QREXEC_POLICY_PROGRAM);
+    fprintf(stderr, "  -D, --direct - run directly, don't daemonize, log to stderr\n");
+    exit(1);
+}
+
 int main(int argc, char **argv)
 {
     fd_set read_fdset, write_fdset;
@@ -945,19 +982,27 @@ int main(int argc, char **argv)
     int max, vchan_fd;
     sigset_t chld_set;
 
-    while ((opt=getopt(argc, argv, "q")) != -1) {
+    while ((opt=getopt_long(argc, argv, "hqd:p:D", longopts, NULL)) != -1) {
         switch (opt) {
             case 'q':
                 opt_quiet = 1;
                 break;
+            case 'd':
+                socket_dir = strdup(optarg);
+                break;
+            case 'p':
+                policy_program = strdup(optarg);
+                break;
+            case 'D':
+                opt_direct = 1;
+                break;
+            case 'h':
             default: /* '?' */
-                fprintf(stderr, "usage: %s [-q] domainid domain-name [default user]\n", argv[0]);
-                exit(1);
+                usage(argv[0]);
         }
     }
     if (argc - optind < 2 || argc - optind > 3) {
-        fprintf(stderr, "usage: %s [-q] domainid domain-name [default user]\n", argv[0]);
-        exit(1);
+        usage(argv[0]);
     }
     remote_domain_id = atoi(argv[optind]);
     remote_domain_name = argv[optind+1];
