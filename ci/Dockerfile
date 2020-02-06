@@ -9,3 +9,6 @@ RUN make -C ~/qubes-core-vchan-socket install LIBDIR=/usr/lib64
 
 ADD requirements.txt /
 RUN pip3 install -r requirements.txt
+
+RUN useradd --create-home --shell /bin/bash travis --uid 2000
+USER travis
