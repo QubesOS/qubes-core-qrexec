@@ -132,6 +132,10 @@ def vchan_server(socket_dir, domain, remote_domain, port):
 
 
 def socket_server(socket_path):
+    try:
+        os.unlink(socket_path)
+    except FileNotFoundError:
+        pass
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(socket_path)
     server.listen(1)
@@ -151,4 +155,8 @@ def connect_when_ready(conn, path):
             return
 
     # Try for the last time (to propagate the exception)
-    conn.connect(path)
+    try:
+        conn.connect(path)
+    except IOError:
+        conn.close()
+        raise

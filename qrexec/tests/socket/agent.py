@@ -30,6 +30,7 @@ import psutil
 
 
 from . import qrexec
+from . import util
 
 
 ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -78,13 +79,6 @@ class TestAgent(unittest.TestCase):
         children = proc.children(recursive=True)
         psutil.wait_procs(children)
 
-    def wait_until(self, func, message, n_tries=10, delay=0.1):
-        for _ in range(n_tries):
-            if func():
-                return
-            time.sleep(delay)
-        self.fail('Timed out waiting: ' + message)
-
     def connect_dom0(self):
         dom0 = qrexec.vchan_client(self.tempdir, self.domain, 0, 512)
         self.addCleanup(dom0.close)
@@ -129,7 +123,7 @@ class TestAgent(unittest.TestCase):
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
         ])
 
-        self.wait_until(
+        util.wait_until(
             lambda: os.path.exists(os.path.join(self.tempdir, 'new_file')),
             'file created')
 

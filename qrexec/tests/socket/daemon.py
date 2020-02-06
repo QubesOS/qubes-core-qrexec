@@ -24,11 +24,12 @@ import os
 import tempfile
 import shutil
 import struct
-import psutil
 from typing import Tuple
 
-from . import qrexec
+import psutil
 
+from . import qrexec
+from . import util
 
 ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                          '..', '..', '..'))
@@ -160,6 +161,26 @@ exit 1
 
         client = self.connect_client()
         client.handshake()
+
+    def test_restart_agent(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        agent.close()
+
+        util.wait_until(
+            lambda: not os.path.exists(
+                os.path.join(self.tempdir, 'qrexec.{}'.format(self.domain))),
+            'socket deleted')
+
+        agent = self.connect_agent()
+        agent.accept()
+        agent.handshake()
+
+        # Now, new client should be able to connect
+        client = self.connect_client()
+        client.handshake()
+
 
     def test_client_cmdline(self):
         agent = self.start_daemon_with_agent()
