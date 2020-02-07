@@ -333,6 +333,7 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
                     /* if this is "remote" service end and no real local process
                      * exists (using own stdin/out) send also fake exit code */
                     send_exit_code(vchan, 0);
+                    libvchan_close(vchan);
                     do_exit(0);
                 }
             }
@@ -496,6 +497,7 @@ static void check_child_status(libvchan_t *vchan)
         return;
     if (is_service)
         send_exit_code(vchan, WEXITSTATUS(status));
+    libvchan_close(vchan);
     do_exit(status);
 }
 
