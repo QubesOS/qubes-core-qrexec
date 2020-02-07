@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <string.h>
 #include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -52,6 +53,57 @@ int child_exited = 0;
 const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
 
 extern char **environ;
+
+static char *xstrdup(const char *arg) {
+    char *retval = strdup(arg);
+    if (!retval) {
+        fputs("Out of memory in xstrdup()\n", stderr);
+        abort();
+    }
+    return retval;
+}
+
+static void set_remote_domain(const char *src_domain_name) {
+    if (setenv("QREXEC_REMOTE_DOMAIN", src_domain_name, 1)) {
+        fputs("Cannot set QREXEC_REMOTE_DOMAIN\n", stderr);
+        abort();
+    }
+}
+
+static void close_stdin_fd(void) {
+    if (local_stdin_fd < 0)
+        return;
+    if (shutdown(local_stdin_fd, SHUT_WR) && errno != ENOTSOCK) {
+        fputs("Cannot shutdown socket\n", stderr);
+        abort();
+    }
+    if (local_stdin_fd != local_stdout_fd) {
+        /* restore flags, as we may have not the only copy of this file descriptor */
+        set_block(local_stdin_fd);
+        if (close(local_stdin_fd)) {
+            fputs("Cannot close socket\n", stderr);
+            abort();
+        }
+    }
+    local_stdin_fd = -1;
+}
+
+static void close_stdout_fd(void) {
+    if (local_stdout_fd < 0)
+        return;
+    if (shutdown(local_stdout_fd, SHUT_RD) && errno != ENOTSOCK) {
+        fputs("Cannot shutdown socket\n", stderr);
+        abort();
+    }
+    if (local_stdout_fd != local_stdin_fd) {
+        set_block(local_stdout_fd);
+        if (close(local_stdout_fd)) {
+            fputs("Cannot close socket\n", stderr);
+            abort();
+        }
+    }
+    local_stdout_fd = -1;
+}
 
 /* initialize data_protocol_version */
 static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
@@ -174,7 +226,7 @@ static void sigchld_handler(int x __attribute__((__unused__)))
 }
 
 /* called from do_fork_exec */
-_Noreturn void do_exec(char *prog)
+static _Noreturn void do_exec(char *prog, const char *username __attribute__((unused)))
 {
     /* avoid calling qubes-rpc-multiplexer through shell */
     exec_qubes_rpc_if_requested(prog, environ);
@@ -188,12 +240,8 @@ _Noreturn void do_exec(char *prog)
 static void do_exit(int code)
 {
     int status;
-    /* restore flags, as we may have not the only copy of this file descriptor
-     */
-    if (local_stdin_fd != -1)
-        set_block(local_stdin_fd);
-    close(local_stdin_fd);
-    close(local_stdout_fd);
+    close_stdin_fd();
+    close_stdout_fd();
     // sever communication lines; wait for child, if any
     // so that qrexec-daemon can count (recursively) spawned processes correctly
     waitpid(-1, &status, 0);
@@ -201,16 +249,18 @@ static void do_exit(int code)
 }
 
 
-static void prepare_local_fds(char *cmdline)
+static void prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
 {
+    if (stdin_buffer == NULL)
+        abort();
     if (!cmdline) {
         local_stdin_fd = 1;
         local_stdout_fd = 0;
         return;
     }
     signal(SIGCHLD, sigchld_handler);
-    do_fork_exec(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
-            NULL);
+    execute_qubes_rpc_command(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
+            NULL, false, stdin_buffer);
 }
 
 /* ask the daemon to allocate vchan port */
@@ -323,13 +373,12 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
         do_exit(1);
     }
     if (ret == 0) {
-        close(local_stdout_fd);
-        local_stdout_fd = -1;
+        close_stdout_fd();
         if (local_stdin_fd == -1) {
             // if not a remote end of service call, wait for exit status
             if (is_service) {
                 // if pipe in opposite direction already closed, no need to stay alive
-                if (local_pid == 0) {
+                if (local_pid <= 0) {
                     /* if this is "remote" service end and no real local process
                      * exists (using own stdin/out) send also fake exit code */
                     send_exit_code(vchan, 0);
@@ -346,8 +395,7 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
             //
             // since vchan socket is buffered it doesn't mean all data was
             // received from the agent
-            close(local_stdout_fd);
-            local_stdout_fd = -1;
+            close_stdout_fd();
             if (local_stdin_fd == -1) {
                 // since child does no longer accept data on its stdin, doesn't
                 // make sense to process the data from the daemon
@@ -391,8 +439,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
         switch(flush_client_data(local_stdin_fd, stdin_buf)) {
             case WRITE_STDIN_ERROR:
                 perror("write stdin");
-                close(local_stdin_fd);
-                local_stdin_fd = -1;
+                close_stdin_fd();
                 break;
             case WRITE_STDIN_BUFFERED:
                 return WRITE_STDIN_BUFFERED;
@@ -429,12 +476,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
             if (replace_chars_stdout)
                 do_replace_chars(buf, hdr.len);
             if (hdr.len == 0) {
-                /* restore flags, as we may have not the only copy of this file descriptor
-                */
-                if (local_stdin_fd != -1)
-                    set_block(local_stdin_fd);
-                close(local_stdin_fd);
-                local_stdin_fd = -1;
+                close_stdin_fd();
             } else {
                 switch (write_stdin(local_stdin_fd, buf, hdr.len, stdin_buf)) {
                     case WRITE_STDIN_BUFFERED:
@@ -444,8 +486,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
                         if (errno == EPIPE) {
                             // local process have closed its stdin, handle data in oposite
                             // direction (if any) before exit
-                            close(local_stdin_fd);
-                            local_stdin_fd = -1;
+                            close_stdin_fd();
                         } else {
                             perror("write local stdout");
                             do_exit(1);
@@ -485,23 +526,25 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
 
 static void check_child_status(libvchan_t *vchan)
 {
-    pid_t pid;
-    int status;
-
-    pid = waitpid(local_pid, &status, WNOHANG);
-    if (pid < 0) {
-        perror("waitpid");
-        do_exit(1);
+    int status = 0;
+    if (local_pid >= 0) {
+        /* this is not a socket-based service */
+        pid_t pid = waitpid(local_pid, &status, WNOHANG);
+        if (pid < 0) {
+            perror("waitpid");
+            do_exit(1);
+        }
+        if (pid == 0 || !WIFEXITED(status))
+            return;
+        status = WEXITSTATUS(status);
     }
-    if (pid == 0 || !WIFEXITED(status))
-        return;
     if (is_service)
-        send_exit_code(vchan, WEXITSTATUS(status));
+        send_exit_code(vchan, status);
     libvchan_close(vchan);
     do_exit(status);
 }
 
-static void select_loop(libvchan_t *vchan, int data_protocol_version)
+static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buffer *stdin_buf)
 {
     fd_set select_set;
     fd_set wr_set;
@@ -511,13 +554,11 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
     sigset_t selectmask;
     struct timespec zero_timeout = { 0, 0 };
     struct timespec select_timeout = { 10, 0 };
-    struct buffer stdin_buf;
 
     sigemptyset(&selectmask);
     sigaddset(&selectmask, SIGCHLD);
     sigprocmask(SIG_BLOCK, &selectmask, NULL);
     sigemptyset(&selectmask);
-    buffer_init(&stdin_buf);
     /* remember to set back to blocking mode before closing the FD - this may
      * be not the only copy and some processes may misbehave when get
      * nonblocking FD for input/output
@@ -536,14 +577,15 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
             if (local_stdout_fd > max_fd)
                 max_fd = local_stdout_fd;
         }
-        if (child_exited && local_stdout_fd == -1)
+        if (local_stdout_fd == -1 &&
+            (child_exited || (local_stdin_fd == -1 && local_pid == -1)))
             check_child_status(vchan);
-        if (local_stdin_fd != -1 && buffer_len(&stdin_buf)) {
+        if (local_stdin_fd != -1 && buffer_len(stdin_buf)) {
             FD_SET(local_stdin_fd, &wr_set);
             if (local_stdin_fd > max_fd)
                 max_fd = local_stdin_fd;
         }
-        if ((local_stdin_fd == -1 || buffer_len(&stdin_buf) == 0) &&
+        if ((local_stdin_fd == -1 || buffer_len(stdin_buf) == 0) &&
                 libvchan_data_ready(vchan) > 0) {
             /* check for other FDs, but exit immediately */
             ret = pselect(max_fd + 1, &select_set, &wr_set, NULL,
@@ -567,17 +609,17 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
         }
         if (FD_ISSET(vchan_fd, &select_set))
             libvchan_wait(vchan);
-        if (buffer_len(&stdin_buf) &&
+        if (buffer_len(stdin_buf) &&
                 local_stdin_fd != -1 &&
                 FD_ISSET(local_stdin_fd, &wr_set)) {
-            if (flush_client_data(local_stdin_fd, &stdin_buf) == WRITE_STDIN_ERROR) {
+            if (flush_client_data(local_stdin_fd, stdin_buf) == WRITE_STDIN_ERROR) {
                 perror("write stdin");
                 close(local_stdin_fd);
                 local_stdin_fd = -1;
             }
         }
         while (libvchan_data_ready(vchan))
-            if (handle_vchan_data(vchan, &stdin_buf, data_protocol_version)
+            if (handle_vchan_data(vchan, stdin_buf, data_protocol_version)
                     != WRITE_STDIN_OK)
                 break;
 
@@ -592,7 +634,7 @@ struct option longopts[] = {
     { NULL, 0, 0, 0 },
 };
 
-static void usage(char *name)
+_Noreturn static void usage(const char *const name)
 {
     fprintf(stderr,
             "usage: %s [options] -d domain_name ["
@@ -638,12 +680,16 @@ static void parse_connect(char *str, char **request_id,
                 *src_domain_id = atoi(token);
                 break;
             default:
-                fprintf(stderr, "Invalid -c parameter (should be: \"-c request_id,src_domain_name,src_domain_id\")\n");
-                exit(1);
+                goto bad_c_param;
         }
         token = strtok(NULL, separators);
         i++;
     }
+    if (i == 3)
+        return;
+bad_c_param:
+    fprintf(stderr, "Invalid -c parameter (should be: \"-c request_id,src_domain_name,src_domain_id\")\n");
+    exit(1);
 }
 
 static void sigalrm_handler(int x __attribute__((__unused__)))
@@ -697,6 +743,16 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
     }
 }
 
+static size_t compute_service_length(const char *const remote_cmdline, const char *const prog_name) {
+    const size_t service_length = strlen(remote_cmdline) + 1;
+    if (service_length < 2 || service_length > MAX_QREXEC_CMD_LEN) {
+        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
+        fprintf(stderr, "Bad command: command line too long or empty: length %zu\n", service_length);
+        usage(prog_name);
+    }
+    return service_length;
+}
+
 int main(int argc, char **argv)
 {
     int opt;
@@ -721,10 +777,10 @@ int main(int argc, char **argv)
     while ((opt = getopt_long(argc, argv, "hd:l:ec:tTw:W", longopts, NULL)) != -1) {
         switch (opt) {
             case 'd':
-                domname = strdup(optarg);
+                domname = xstrdup(optarg);
                 break;
             case 'l':
-                local_cmdline = strdup(optarg);
+                local_cmdline = xstrdup(optarg);
                 break;
             case 'e':
                 just_exec = 1;
@@ -767,33 +823,32 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
-    if ((strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) &&
-            !connect_existing) {
-        fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
-        usage(argv[0]);
-    }
-
     if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
         if (connect_existing) {
             msg_type = MSG_SERVICE_CONNECT;
             strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
             svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
-        } else if (just_exec)
-            msg_type = MSG_JUST_EXEC;
-        else
-            msg_type = MSG_EXEC_CMDLINE;
-        assert(src_domain_name);
-        setenv("QREXEC_REMOTE_DOMAIN", src_domain_name, 1);
+        } else {
+            fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
+            usage(argv[0]);
+        }
+        if (src_domain_name == NULL) {
+            fputs("internal error: src_domain_name should not be NULL here\n", stderr);
+            abort();
+        }
+        set_remote_domain(src_domain_name);
         s = connect_unix_socket(src_domain_name);
         negotiate_connection_params(s,
                 0, /* dom0 */
                 msg_type,
                 connect_existing ? (void*)&svc_params : (void*)remote_cmdline,
-                connect_existing ? sizeof(svc_params) : strlen(remote_cmdline) + 1,
+                connect_existing ? sizeof(svc_params) : compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
                 &data_port);
 
-        prepare_local_fds(remote_cmdline);
+        struct buffer stdin_buffer;
+        buffer_init(&stdin_buffer);
+        prepare_local_fds(remote_cmdline, &stdin_buffer);
         if (connect_existing) {
             void (*old_handler)(int);
 
@@ -816,18 +871,15 @@ int main(int argc, char **argv)
         data_protocol_version = handle_agent_handshake(data_vchan, connect_existing);
         if (data_protocol_version < 0)
             do_exit(1);
-        select_loop(data_vchan, data_protocol_version);
+        select_loop(data_vchan, data_protocol_version, &stdin_buffer);
     } else {
-        if (just_exec)
-            msg_type = MSG_JUST_EXEC;
-        else
-            msg_type = MSG_EXEC_CMDLINE;
+        msg_type = just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE;
         s = connect_unix_socket(domname);
         negotiate_connection_params(s,
                 src_domain_id,
                 msg_type,
                 remote_cmdline,
-                strlen(remote_cmdline) + 1,
+                compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
                 &data_port);
         if (wait_connection_end && connect_existing)
@@ -836,8 +888,10 @@ int main(int argc, char **argv)
             wait_connection_end = s;
         else
             close(s);
-        setenv("QREXEC_REMOTE_DOMAIN", domname, 1);
-        prepare_local_fds(local_cmdline);
+        set_remote_domain(domname);
+        struct buffer stdin_buffer;
+        buffer_init(&stdin_buffer);
+        prepare_local_fds(local_cmdline, &stdin_buffer);
         if (connect_existing) {
             s = connect_unix_socket(src_domain_name);
             send_service_connect(s, request_id, data_domain, data_port);
@@ -864,7 +918,7 @@ int main(int argc, char **argv)
             data_protocol_version = handle_agent_handshake(data_vchan, 0);
             if (data_protocol_version < 0)
                 do_exit(1);
-            select_loop(data_vchan, data_protocol_version);
+            select_loop(data_vchan, data_protocol_version, &stdin_buffer);
         }
     }
     return 0;

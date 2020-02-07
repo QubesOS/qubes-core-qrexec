@@ -34,6 +34,8 @@ reports that "fd" is writable. Write as much as possible to fd.
 */
 int flush_client_data(int fd, struct buffer *buffer)
 {
+    if (fd == -1)
+        return 0;
     int ret;
     int len;
     for (;;) {
@@ -43,9 +45,9 @@ int flush_client_data(int fd, struct buffer *buffer)
         }
         ret = write(fd, buffer_data(buffer), len);
         if (ret == -1) {
-            if (errno != EAGAIN) {
+            if (errno != EAGAIN)
                 return WRITE_STDIN_ERROR;
-            } else
+            else
                 return WRITE_STDIN_BUFFERED;
         }
         // we previously called buffer_remove(buffer, len)

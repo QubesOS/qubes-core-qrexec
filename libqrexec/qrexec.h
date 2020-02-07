@@ -45,6 +45,7 @@
 #define NOGUI_CMD_PREFIX "nogui:"
 #define NOGUI_CMD_PREFIX_LEN (sizeof(NOGUI_CMD_PREFIX)-1)
 #define VCHAN_BASE_PORT 512
+#define MAX_QREXEC_CMD_LEN 65535UL
 
 /* protocol version */
 enum {
@@ -122,7 +123,7 @@ struct msg_header {
 struct exec_params {
     uint32_t connect_domain; /* target domain name */
     uint32_t connect_port;   /* target vchan port for i/o exchange */
-    char cmdline[0];         /* command line to execute, null terminated, size = msg_header.len - sizeof(struct exec_params) */
+    char cmdline[];          /* command line to execute, null terminated, size = msg_header.len - sizeof(struct exec_params) */
 };
 
 struct service_params {
