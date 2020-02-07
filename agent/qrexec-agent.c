@@ -164,12 +164,19 @@ void do_exec(char *cmd)
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
 
-    pw = getpwuid(geteuid());
-    if (!pw) {
-        perror("getpwuid");
-        exit(1);
-    }
-    if (!strcmp(pw->pw_name, user)) {
+    if (geteuid() != 0) {
+        /* We're not root, assume this is a testing environment. */
+
+        pw = getpwuid(geteuid());
+        if (!pw) {
+            perror("getpwuid");
+            exit(1);
+        }
+        if (strcmp(pw->pw_name, user)) {
+            fprintf(stderr, "requested user %s, but qrexec-agent is running as user %s\n",
+                    user, pw->pw_name);
+            exit(1);
+        }
         /* call QUBESRPC if requested */
         exec_qubes_rpc_if_requested(realcmd, environ);
 
