@@ -181,27 +181,76 @@ exit 1
         client = self.connect_client()
         client.handshake()
 
-    def test_client_cmdline(self):
+    def test_client_exec(self):
         agent = self.start_daemon_with_agent()
         agent.handshake()
 
+        cmd = 'user:echo Hello world'
+        port = self.client_exec(0, cmd, qrexec.MSG_JUST_EXEC)
+
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
+        self.assertEqual(data,
+                         struct.pack('<LL', 0, port) +
+                         cmd.encode() + b'\0')
+
+    def client_exec(self,
+                    domain: int,
+                    cmd: str = 'user:echo Hello world',
+                    message_type: int = qrexec.MSG_JUST_EXEC):
         client = self.connect_client()
         client.handshake()
 
-        cmd = b'user:echo Hello world'
-
         client.send_message(
-            qrexec.MSG_JUST_EXEC,
-            struct.pack('<LL', 0, 0) +
-            cmd + b'\0')
+            message_type,
+            struct.pack('<LL', domain, 0) +
+            cmd.encode() + b'\0')
 
         message_type, data = client.recv_message()
         self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
         domain, port = struct.unpack('<LL', data)
         self.assertEqual(domain, self.domain)
 
-        message_type, data = agent.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
-        self.assertEqual(data,
-                         struct.pack('<LL', 0, port) +
-                         cmd + b'\0')
+        return port
+
+    def test_client_exec_allocates_next_port(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        domain1 = self.domain + 1
+        domain2 = self.domain + 2
+        port = self.client_exec(domain1)
+        self.assertEqual(port, 513)
+        port = self.client_exec(domain2)
+        self.assertEqual(port, 514)
+
+    def test_client_exec_connection_terminated(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        domain1 = self.domain + 1
+        domain2 = self.domain + 2
+        port = self.client_exec(domain1)
+        self.assertEqual(port, 513)
+        agent.send_message(qrexec.MSG_CONNECTION_TERMINATED,
+                           struct.pack('<LL', domain1, port))
+        port = self.client_exec(domain2)
+        self.assertEqual(port, 513)
+
+    def test_client_service_connect(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        client = self.connect_client()
+        client.handshake()
+
+        target_domain = self.domain + 1
+        target_port = 513
+        ident = 'SOCKET11'
+
+        data = (struct.pack('<LL', target_domain, target_port) +
+                ident.encode() + b'\0')
+
+        client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
+        self.assertEqual(agent.recv_message(),
+                         (qrexec.MSG_SERVICE_CONNECT, data))
