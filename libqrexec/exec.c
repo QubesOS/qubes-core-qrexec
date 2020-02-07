@@ -72,9 +72,16 @@ void fix_fds(int fdin, int fdout, int fderr)
     for (i = 3; i < 256; i++)
         if (i != fdin && i != fdout && i != fderr)
             close(i);
-    if (dup2(fdin, 0) < 0 || dup2(fdout, 1) < 0 || dup2(fderr, 2) < 0 ||
-        close(fdin) || close(fdout) || (fderr != 2 && close(fderr)))
+    if (dup2(fdin, 0) < 0 || dup2(fdout, 1) < 0 || dup2(fderr, 2) < 0) {
+        perror("dup2");
         abort();
+    }
+
+    if (close(fdin) || (fdin != fdout && close(fdout)) ||
+        (fdin != fderr && fdout != fderr && fderr != 2 && close(fderr))) {
+        perror("close");
+        abort();
+    }
 }
 
 static int do_fork_exec(const char *user,
