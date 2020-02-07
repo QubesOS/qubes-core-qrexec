@@ -181,7 +181,6 @@ exit 1
         client = self.connect_client()
         client.handshake()
 
-
     def test_client_cmdline(self):
         agent = self.start_daemon_with_agent()
         agent.handshake()

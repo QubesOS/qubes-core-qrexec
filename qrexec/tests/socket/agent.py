@@ -23,7 +23,6 @@ import os.path
 import os
 import tempfile
 import shutil
-import time
 import struct
 import getpass
 import psutil
@@ -131,6 +130,11 @@ class TestAgent(TestAgentBase):
             lambda: os.path.exists(os.path.join(self.tempdir, 'new_file')),
             'file created')
 
+        self.assertEqual(
+            dom0.recv_message(),
+            (qrexec.MSG_CONNECTION_TERMINATED,
+             struct.pack('<LL', self.target_domain, self.target_port)))
+
     def test_exec_cmdline(self):
         self.start_agent()
 
@@ -159,6 +163,11 @@ class TestAgent(TestAgentBase):
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
         ])
 
+        self.assertEqual(
+            dom0.recv_message(),
+            (qrexec.MSG_CONNECTION_TERMINATED,
+             struct.pack('<LL', self.target_domain, self.target_port)))
+
     def test_trigger_service(self):
         self.start_agent()
 
@@ -181,6 +190,12 @@ class TestAgent(TestAgentBase):
         data = client.recvall(8)
         self.assertEqual(struct.unpack('<LL', data),
                          (self.target_domain, self.target_port))
+
+        client.close()
+        self.assertEqual(
+            dom0.recv_message(),
+            (qrexec.MSG_CONNECTION_TERMINATED,
+             struct.pack('<LL', self.target_domain, self.target_port)))
 
     def test_trigger_service_refused(self):
         self.start_agent()
@@ -228,7 +243,6 @@ class TestAgent(TestAgentBase):
             source_params[:64] + ident + source_params[64+len(ident):])
 
         return ident
-
 
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
