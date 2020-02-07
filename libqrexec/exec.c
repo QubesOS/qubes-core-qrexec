@@ -19,66 +19,79 @@
  *
  */
 
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
+#include <errno.h>
+#include <stddef.h>
+#include <limits.h>
+
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 
 static do_exec_t *exec_func = NULL;
 void register_exec_func(do_exec_t *func) {
+    if (exec_func != NULL)
+        abort();
     exec_func = func;
 }
 
 void exec_qubes_rpc_if_requested(char *prog, char *const envp[]) {
     /* avoid calling qubes-rpc-multiplexer through shell */
     if (strncmp(prog, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) == 0) {
-        char *tok;
+        char *tok, *savetok;
         char *argv[16]; // right now 6 are used, but allow future extensions
         size_t i = 0;
 
-        tok=strtok(prog, " ");
+        tok=strtok_r(prog, " ", &savetok);
         do {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
                 fprintf(stderr, "To many arguments to %s\n", RPC_REQUEST_COMMAND);
                 exit(1);
             }
             argv[i++] = tok;
-        } while ((tok=strtok(NULL, " ")));
+        } while ((tok=strtok_r(NULL, " ", &savetok)));
         argv[i] = NULL;
         argv[0] = QUBES_RPC_MULTIPLEXER_PATH;
         execve(QUBES_RPC_MULTIPLEXER_PATH, argv, envp);
         perror("exec qubes-rpc-multiplexer");
-        exit(1);
+        _exit(126);
     }
 }
 
 void fix_fds(int fdin, int fdout, int fderr)
 {
     int i;
-    for (i = 0; i < 256; i++)
+    for (i = 3; i < 256; i++)
         if (i != fdin && i != fdout && i != fderr)
             close(i);
-    dup2(fdin, 0);
-    dup2(fdout, 1);
-    dup2(fderr, 2);
-    close(fdin);
-    close(fdout);
-    if (fderr != 2)
-        close(fderr);
+    if (dup2(fdin, 0) < 0 || dup2(fdout, 1) < 0 || dup2(fderr, 2) < 0 ||
+        close(fdin) || close(fdout) || (fderr != 2 && close(fderr)))
+        abort();
 }
 
-void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
+static int do_fork_exec(const char *user,
+        char *cmdline,
+        int *pid,
+        int *stdin_fd,
+        int *stdout_fd,
         int *stderr_fd)
 {
-    int inpipe[2], outpipe[2], errpipe[2];
-
+    int inpipe[2], outpipe[2], errpipe[2], statuspipe[2], retval;
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0
+#endif
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, inpipe) || 
             socketpair(AF_UNIX, SOCK_STREAM, 0, outpipe) || 
-            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe))) {
+            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe)) ||
+            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, statuspipe)) {
         perror("socketpair");
         exit(1);
     }
@@ -86,16 +99,38 @@ void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
         case -1:
             perror("fork");
             exit(-1);
-        case 0:
+        case 0: {
+            int status;
+            if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)
+                abort();
             if (stderr_fd) {
                 fix_fds(inpipe[0], outpipe[1], errpipe[1]);
             } else
                 fix_fds(inpipe[0], outpipe[1], 2);
 
+            close(statuspipe[0]);
+#if !SOCK_CLOEXEC
+            status = fcntl(statuspipe[1], F_GETFD);
+            fcntl(statuspipe[1], F_SETFD, status | FD_CLOEXEC);
+#endif
             if (exec_func != NULL)
-                exec_func((char*)cmdline);
+                exec_func(cmdline, user);
+            else
+                abort();
+            status = errno;
+            while (write(statuspipe[1], &status, sizeof status) <= 0) {}
             exit(-1);
-        default:;
+        }
+        default: {
+            close(statuspipe[1]);
+            if (read(statuspipe[0], &retval, sizeof retval) == sizeof retval) {
+                siginfo_t siginfo;
+                memset(&siginfo, 0, sizeof siginfo);
+                waitid(P_PID, *pid, &siginfo, WEXITED); // discard result
+            } else {
+                retval = 0;
+            }
+        }
     }
     close(inpipe[0]);
     close(outpipe[1]);
@@ -105,4 +140,232 @@ void do_fork_exec(const char *cmdline, int *pid, int *stdin_fd, int *stdout_fd,
         close(errpipe[1]);
         *stderr_fd = errpipe[0];
     }
+    return retval;
 }
+
+#define QUBES_SOCKADDR_UN_MAX_PATH_LEN 1024
+
+#define MAKE_STRUCT(x) \
+    x("/usr/local/etc/qubes-rpc/") \
+    x("/etc/qubes-rpc/")
+static const struct Q {
+    const char *const string;
+    size_t const length;
+} qubes_rpc_directories[] = {
+#define S(z) { .string = z, .length = sizeof(z) - 1 },
+    MAKE_STRUCT(S)
+#undef S
+};
+
+static int qubes_connect(int s, const char *connect_path, const size_t total_path_length) {
+    // Avoiding an extra copy is NOT worth it!
+#define QUBES_TMP_DIRECTORY "/tmp/qrexec-XXXXXX"
+    char buf[] = QUBES_TMP_DIRECTORY "\0qrexec-socket";
+    struct sockaddr_un remote = { .sun_family = AF_UNIX, .sun_path = { '\0' } };
+    static_assert(sizeof buf <= sizeof remote.sun_path,
+                  "maximum path length of AF_UNIX sockets too small");
+    static const size_t path_separator_offset = sizeof QUBES_TMP_DIRECTORY - 1;
+    int result = -1, dummy_errno = -1;
+    socklen_t socket_len;
+    if (sizeof remote.sun_path <= total_path_length) {
+        // sockaddr_un too small :(
+        if (NULL == mkdtemp(buf))
+            return -1;
+        buf[path_separator_offset] = '/';
+        if (symlink(connect_path, buf)) {
+           dummy_errno = errno;
+           goto out;
+        }
+        memcpy(remote.sun_path, buf, sizeof buf);
+        socket_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + sizeof buf);
+    } else {
+        memcpy(remote.sun_path, connect_path, total_path_length);
+        remote.sun_path[total_path_length] = '\0';
+        socket_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + total_path_length + 1);
+    }
+
+    do
+       result = connect(s, (struct sockaddr *) &remote, socket_len);
+    while (result < 0 && (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN));
+    dummy_errno = errno;
+    unlink(buf);
+out:
+    buf[path_separator_offset] = '\0';
+    rmdir(buf);
+    errno = dummy_errno;
+    return result;
+}
+
+/* A parsed, mostly-validated RPC command. */
+struct qrexec_parsed_command {
+    /* NULL if and only if we are the fork server.  Otherwise, a NUL-terminated string. */
+    const char *const username;
+    /* Command line.  Never NULL.  NUL-terminated. Does not include "QUBESRPC ". */
+    char *const command;
+    /* Service descriptor.  Identical to `command` unless the "nogui:" prefix is present, in which case it points
+     * after the colon.  Always points to the start of the service name. */
+    const char *service_descriptor;
+    /* Size of service_descriptor (the service name + argument).  Guaranteed to be <= MAX_SERVICE_NAME_LEN. */
+    size_t const service_descriptor_length;
+};
+
+static int execute_parsed_qubes_rpc_command(const struct qrexec_parsed_command *const command, int *const pid, int *const stdin_fd, int *const stdout_fd, int *const stderr_fd, struct buffer *stdin_buffer);
+
+static const char *skip_nogui(const char *cmdline) {
+    return strncmp(cmdline, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) ? cmdline : cmdline + NOGUI_CMD_PREFIX_LEN;
+}
+
+int execute_qubes_rpc_command(char *cmdline, int *pid, int *stdin_fd,
+        int *stdout_fd, int *stderr_fd, bool strip_username, struct buffer *stdin_buffer) {
+    const char *service_descriptor;
+    char *realcmd;
+    size_t service_descriptor_length;
+    const char *const username = strip_username ? cmdline : NULL;
+    {
+        if (strip_username) {
+            realcmd = strchr(cmdline, ':');
+            if (!realcmd) {
+                fputs("Bad command from dom0: no colon\n", stderr);
+                abort();
+            }
+            *realcmd++ = '\0';
+        } else {
+            realcmd = cmdline;
+        }
+        // Get the part of the command line that will be executed.
+        const char *const start_cmdline = skip_nogui(realcmd);
+        if (strncmp(start_cmdline, RPC_REQUEST_COMMAND " ", RPC_REQUEST_COMMAND_LEN + 1) != 0) {
+            // Legacy qrexec behavior: spawn shell directly.
+            return do_fork_exec(username, realcmd, pid, stdin_fd, stdout_fd, stderr_fd);
+        } else {
+            // Proper Qubes RPC call
+            service_descriptor = start_cmdline + RPC_REQUEST_COMMAND_LEN + 1;
+        }
+    }
+    const char *const end_service_descriptor = strchr(service_descriptor, ' ');
+    if (!end_service_descriptor) {
+        fputs("Bad command from dom0: no remote domain\n", stderr);
+        abort();
+    }
+    service_descriptor_length = (size_t)(end_service_descriptor - service_descriptor);
+    /* Check that the path is of a valid length */
+    if (service_descriptor_length > MAX_SERVICE_NAME_LEN) {
+        fprintf(stderr, "Bad command from dom0: absurdly long command (length %zu)\n", service_descriptor_length);
+        abort();
+    }
+    const struct qrexec_parsed_command command = {
+       .username = username,
+       .command = realcmd,
+       .service_descriptor = service_descriptor,
+       .service_descriptor_length = service_descriptor_length,
+    };
+    return execute_parsed_qubes_rpc_command(&command, pid, stdin_fd, stdout_fd, stderr_fd, stdin_buffer);
+}
+
+static int execute_parsed_qubes_rpc_command(
+        const struct qrexec_parsed_command *const command, int *const pid, int *const stdin_fd,
+        int *const stdout_fd, int *const stderr_fd, struct buffer *stdin_buffer) {
+    char const *const delimiter = memchr(command->service_descriptor, '+', command->service_descriptor_length);
+    size_t const service_length = delimiter ?
+        (size_t)(delimiter - command->service_descriptor) : command->service_descriptor_length;
+
+    if (!service_length) {
+        fputs("Service path empty\n", stderr);
+        return -1;
+    } else if (service_length > NAME_MAX) {
+        fprintf(stderr, "Service path too long to execute: %zu\n", service_length);
+        return -1;
+    }
+
+    int s;
+    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("socket");
+        return -1;
+    }
+
+    bool use_bare_path = command->service_descriptor_length > NAME_MAX;
+    for (;;) {
+        for (size_t i = 0; i < ARRAY_SIZE(qubes_rpc_directories); ++i) {
+            static_assert(sizeof "/usr/local/etc/qubes-rpc/" + NAME_MAX < QUBES_SOCKADDR_UN_MAX_PATH_LEN,
+                          "buffer length too low");
+            char service_full_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN] = { 0 };
+            size_t const directory_length = qubes_rpc_directories[i].length;
+
+            // The total size of the path (not including NUL terminator).
+            // Cannot overflow due to earlier checks.
+            size_t const total_path_length = directory_length +
+                (use_bare_path ? service_length : command->service_descriptor_length);
+            if (sizeof service_full_path <= total_path_length) {
+                fputs("qrexec internal error: miscalculated the buffer size needed", stderr);
+                abort();
+            }
+            memcpy(service_full_path, qubes_rpc_directories[i].string, directory_length);
+            memcpy(service_full_path + directory_length, command->service_descriptor, total_path_length - directory_length);
+            service_full_path[total_path_length] = '\0';
+
+            if (!qubes_connect(s, service_full_path, total_path_length)) {
+                *stdout_fd = *stdin_fd = s;
+                if (stderr_fd) {
+                    *stderr_fd = -1;
+                }
+                *pid = -1;
+                set_nonblock(s);
+                buffer_append(stdin_buffer, command->service_descriptor, strlen(command->service_descriptor) + 1);
+                return 0;
+            }
+            switch (errno) {
+            // These cannot happen
+            case EFAULT:       // all of our parameters are in valid memory
+            case EINVAL:       // we passed valid parameters
+            case EBADF:        // `s` is a valid file descriptor
+            case ENOTSOCK:     // `s` was created by a call to `socket(2)`
+            case ENETUNREACH:  // cannot happen for AF_UNIX
+            case EADDRNOTAVAIL:// cannot happen for AF_UNIX
+            case EINPROGRESS:  // this socket is blocking
+            case EAGAIN:       // ditto
+#if EAGAIN != EWOULDBLOCK
+            case EWOULDBLOCK:  // ditto
+#endif
+            case EINTR:        // we already check for this and retry
+            case EAFNOSUPPORT: // the kernel supports AF_UNIX
+            case EALREADY:     // we have not connected this yet!
+            case EPROTO:       // no remote peer to mess up the protocol
+            default:
+                perror("unexpected return from connect()");
+                abort();
+            // Filesystem misconfigured
+            case ENOENT:
+            case ENOTDIR:
+                // These errors would also happen with `execve()`
+                break;
+            // These should not happen
+            case EPROTOTYPE:
+            case ETIMEDOUT:
+            case EPERM:
+            case EIO:
+            case EISDIR:
+                // Socket server problem and/or misconfiguration.  Fail the whole connection.
+                // (We do not want to fall back because the user may have
+                // overriden behavior for security reasons, and because
+                // fail-fast is much easier to debug).
+                goto out;
+            // Found a file instead of a socket
+            case EACCES:
+            case ECONNREFUSED:
+                close(s);
+                s = -1;
+                return do_fork_exec(command->username, command->command, pid, stdin_fd, stdout_fd, stderr_fd);
+            }
+        }
+        if (!use_bare_path) {
+            use_bare_path = true; // try again with path excluding the service argument
+        } else {
+            break;
+        }
+    }
+out:
+    if (s > 0)
+        close(s);
+    return -1;
+}
+// vim: set sw=4 ts=4 sts=4 et:

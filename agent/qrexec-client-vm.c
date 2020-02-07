@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
-#define _GNU_SOURCE
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <sys/un.h>
@@ -32,20 +31,23 @@
 #include "qrexec.h"
 #include "qrexec-agent.h"
 
-void handle_vchan_error(const char *op)
+const bool qrexec_is_fork_server = false;
+
+_Noreturn void handle_vchan_error(const char *op)
 {
     fprintf(stderr, "Error while vchan %s, exiting\n", op);
     exit(1);
 }
 
-void do_exec(char *cmd __attribute__((__unused__))) {
+_Noreturn void do_exec(char *cmd __attribute__((unused)), char const* user __attribute__((__unused__))) {
     fprintf(stderr, "BUG: do_exec function shouldn't be called!\n");
-    exit(1);
+    abort();
 }
 
-int connect_unix_socket(const char *path)
+static int connect_unix_socket(const char *path)
 {
-    int s, len;
+    int s;
+    size_t len;
     struct sockaddr_un remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -57,14 +59,14 @@ int connect_unix_socket(const char *path)
     strncpy(remote.sun_path, path,
             sizeof(remote.sun_path) - 1);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
-    if (connect(s, (struct sockaddr *) &remote, len) == -1) {
+    if (connect(s, (struct sockaddr *) &remote, (socklen_t)len) == -1) {
         perror("connect");
         exit(1);
     }
     return s;
 }
 
-char *get_program_name(char *prog)
+static char *get_program_name(char *prog)
 {
     char *basename = rindex(prog, '/');
     if (basename)
@@ -76,7 +78,7 @@ char *get_program_name(char *prog)
 /* Target specification with keyword have changed from $... to @... . Convert
  * the argument appropriately, to avoid breaking user tools.
  */
-void convert_target_name_keyword(char *target)
+static void convert_target_name_keyword(char *target)
 {
     size_t i;
     size_t len = strlen(target);
@@ -91,7 +93,7 @@ enum {
     opt_no_filter_stderr = 'T'+128,
 };
 
-struct option longopts[] = {
+static struct option longopts[] = {
     { "buffer-size", required_argument, 0,  'b' },
     { "filter-escape-chars-stdout", no_argument, 0, 't'},
     { "filter-escape-chars-stderr", no_argument, 0, 'T'},
@@ -101,7 +103,7 @@ struct option longopts[] = {
     { NULL, 0, 0, 0},
 };
 
-_Noreturn void usage(const char *argv0) {
+_Noreturn static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [options] target_vmname program_ident [local_program [local program arguments]]\n",
             argv0);
@@ -124,7 +126,8 @@ int main(int argc, char **argv)
     struct exec_params exec_params;
     size_t service_name_len;
     char *service_name;
-    int ret, i;
+    ssize_t ret;
+    int i;
     int start_local_process = 0;
     char *abs_exec_path;
     pid_t child_pid = 0;
@@ -277,5 +280,5 @@ int main(int argc, char **argv)
         }
     }
 
-    return ret;
+    return (int)ret;
 }
