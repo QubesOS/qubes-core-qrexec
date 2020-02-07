@@ -23,7 +23,6 @@ import os.path
 import os
 import tempfile
 import shutil
-import time
 import struct
 import getpass
 import psutil
@@ -39,7 +38,7 @@ ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
                  'socket tests not set up')
-class TestAgent(unittest.TestCase):
+class TestAgentBase(unittest.TestCase):
     agent = None
     domain = 42
     target_domain = 43
@@ -96,6 +95,10 @@ class TestAgent(unittest.TestCase):
         self.addCleanup(client.close)
         return client
 
+
+@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
+                 'socket tests not set up')
+class TestAgent(TestAgentBase):
     def test_handshake(self):
         self.start_agent()
 
@@ -127,6 +130,11 @@ class TestAgent(unittest.TestCase):
             lambda: os.path.exists(os.path.join(self.tempdir, 'new_file')),
             'file created')
 
+        self.assertEqual(
+            dom0.recv_message(),
+            (qrexec.MSG_CONNECTION_TERMINATED,
+             struct.pack('<LL', self.target_domain, self.target_port)))
+
     def test_exec_cmdline(self):
         self.start_agent()
 
@@ -148,14 +156,17 @@ class TestAgent(unittest.TestCase):
             b'')
 
         messages = target.recv_all_messages()
-        # Unfortunately, the order of two middle messages
-        # (stdout/stderr end) is not deterministic.
-        self.assertListEqual(sorted(messages), sorted([
+        self.assertListEqual(util.sort_messages(messages), [
             (qrexec.MSG_DATA_STDOUT, b'Hello world\n'),
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_STDERR, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
-        ]))
+        ])
+
+        self.assertEqual(
+            dom0.recv_message(),
+            (qrexec.MSG_CONNECTION_TERMINATED,
+             struct.pack('<LL', self.target_domain, self.target_port)))
 
     def test_trigger_service(self):
         self.start_agent()
@@ -179,6 +190,12 @@ class TestAgent(unittest.TestCase):
         data = client.recvall(8)
         self.assertEqual(struct.unpack('<LL', data),
                          (self.target_domain, self.target_port))
+
+        client.close()
+        self.assertEqual(
+            dom0.recv_message(),
+            (qrexec.MSG_CONNECTION_TERMINATED,
+             struct.pack('<LL', self.target_domain, self.target_port)))
 
     def test_trigger_service_refused(self):
         self.start_agent()
@@ -226,6 +243,127 @@ class TestAgent(unittest.TestCase):
             source_params[:64] + ident + source_params[64+len(ident):])
 
         return ident
+
+
+@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
+                 'socket tests not set up')
+class TestAgentStreams(TestAgentBase):
+    def execute(self, cmd: str):
+        self.start_agent()
+
+        dom0 = self.connect_dom0()
+        dom0.handshake()
+
+        user = getpass.getuser()
+        cmdline = '{}:{}\0'.format(user, cmd).encode('ascii')
+
+        dom0.send_message(
+            qrexec.MSG_EXEC_CMDLINE,
+            struct.pack('<LL', self.target_domain, self.target_port) +
+            cmdline)
+
+        target = self.connect_target()
+        target.handshake()
+        return target
+
+    def test_stdin_stderr(self):
+        target = self.execute('echo "stdout"; echo "stderr" >&2')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b'stdout\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b'stderr\n'),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    def test_pass_stdin(self):
+        target = self.execute('cat')
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'data 1')
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'data 1'))
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'data 2')
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'data 2'))
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    def test_close_stdin_early(self):
+        target = self.execute('head -n1')
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'data 1\n')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'data 2\n')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b'data 1\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    def test_close_stdout_stderr_early(self):
+        target = self.execute('''\
+read
+echo closing stdout
+exec >&-
+read
+echo closing stderr >&2
+exec 2>&-
+read code
+exit $code
+''')
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'\n')
+
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'closing stdout\n'))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b''))
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'\n')
+
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDERR, b'closing stderr\n'))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDERR, b''))
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'42\n')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 42)))
+
+    def test_stdio_socket(self):
+        target = self.execute('''\
+kill -USR1 $PPID
+echo hello world >&0
+read x
+echo "received: $x" >&0
+''')
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'hello world\n'))
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'stdin\n')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b'received: stdin\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
 
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),

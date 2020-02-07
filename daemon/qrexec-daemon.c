@@ -965,7 +965,7 @@ static int handle_agent_restart(int xid) {
 struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
     { "quiet", no_argument, 0, 'q' },
-    { "socket-dir", required_argument, 0, 'd' },
+    { "socket-dir", required_argument, 0, 'd' + 128 },
     { "policy-program", required_argument, 0, 'p' },
     { "direct", no_argument, 0, 'D' },
     { NULL, 0, 0, 0 },
@@ -977,7 +977,7 @@ _Noreturn void usage(const char *argv0)
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -h, --help - display usage\n");
     fprintf(stderr, "  -q, --quiet - quiet mode\n");
-    fprintf(stderr, "  -d, --socket-dir=PATH - directory for qrexec socket, default: %s\n",
+    fprintf(stderr, "  --socket-dir=PATH - directory for qrexec socket, default: %s\n",
             QREXEC_DAEMON_SOCKET_DIR);
     fprintf(stderr, "  -p, --policy-program=PATH - program to execute to check policy, default: %s\n",
             QREXEC_POLICY_PROGRAM);
@@ -992,12 +992,12 @@ int main(int argc, char **argv)
     int max, vchan_fd;
     sigset_t chld_set;
 
-    while ((opt=getopt_long(argc, argv, "hqd:p:D", longopts, NULL)) != -1) {
+    while ((opt=getopt_long(argc, argv, "hqp:D", longopts, NULL)) != -1) {
         switch (opt) {
             case 'q':
                 opt_quiet = 1;
                 break;
-            case 'd':
+            case 'd' + 128:
                 socket_dir = strdup(optarg);
                 break;
             case 'p':

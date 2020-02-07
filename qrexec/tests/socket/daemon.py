@@ -181,28 +181,238 @@ exit 1
         client = self.connect_client()
         client.handshake()
 
-
-    def test_client_cmdline(self):
+    def test_client_exec(self):
         agent = self.start_daemon_with_agent()
         agent.handshake()
 
+        cmd = 'user:echo Hello world'
+        port = self.client_exec(0, cmd, qrexec.MSG_JUST_EXEC)
+
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
+        self.assertEqual(data,
+                         struct.pack('<LL', 0, port) +
+                         cmd.encode() + b'\0')
+
+    def client_exec(self,
+                    domain: int,
+                    cmd: str = 'user:echo Hello world',
+                    message_type: int = qrexec.MSG_JUST_EXEC):
         client = self.connect_client()
         client.handshake()
 
-        cmd = b'user:echo Hello world'
-
         client.send_message(
-            qrexec.MSG_JUST_EXEC,
-            struct.pack('<LL', 0, 0) +
-            cmd + b'\0')
+            message_type,
+            struct.pack('<LL', domain, 0) +
+            cmd.encode() + b'\0')
 
         message_type, data = client.recv_message()
         self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
         domain, port = struct.unpack('<LL', data)
         self.assertEqual(domain, self.domain)
 
-        message_type, data = agent.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
-        self.assertEqual(data,
-                         struct.pack('<LL', 0, port) +
-                         cmd + b'\0')
+        return port
+
+    def test_client_exec_allocates_next_port(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        domain1 = self.domain + 1
+        domain2 = self.domain + 2
+        port = self.client_exec(domain1)
+        self.assertEqual(port, 513)
+        port = self.client_exec(domain2)
+        self.assertEqual(port, 514)
+
+    def test_client_exec_connection_terminated(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        domain1 = self.domain + 1
+        domain2 = self.domain + 2
+        port = self.client_exec(domain1)
+        self.assertEqual(port, 513)
+        agent.send_message(qrexec.MSG_CONNECTION_TERMINATED,
+                           struct.pack('<LL', domain1, port))
+        port = self.client_exec(domain2)
+        self.assertEqual(port, 513)
+
+    def test_client_service_connect(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        client = self.connect_client()
+        client.handshake()
+
+        target_domain = self.domain + 1
+        target_port = 513
+        ident = 'SOCKET11'
+
+        data = (struct.pack('<LL', target_domain, target_port) +
+                ident.encode() + b'\0')
+
+        client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
+        self.assertEqual(agent.recv_message(),
+                         (qrexec.MSG_SERVICE_CONNECT, data))
+
+
+@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
+                 'socket tests not set up')
+class TestClient(unittest.TestCase):
+    client = None
+
+    def setUp(self):
+        self.tempdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tempdir)
+
+    def start_client(self, args):
+        env = os.environ.copy()
+        env['LD_LIBRARY_PATH'] = os.path.join(ROOT_PATH, 'libqrexec')
+        env['VCHAN_DOMAIN'] = '0'
+        env['VCHAN_SOCKET_DIR'] = self.tempdir
+        cmd = [
+            os.path.join(ROOT_PATH, 'daemon', 'qrexec-client'),
+            '--socket-dir=' + self.tempdir,
+        ] + args
+        if os.environ.get('USE_STRACE'):
+            cmd = ['strace', '-f'] + cmd
+        self.client = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+        )
+        self.addCleanup(self.stop_client)
+
+    def stop_client(self):
+        if self.client:
+            self.client.terminate()
+            self.client.communicate()
+            self.client = None
+
+    def connect_daemon(self, domain_name):
+        daemon = qrexec.socket_server(
+            os.path.join(self.tempdir, 'qrexec.{}'.format(domain_name)))
+        self.addCleanup(daemon.close)
+        return daemon
+
+    def connect_target(self, domain, port):
+        target = qrexec.vchan_client(self.tempdir, 0, domain, port)
+        self.addCleanup(target.close)
+        return target
+
+    def connect_source(self, domain, port):
+        source = qrexec.vchan_server(self.tempdir, domain, 0, port)
+        self.addCleanup(source.close)
+        return source
+
+    def test_run_vm_command_from_dom0(self):
+        cmd = 'user:command'
+        target_domain_name = 'target_domain'
+        target_domain = 42
+        target_port = 513
+
+        target_daemon = self.connect_daemon(target_domain_name)
+        self.start_client(['-d', target_domain_name, cmd])
+        target_daemon.accept()
+        target_daemon.handshake()
+
+        # negotiate_connection_params
+        self.assertEqual(
+            target_daemon.recv_message(),
+            (qrexec.MSG_EXEC_CMDLINE,
+             struct.pack('<LL', 0, 0) + cmd.encode() + b'\0'))
+        target_daemon.send_message(
+            qrexec.MSG_EXEC_CMDLINE,
+            struct.pack('<LL', target_domain, target_port))
+
+        target = self.connect_target(target_domain, target_port)
+        target.handshake()
+
+        # select_loop
+        target.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
+        target.send_message(qrexec.MSG_DATA_STDOUT, b'')
+        self.assertEqual(self.client.stdout.read(), b'stdout data\n')
+        target.send_message(qrexec.MSG_DATA_EXIT_CODE,
+                                   struct.pack('<L', 42))
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 42)
+
+    def test_run_vm_command_and_connect_vm(self):
+        cmd = 'user:command'
+        request_id = 'SOCKET11'
+        src_domain_name = 'src_domain'
+        src_domain = 43
+        target_domain_name = 'target_domain'
+        target_domain = 42
+        target_port = 513
+
+        target_daemon = self.connect_daemon(target_domain_name)
+        src_daemon = self.connect_daemon(src_domain_name)
+
+        self.start_client([
+            '-d', target_domain_name,
+            '-c', '{},{},{}'.format(
+                request_id, src_domain_name, src_domain),
+            cmd,
+        ])
+
+        target_daemon.accept()
+        target_daemon.handshake()
+
+        # negotiate_connection_params
+        self.assertEqual(
+            target_daemon.recv_message(),
+            (qrexec.MSG_EXEC_CMDLINE,
+             struct.pack('<LL', src_domain, 0) + cmd.encode() + b'\0'))
+        target_daemon.send_message(
+            qrexec.MSG_EXEC_CMDLINE,
+            struct.pack('<LL', target_domain, target_port))
+
+        # send_service_connect
+        src_daemon.accept()
+        src_daemon.handshake()
+        self.assertEqual(
+            src_daemon.recv_message(),
+            (qrexec.MSG_SERVICE_CONNECT,
+             struct.pack('<LL32s', target_domain, target_port,
+                         request_id.encode())))
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_command_and_connect_vm(self):
+        cmd = 'echo Hello world'
+        request_id = 'SOCKET11'
+        src_domain_name = 'src_domain'
+        src_domain = 43
+        src_port = 42
+
+        src_daemon = self.connect_daemon(src_domain_name)
+        source = self.connect_source(src_domain, src_port)
+
+        self.start_client([
+            '-d', 'dom0',
+            '-c', '{},{},{}'.format(
+                request_id, src_domain_name, src_domain),
+            cmd,
+        ])
+
+        # negotiate_connection_params
+        src_daemon.accept()
+        src_daemon.handshake()
+        self.assertEqual(
+            src_daemon.recv_message(),
+            (qrexec.MSG_SERVICE_CONNECT,
+             struct.pack('<LL32s', 0, 0, request_id.encode())))
+        src_daemon.send_message(
+            qrexec.MSG_SERVICE_CONNECT,
+            struct.pack('<LL', src_domain, src_port))
+
+        source.accept()
+        source.handshake()
+
+        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+        self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b'Hello world\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
+        ])
