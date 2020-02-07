@@ -49,6 +49,8 @@ pid_t local_pid = 0;
 int is_service = 0;
 int child_exited = 0;
 
+const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
+
 extern char **environ;
 
 /* initialize data_protocol_version */
@@ -154,7 +156,7 @@ static int connect_unix_socket(const char *domname)
 
     remote.sun_family = AF_UNIX;
     snprintf(remote.sun_path, sizeof remote.sun_path,
-            QREXEC_DAEMON_SOCKET_DIR "/qrexec.%s", domname);
+             "%s/qrexec.%s", socket_dir, domname);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
     if (connect(s, (struct sockaddr *) &remote, len) == -1) {
         perror("connect");
@@ -582,20 +584,28 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version)
             handle_input(vchan, data_protocol_version);
     }
 }
+struct option longopts[] = {
+    { "help", no_argument, 0, 'h' },
+    { "socket-dir", required_argument, 0, 'd'+128 },
+    { NULL, 0, 0, 0 },
+};
 
 static void usage(char *name)
 {
     fprintf(stderr,
-            "usage: %s [-w timeout] [-W] [-t] [-T] -d domain_name ["
+            "usage: %s [options] -d domain_name ["
             "-l local_prog|"
             "-c request_id,src_domain_name,src_domain_id|"
             "-e] remote_cmdline\n"
-            "-e means exit after sending cmd,\n"
-            "-t enables replacing problematic bytes with '_' in command output, -T is the same for stderr\n"
-            "-W waits for connection end even in case of VM-VM (-c)\n"
-            "-c: connect to existing process (response to trigger service call)\n"
-            "-w timeout: override default connection timeout of 5s (set 0 for no timeout)\n",
-            name);
+            "Options:\n"
+            "  -h, --help - display usage\n"
+            "  -e - exit after sending cmd\n"
+            "  -t - enables replacing problematic bytes with '_' in command output, -T is the same for stderr\n"
+            "  -W - waits for connection end even in case of VM-VM (-c)\n"
+            "  -c - connect to existing process (response to trigger service call)\n"
+            "  -w timeout - override default connection timeout of 5s (set 0 for no timeout)\n"
+            "  --socket-dir=PATH -  directory for qrexec socket, default: %s\n",
+            name, QREXEC_DAEMON_SOCKET_DIR);
     exit(1);
 }
 
@@ -706,7 +716,7 @@ int main(int argc, char **argv)
     struct service_params svc_params;
     int data_protocol_version;
 
-    while ((opt = getopt(argc, argv, "d:l:ec:tTw:W")) != -1) {
+    while ((opt = getopt_long(argc, argv, "hd:l:ec:tTw:W", longopts, NULL)) != -1) {
         switch (opt) {
             case 'd':
                 domname = strdup(optarg);
@@ -734,6 +744,10 @@ int main(int argc, char **argv)
             case 'W':
                 wait_connection_end = 1;
                 break;
+            case 'd' + 128:
+                socket_dir = strdup(optarg);
+                break;
+            case 'h':
             default:
                 usage(argv[0]);
         }
