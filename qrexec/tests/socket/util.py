@@ -26,3 +26,14 @@ def wait_until(func, message, n_tries=10, delay=0.1):
             return
         time.sleep(delay)
     raise Exception('Timed out waiting: ' + message)
+
+
+def sort_messages(messages):
+    '''
+    Sort a list of messages (message_type, data) by message type.
+    Useful because the order of messages from multiple streams is not
+    deterministic wrt stdout/stderr.
+    '''
+    # Python sort is stable, so it will not reorder messages with the same
+    # type.
+    return sorted(messages, key=lambda m: m[0])
