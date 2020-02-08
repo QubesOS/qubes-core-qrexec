@@ -24,6 +24,7 @@ jobs:
       script: pylint qrexec
     - install:
        - pip install --quiet codecov
+       - pip install --quiet 'coverage<5.0'
        - docker build -t qrexec-test ci
       env: DOCKER_RUN="docker run -v $TRAVIS_BUILD_DIR:$TRAVIS_BUILD_DIR -v /tmp/.X11-unix:/tmp/.X11-unix -w $TRAVIS_BUILD_DIR -e DISPLAY=$DISPLAY -- qrexec-test"
       script: $DOCKER_RUN ./run-tests
