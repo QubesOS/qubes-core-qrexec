@@ -610,8 +610,7 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
                 FD_ISSET(local_stdin_fd, &wr_set)) {
             if (flush_client_data(local_stdin_fd, stdin_buf) == WRITE_STDIN_ERROR) {
                 perror("write stdin");
-                close(local_stdin_fd);
-                local_stdin_fd = -1;
+                close_stdin_fd();
             }
         }
         while (libvchan_data_ready(vchan))
