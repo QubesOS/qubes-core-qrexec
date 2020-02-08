@@ -1,6 +1,8 @@
 #!/bin/sh -e
 
 if pkg-config vchan-socket; then
+    export CFLAGS=--coverage
+    export LDFLAGS=--coverage
     make -C libqrexec BACKEND_VMM=socket
     make -C agent BACKEND_VMM=socket
     make -C daemon BACKEND_VMM=socket

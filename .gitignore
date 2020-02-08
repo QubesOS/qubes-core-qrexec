@@ -18,5 +18,8 @@ pkgs/
 *.so.[0-9]
 *.so
 *.o.dep
+*.gcno
+*.gcda
+*.gcov
 *~
 \#*#
