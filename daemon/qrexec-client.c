@@ -382,6 +382,9 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
                     send_exit_code(vchan, 0);
                     do_exit(0);
                 }
+            } else if (local_pid < 0) {
+                // socket-based service, so we will never get a SIGCHLD
+                do_exit(0);
             }
         }
     }
