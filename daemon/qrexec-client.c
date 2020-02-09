@@ -237,7 +237,7 @@ static _Noreturn void do_exec(char *prog, const char *username __attribute__((un
     exit(1);
 }
 
-static void do_exit(int code)
+static _Noreturn void do_exit(int code)
 {
     int status;
     close_stdin_fd();
@@ -248,6 +248,10 @@ static void do_exit(int code)
     exit(code);
 }
 
+static _Noreturn void close_vchan_and_exit(int code, libvchan_t *vchan) {
+    libvchan_close(vchan);
+    do_exit(code);
+}
 
 static void prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
 {
@@ -330,11 +334,11 @@ static void send_exit_code(libvchan_t *vchan, int status)
     hdr.len = sizeof(int);
     if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
         fprintf(stderr, "Failed to write exit code to the agent\n");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
     if (libvchan_send(vchan, &status, sizeof(status)) != sizeof(status)) {
         fprintf(stderr, "Failed to write exit code(2) to the agent\n");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
 }
 
@@ -358,19 +362,19 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
     buf = malloc(max_len);
     if (!buf) {
         fprintf(stderr, "Out of memory\n");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
 
     ret = read(local_stdout_fd, buf, max_len);
     if (ret < 0) {
         perror("read");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
     hdr.type = is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN;
     hdr.len = ret;
     if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
         fprintf(stderr, "Failed to write STDIN data to the agent\n");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
     if (ret == 0) {
         close_stdout_fd();
@@ -382,12 +386,11 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
                     /* if this is "remote" service end and no real local process
                      * exists (using own stdin/out) send also fake exit code */
                     send_exit_code(vchan, 0);
-                    libvchan_close(vchan);
-                    do_exit(0);
+                    close_vchan_and_exit(0, vchan);
                 }
             } else if (local_pid < 0) {
                 // socket-based service, so we will never get a SIGCHLD
-                do_exit(0);
+                close_vchan_and_exit(0, vchan);
             }
         }
     }
@@ -454,20 +457,20 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
     buf = malloc(buf_len);
     if (!buf) {
         fprintf(stderr, "Out of memory\n");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
 
     if (libvchan_recv(vchan, &hdr, sizeof hdr) < 0) {
         perror("read vchan");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
     if (hdr.len > buf_len) {
         fprintf(stderr, "client_header.len=%d\n", hdr.len);
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
     if (!read_vchan_all(vchan, buf, hdr.len)) {
         perror("read daemon");
-        do_exit(1);
+        close_vchan_and_exit(1, vchan);
     }
 
     switch (hdr.type) {
@@ -492,7 +495,7 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
                             close_stdin_fd();
                         } else {
                             perror("write local stdout");
-                            do_exit(1);
+                            close_vchan_and_exit(1, vchan);
                         }
                         break;
                     case WRITE_STDIN_OK:
@@ -506,18 +509,17 @@ static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
             write_all(2, buf, hdr.len);
             break;
         case MSG_DATA_EXIT_CODE:
-            libvchan_close(vchan);
             if (hdr.len < sizeof(status))
                 status = 255;
             else
                 memcpy(&status, buf, sizeof(status));
 
             flush_client_data(local_stdin_fd, stdin_buf);
-            do_exit(status);
+            close_vchan_and_exit(status, vchan);
             break;
         default:
             fprintf(stderr, "unknown msg %d\n", hdr.type);
-            do_exit(1);
+            close_vchan_and_exit(1, vchan);
     }
 
     free(buf);
@@ -535,7 +537,7 @@ static void check_child_status(libvchan_t *vchan)
         pid_t pid = waitpid(local_pid, &status, WNOHANG);
         if (pid < 0) {
             perror("waitpid");
-            do_exit(1);
+            close_vchan_and_exit(1, vchan);
         }
         if (pid == 0 || !WIFEXITED(status))
             return;
@@ -543,8 +545,7 @@ static void check_child_status(libvchan_t *vchan)
     }
     if (is_service)
         send_exit_code(vchan, status);
-    libvchan_close(vchan);
-    do_exit(status);
+    close_vchan_and_exit(1, vchan);
 }
 
 static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buffer *stdin_buf)
@@ -601,7 +602,7 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
                 continue;
             } else {
                 perror("select");
-                do_exit(1);
+                close_vchan_and_exit(1, vchan);
             }
         }
         if (ret == 0) {
@@ -715,14 +716,13 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
             /* calculate how much time left until connection timeout expire */
             if (gettimeofday(&now_tv, NULL) == -1) {
                 perror("gettimeofday");
-                do_exit(1);
+                close_vchan_and_exit(1, conn);
             }
             timersub(&start_tv, &now_tv, &timeout_tv);
             timeout_tv.tv_sec += timeout;
             if (timeout_tv.tv_sec < 0) {
                 fprintf(stderr, "vchan connection timeout\n");
-                libvchan_close(conn);
-                do_exit(1);
+                close_vchan_and_exit(1, conn);
             }
             FD_ZERO(&rdset);
             FD_SET(fd, &rdset);
@@ -732,13 +732,10 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
                         break;
                     }
                     fprintf(stderr, "vchan connection error\n");
-                    libvchan_close(conn);
-                    do_exit(1);
-                    break;
+                    close_vchan_and_exit(1, conn);
                 case 0:
                     fprintf(stderr, "vchan connection timeout\n");
-                    libvchan_close(conn);
-                    do_exit(1);
+                    close_vchan_and_exit(1, conn);
             }
         }
         libvchan_wait(conn);
@@ -872,7 +869,7 @@ int main(int argc, char **argv)
         }
         data_protocol_version = handle_agent_handshake(data_vchan, connect_existing);
         if (data_protocol_version < 0)
-            do_exit(1);
+            close_vchan_and_exit(1, data_vchan);
         select_loop(data_vchan, data_protocol_version, &stdin_buffer);
     } else {
         msg_type = just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE;
@@ -919,7 +916,7 @@ int main(int argc, char **argv)
             }
             data_protocol_version = handle_agent_handshake(data_vchan, 0);
             if (data_protocol_version < 0)
-                do_exit(1);
+                close_vchan_and_exit(1, data_vchan);
             select_loop(data_vchan, data_protocol_version, &stdin_buffer);
         }
     }
