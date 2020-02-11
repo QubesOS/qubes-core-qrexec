@@ -337,6 +337,44 @@ class TestClient(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
 
+    def test_run_vm_command_from_dom0_with_local_command(self):
+        cmd = 'user:command'
+        local_cmd = "while read x; do echo input: $x; done; exit 44"
+        target_domain_name = 'target_domain'
+        target_domain = 42
+        target_port = 513
+
+        target_daemon = self.connect_daemon(target_domain_name)
+        self.start_client(['-d', target_domain_name, '-l', local_cmd, cmd])
+        target_daemon.accept()
+        target_daemon.handshake()
+
+        # negotiate_connection_params
+        self.assertEqual(
+            target_daemon.recv_message(),
+            (qrexec.MSG_EXEC_CMDLINE,
+             struct.pack('<LL', 0, 0) + cmd.encode() + b'\0'))
+        target_daemon.send_message(
+            qrexec.MSG_EXEC_CMDLINE,
+            struct.pack('<LL', target_domain, target_port))
+
+        target = self.connect_target(target_domain, target_port)
+        target.handshake()
+
+        # select_loop
+        target.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
+        self.assertEqual(target.recv_message(), (
+            qrexec.MSG_DATA_STDIN, b'input: stdout data\n'))
+
+        target.send_message(qrexec.MSG_DATA_STDOUT, b'')
+        self.assertEqual(target.recv_message(), (
+            qrexec.MSG_DATA_STDIN, b''))
+
+        self.client.wait()
+
+        # If local_cmd finishes first, return code is 0.
+        self.assertEqual(self.client.returncode, 0)
+
     def test_run_vm_command_and_connect_vm(self):
         cmd = 'user:command'
         request_id = 'SOCKET11'
