@@ -545,7 +545,7 @@ static void check_child_status(libvchan_t *vchan)
     }
     if (is_service)
         send_exit_code(vchan, status);
-    close_vchan_and_exit(1, vchan);
+    close_vchan_and_exit(status, vchan);
 }
 
 static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buffer *stdin_buf)
