@@ -36,21 +36,21 @@
 #include "libqrexec-utils.h"
 
 // whether qrexec-client should replace problematic bytes with _ before printing the output
-int replace_chars_stdout = 0;
-int replace_chars_stderr = 0;
+static int replace_chars_stdout = 0;
+static int replace_chars_stderr = 0;
 
 #define VCHAN_BUFFER_SIZE 65536
 
 #define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
 
-int local_stdin_fd, local_stdout_fd;
-pid_t local_pid = 0;
+static int local_stdin_fd, local_stdout_fd;
+static pid_t local_pid = 0;
 /* flag if this is "remote" end of service call. In this case swap STDIN/STDOUT
  * msg types and send exit code at the end */
-int is_service = 0;
-int child_exited = 0;
+static int is_service = 0;
+static int child_exited = 0;
 
-const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
+static const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
 
 extern char **environ;
 
@@ -631,7 +631,7 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
             handle_input(vchan, data_protocol_version);
     }
 }
-struct option longopts[] = {
+static struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
     { "socket-dir", required_argument, 0, 'd'+128 },
     { NULL, 0, 0, 0 },
