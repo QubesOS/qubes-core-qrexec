@@ -418,7 +418,11 @@ class TestClient(unittest.TestCase):
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_command_and_connect_vm(self):
-        cmd = 'echo Hello world'
+        # TODO: This test fails occasionally without the initial 'read', there
+        # is possibly a race condition where the client disconnects too soon
+        # without sending all the data. (It might matter only for the
+        # socket-based vchan implementation).
+        cmd = 'read; echo Hello world'
         request_id = 'SOCKET11'
         src_domain_name = 'src_domain'
         src_domain = 43
