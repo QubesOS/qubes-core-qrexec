@@ -220,9 +220,9 @@ exit 1
         domain1 = self.domain + 1
         domain2 = self.domain + 2
         port = self.client_exec(domain1)
-        self.assertEqual(port, 513)
-        port = self.client_exec(domain2)
         self.assertEqual(port, 514)
+        port = self.client_exec(domain2)
+        self.assertEqual(port, 516)
 
     def test_client_exec_connection_terminated(self):
         agent = self.start_daemon_with_agent()
@@ -231,11 +231,11 @@ exit 1
         domain1 = self.domain + 1
         domain2 = self.domain + 2
         port = self.client_exec(domain1)
-        self.assertEqual(port, 513)
+        self.assertEqual(port, 514)
         agent.send_message(qrexec.MSG_CONNECTION_TERMINATED,
                            struct.pack('<LL', domain1, port))
         port = self.client_exec(domain2)
-        self.assertEqual(port, 513)
+        self.assertEqual(port, 514)
 
     def test_client_service_connect(self):
         agent = self.start_daemon_with_agent()
@@ -372,8 +372,8 @@ class TestClient(unittest.TestCase):
 
         self.client.wait()
 
-        # If local_cmd finishes first, return code is 0.
-        self.assertEqual(self.client.returncode, 0)
+        # If local_cmd finishes first, return code is its exit code.
+        self.assertEqual(self.client.returncode, 44)
 
     def test_run_vm_command_and_connect_vm(self):
         cmd = 'user:command'
