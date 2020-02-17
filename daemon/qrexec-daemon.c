@@ -1073,7 +1073,9 @@ int main(int argc, char **argv)
         if (child_exited)
             reap_children();
         ret = select(max+1, &read_fdset, &write_fdset, NULL, &tv);
-        if (ret < 0 && errno != EINTR) {
+        if (ret < 0) {
+            if (errno == EINTR)
+                continue;
             perror("select");
             return 1;
         }
