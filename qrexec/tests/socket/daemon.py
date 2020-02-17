@@ -25,6 +25,7 @@ import tempfile
 import shutil
 import struct
 from typing import Tuple
+import time
 
 import psutil
 
@@ -234,6 +235,10 @@ exit 1
         self.assertEqual(port, 514)
         agent.send_message(qrexec.MSG_CONNECTION_TERMINATED,
                            struct.pack('<LL', domain1, port))
+
+        # TODO: race condition here
+        time.sleep(0.1)
+
         port = self.client_exec(domain2)
         self.assertEqual(port, 514)
 
