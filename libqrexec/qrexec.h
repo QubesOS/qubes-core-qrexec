@@ -166,5 +166,6 @@ enum {
 #define QUBES_RPC_MULTIPLEXER_PATH "/usr/lib/qubes/qubes-rpc-multiplexer"
 #define QREXEC_DAEMON_SOCKET_DIR "/var/run/qubes"
 #define QREXEC_POLICY_PROGRAM "/usr/bin/qrexec-policy-exec"
+#define QREXEC_SERVICE_PATH "/usr/local/etc/qubes-rpc:/etc/qubes-rpc"
 
 #endif /* _QREXEC_H */
