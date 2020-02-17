@@ -100,6 +100,7 @@ const char *policy_program = QREXEC_POLICY_PROGRAM;
 
 volatile int children_count;
 int child_exited;
+int terminate_requested;
 
 libvchan_t *vchan;
 int protocol_version;
@@ -125,6 +126,7 @@ void sigchld_parent_handler(int UNUSED(x))
 }
 
 static void sigchld_handler(int UNUSED(x));
+static void sigterm_handler(int UNUSED(x));
 
 char *remote_domain_name;	// guess what
 int remote_domain_id;
@@ -357,6 +359,7 @@ void init(int xid)
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, sigchld_handler);
     signal(SIGUSR1, SIG_DFL);
+    signal(SIGTERM, sigterm_handler);
 
     if (!opt_direct)
         kill(getppid(), SIGUSR1);   // let the parent know we are ready
@@ -635,6 +638,11 @@ static void sigchld_handler(int UNUSED(x))
 {
     child_exited = 1;
     signal(SIGCHLD, sigchld_handler);
+}
+
+static void sigterm_handler(int UNUSED(x))
+{
+    terminate_requested = 1;
 }
 
 static void send_service_refused(libvchan_t *vchan, const struct service_params *params) {
@@ -1053,7 +1061,7 @@ int main(int argc, char **argv)
      * - new client
      * - child exited
      */
-    for (;;) {
+    while (!terminate_requested) {
         struct timeval tv = { 0, 1000000 };
 
         vchan_fd = libvchan_fd_for_select(vchan);
