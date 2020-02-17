@@ -1,0 +1,8 @@
+[report]
+exclude_lines =
+    pragma: no cover
+    ^\s*(el)?if os\.name ==
+    ^\s*raise (RuntimeError|NotImplementedError)
+    ^\s*except ImportError
+[run]
+source = qrexec

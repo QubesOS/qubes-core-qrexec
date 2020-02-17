@@ -19,21 +19,30 @@
  *
  */
 
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <unistd.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <string.h>
+#include <stddef.h>
+#include <assert.h>
+#include <stdbool.h>
+
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <fcntl.h>
 #include <libvchan.h>
-#include <assert.h>
+
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 #include "qrexec-agent.h"
@@ -43,7 +52,7 @@
 #define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
 
 static volatile int child_exited;
-static volatile int stdio_socket_requested;
+static volatile sig_atomic_t stdio_socket_requested;
 int stdout_msg_type = MSG_DATA_STDOUT;
 pid_t child_process_pid;
 int remote_process_status = 0;
@@ -86,8 +95,10 @@ void prepare_child_env() {
 
     signal(SIGCHLD, sigchld_handler);
     signal(SIGUSR1, sigusr1_handler);
-    snprintf(pid_s, sizeof(pid_s), "%d", getpid());
-    setenv("QREXEC_AGENT_PID", pid_s, 1);
+    int res = snprintf(pid_s, sizeof(pid_s), "%d", getpid());
+    if (res < 0) abort();
+    if (res >= (int)sizeof(pid_s)) abort();
+    if (setenv("QREXEC_AGENT_PID", pid_s, 1)) abort();
 }
 
 int handle_handshake(libvchan_t *ctrl)
@@ -138,10 +149,16 @@ int handle_handshake(libvchan_t *ctrl)
 }
 
 
-int handle_just_exec(char *cmdline)
+static int handle_just_exec(char *cmdline)
 {
     int fdn, pid;
 
+    char *end_username = strchr(cmdline, ':');
+    if (!end_username) {
+        fprintf(stderr, "No colon in command from dom0\n");
+        return -1;
+    }
+    *end_username++ = '\0';
     switch (pid = fork()) {
         case -1:
             perror("fork");
@@ -149,16 +166,14 @@ int handle_just_exec(char *cmdline)
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
-            do_exec(cmdline);
-            perror("execl");
-            exit(1);
+            do_exec(end_username, cmdline);
         default:;
     }
     fprintf(stderr, "executed (nowait) %s pid %d\n", cmdline, pid);
     return 0;
 }
 
-void send_exit_code(libvchan_t *data_vchan, int status)
+static void send_exit_code(libvchan_t *data_vchan, int status)
 {
     struct msg_header hdr;
     hdr.type = MSG_DATA_EXIT_CODE;
@@ -177,7 +192,7 @@ void send_exit_code(libvchan_t *data_vchan, int status)
  *  1 - some data processed, call it again when buffer space and more data
  *      available
  */
-int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
+static int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
 {
     const size_t max_len = max_data_chunk_size(data_protocol_version);
     char *buf;
@@ -191,6 +206,7 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_vers
         return -1;
     }
 
+    static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
     hdr.type = msg_type;
     while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
         len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
@@ -203,7 +219,7 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_vers
             /* otherwise keep rc = -1 */
             goto out;
         }
-        hdr.len = len;
+        hdr.len = (uint32_t)len;
         if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0)
             goto out;
 
@@ -212,7 +228,8 @@ int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_vers
 
         if (len == 0) {
             /* restore flags */
-            set_block(fd);
+            if (stdio_socket_requested < 2)
+                set_block(fd);
             if (shutdown(fd, SHUT_RD) < 0) {
                 if (errno == ENOTSOCK)
                     close(fd);
@@ -237,7 +254,7 @@ out:
  *      available
  */
 
-int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
+static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
         struct buffer *stdin_buf, int data_protocol_version)
 {
     struct msg_header hdr;
@@ -343,19 +360,18 @@ out:
     return rc;
 }
 
-int process_child_io(libvchan_t *data_vchan,
+static int process_child_io(libvchan_t *data_vchan,
         int stdin_fd, int stdout_fd, int stderr_fd,
-        int data_protocol_version)
+        int data_protocol_version, struct buffer *stdin_buf)
 {
     fd_set rdset, wrset;
     int vchan_fd;
     sigset_t selectmask;
-    int child_process_status = -1;
+    int child_process_status = child_process_pid > 0 ? -1 : 0;
     int remote_process_status = -1;
     int ret, max_fd;
     struct timespec zero_timeout = { 0, 0 };
     struct timespec normal_timeout = { 10, 0 };
-    struct buffer stdin_buf;
 
     sigemptyset(&selectmask);
     sigaddset(&selectmask, SIGCHLD);
@@ -363,14 +379,17 @@ int process_child_io(libvchan_t *data_vchan,
     sigemptyset(&selectmask);
 
     set_nonblock(stdin_fd);
-    set_nonblock(stdout_fd);
-    set_nonblock(stderr_fd);
+    if (stdout_fd != stdin_fd)
+        set_nonblock(stdout_fd);
+    else if ((stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3)) < 0)
+        abort(); // not worth handling running out of file descriptors
+    if (stderr_fd >= 0)
+        set_nonblock(stderr_fd);
 
-    buffer_init(&stdin_buf);
     while (1) {
         if (child_exited) {
             int status;
-            if (child_process_pid &&
+            if (child_process_pid > 0 &&
                     waitpid(child_process_pid, &status, WNOHANG) > 0) {
                 if (WIFSIGNALED(status))
                     child_process_status = 128 + WTERMSIG(status);
@@ -403,15 +422,28 @@ int process_child_io(libvchan_t *data_vchan,
          * is no sense of processing further data */
         if (!libvchan_data_ready(data_vchan) &&
                 !libvchan_is_open(data_vchan) &&
-                !buffer_len(&stdin_buf)) {
+                !buffer_len(stdin_buf)) {
             break;
         }
         /* child signaled desire to use single socket for both stdin and stdout */
-        if (stdio_socket_requested) {
-            if (stdout_fd != -1 && stdout_fd != stdin_fd)
-                close(stdout_fd);
-            stdout_fd = stdin_fd;
-            stdio_socket_requested = 0;
+        if (stdio_socket_requested == 1) {
+            if (stdout_fd != -1) {
+                do
+                    errno = 0;
+                while (dup3(stdin_fd, stdout_fd, O_CLOEXEC) &&
+                       (errno == EINTR || errno == EBUSY));
+                // other errors are fatal
+                if (errno) {
+                    fputs("Fatal error from dup3()\n", stderr);
+                    abort();
+                }
+            } else {
+                stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3);
+                // all errors are fatal
+                if (stdout_fd < 3)
+                    abort();
+            }
+            stdio_socket_requested = 2;
         }
         /* otherwise handle the events */
 
@@ -436,13 +468,13 @@ int process_child_io(libvchan_t *data_vchan,
             max_fd = vchan_fd;
         /* if we have something buffered for the child process, wake also on
          * writable stdin */
-        if (stdin_fd > -1 && buffer_len(&stdin_buf)) {
+        if (stdin_fd > -1 && buffer_len(stdin_buf)) {
             FD_SET(stdin_fd, &wrset);
             if (stdin_fd > max_fd)
                 max_fd = stdin_fd;
         }
 
-        if (!buffer_len(&stdin_buf) && libvchan_data_ready(data_vchan) > 0) {
+        if (!buffer_len(stdin_buf) && libvchan_data_ready(data_vchan) > 0) {
             /* check for other FDs, but exit immediately */
             ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &zero_timeout, &selectmask);
         } else
@@ -466,7 +498,7 @@ int process_child_io(libvchan_t *data_vchan,
         /* handle_remote_data will check if any data is available */
         switch (handle_remote_data(data_vchan, stdin_fd,
                     &remote_process_status,
-                    &stdin_buf,
+                    stdin_buf,
                     data_protocol_version)) {
             case -1:
                 handle_vchan_error("read");
@@ -559,8 +591,8 @@ int process_child_io(libvchan_t *data_vchan,
  *  buffer_size is about vchan buffer allocated (only for vchan server cases),
  *  use 0 to use built-in default (64k); needs to be power of 2
  */
-int handle_new_process_common(int type, int connect_domain, int connect_port,
-                char *cmdline, int cmdline_len, /* MSG_JUST_EXEC and MSG_EXEC_CMDLINE */
+static int handle_new_process_common(int type, int connect_domain, int connect_port,
+                char *cmdline, size_t cmdline_len, /* MSG_JUST_EXEC and MSG_EXEC_CMDLINE */
                 int stdin_fd, int stdout_fd, int stderr_fd /* MSG_SERVICE_CONNECT */,
                 int buffer_size)
 {
@@ -568,11 +600,6 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
     int exit_code = 0;
     pid_t pid;
     int data_protocol_version;
-
-    if (type != MSG_SERVICE_CONNECT) {
-        assert(cmdline != NULL);
-        cmdline[cmdline_len-1] = 0;
-    }
 
     if (buffer_size == 0)
         buffer_size = VCHAN_BUFFER_SIZE;
@@ -583,6 +610,18 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
         if (data_vchan)
             libvchan_wait(data_vchan);
     } else {
+        if (cmdline == NULL) {
+            fputs("internal qrexec error: NULL cmdline passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+            abort();
+        } else if (cmdline_len == 0) {
+            fputs("internal qrexec error: zero-length command line passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+            abort();
+        } else if (cmdline_len > MAX_QREXEC_CMD_LEN) {
+            /* This is arbitrary, but it helps reduce the risk of overflows in other code */
+            fprintf(stderr, "Bad command from dom0: command line too long: length %zu\n", cmdline_len);
+            abort();
+        }
+        cmdline[cmdline_len-1] = 0;
         data_vchan = libvchan_client_init(connect_domain, connect_port);
     }
     if (!data_vchan) {
@@ -598,22 +637,30 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
         case MSG_JUST_EXEC:
             send_exit_code(data_vchan, handle_just_exec(cmdline));
             break;
-        case MSG_EXEC_CMDLINE:
-            do_fork_exec(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd);
+        case MSG_EXEC_CMDLINE: {
+            struct buffer stdin_buf;
+            buffer_init(&stdin_buf);
+            if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd, !qrexec_is_fork_server, &stdin_buf) < 0) {
+                fputs("failed to spawn process\n", stderr);
+            }
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
             child_process_pid = pid;
             exit_code = process_child_io(
                     data_vchan, stdin_fd, stdout_fd, stderr_fd,
-                    data_protocol_version);
+                    data_protocol_version, &stdin_buf);
             fprintf(stderr, "pid %d exited with %d\n", pid, exit_code);
             break;
-        case MSG_SERVICE_CONNECT:
+        }
+        case MSG_SERVICE_CONNECT: {
+            struct buffer stdin_buf;
+            buffer_init(&stdin_buf);
             child_process_pid = 0;
             stdout_msg_type = MSG_DATA_STDIN;
             exit_code = process_child_io(
                     data_vchan, stdin_fd, stdout_fd, stderr_fd,
-                    data_protocol_version);
+                    data_protocol_version, &stdin_buf);
             break;
+        }
     }
     libvchan_close(data_vchan);
     return exit_code;
@@ -621,7 +668,7 @@ int handle_new_process_common(int type, int connect_domain, int connect_port,
 
 /* Returns PID of data processing process */
 pid_t handle_new_process(int type, int connect_domain, int connect_port,
-        char *cmdline, int cmdline_len)
+        char *cmdline, size_t cmdline_len)
 {
     int exit_code;
     pid_t pid;
@@ -643,8 +690,6 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
             -1, -1, -1, 0);
 
     exit(exit_code);
-    /* suppress warning */
-    return 0;
 }
 
 /* Returns exit code of remote process */
@@ -659,3 +704,10 @@ int handle_data_client(int type, int connect_domain, int connect_port,
             NULL, 0, stdin_fd, stdout_fd, stderr_fd, buffer_size);
     return exit_code;
 }
+
+/* Local Variables: */
+/* mode: c */
+/* indent-tabs-mode: nil */
+/* c-basic-offset: 4 */
+/* coding: utf-8-unix */
+/* End: */

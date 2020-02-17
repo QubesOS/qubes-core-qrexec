@@ -1,22 +1,38 @@
+MAKEFLAGS=-r
 CC ?= gcc
-CFLAGS += -I. -g -O2 -Wall -Wextra -Werror -pie -fPIC `pkg-config --cflags vchan-$(BACKEND_VMM)`
-CFLAGS += -I../libqrexec
-LDFLAGS += -pie
-LDLIBS = -L../libqrexec
-LDLIBS += `pkg-config --libs vchan-$(BACKEND_VMM)` -lqrexec-utils -lpam
 PANDOC ?= pandoc
+BACKEND_VMM ?= xen
+DESTDIR ?= /
+.SUFFIXES:
+override os := $(shell lsb_release -is)
+override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
+   $(shell pkg-config --cflags vchan-$(BACKEND_VMM)) -fstack-protector \
+   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC -std=c11 -D_POSIX_C_SOURCE=200809L \
+	-D_GNU_SOURCE $(CFLAGS)
+override LDFLAGS += -pie -Wl,-z,relro,-z,now -L../libqrexec
+override LDLIBS=-lqrexec-utils $(shell pkg-config --libs vchan-$(BACKEND_VMM)) -lpam
+
+.PHONY: all clean install
+
+override remove_generated := \
+	rm -f -- *.o *~ qrexec-agent qrexec-client-vm *.o.dep
 
 all: qrexec-agent qrexec-client-vm qrexec-fork-server qrexec-client-vm.1.gz
+.PHONY: all clean install .PHONY
 qrexec-agent: qrexec-agent.o qrexec-agent-data.o
 qrexec-fork-server: qrexec-fork-server.o qrexec-agent-data.o
 qrexec-client-vm: qrexec-client-vm.o qrexec-agent-data.o
 clean:
-	rm -f *.o *~ qrexec-agent qrexec-client-vm
+ifeq ($(BUILDDIR),)
+	$(remove_generated)
+else
+	cd -P -- $(BUILDDIR) && $(remove_generated)
+endif
 
-install:
-	install -d $(DESTDIR)/etc/qubes-rpc
-	install -d $(DESTDIR)/usr/lib/qubes $(DESTDIR)/usr/bin
-	install -d $(DESTDIR)/usr/share/man/man1
+
+install: all
+	install -d $(DESTDIR)/etc/qubes-rpc $(DESTDIR)/usr/lib/qubes \
+		$(DESTDIR)/usr/bin $(DESTDIR)/usr/share/man/man1
 	install qrexec-agent $(DESTDIR)/usr/lib/qubes
 	install qrexec-client-vm $(DESTDIR)/usr/bin
 	install -d $(DESTDIR)/usr/share/man/man1
@@ -24,11 +40,11 @@ install:
 	ln -s ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec-client-vm
 	ln -s ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec_client_vm
 	install qrexec-fork-server $(DESTDIR)/usr/bin
-ifeq ($(shell lsb_release -is), Debian)
+ifeq ($(os), Debian)
 	install -D -m 0644 qrexec.pam.debian $(DESTDIR)/etc/pam.d/qrexec
-else ifeq ($(shell lsb_release -is), Ubuntu)
+else ifeq ($(os), Ubuntu)
 	install -D -m 0644 qrexec.pam.debian $(DESTDIR)/etc/pam.d/qrexec
-else ifeq ($(shell lsb_release -is), Arch)
+else ifeq ($(os), Arch)
 	install -D -m 0644 qrexec.pam.archlinux $(DESTDIR)/etc/pam.d/qrexec
 else
 	install -D -m 0644 qrexec.pam $(DESTDIR)/etc/pam.d/qrexec
@@ -39,3 +55,11 @@ endif
 
 %.1.gz: %.1
 	gzip -f $<
+
+%: %.o
+	$(CC) $(LDFLAGS) -pie -g -o $@ $^ $(LDLIBS)
+
+%.o: %.c
+	$(CC) $< -c -o $@ $(QUBES_CFLAGS) $(CFLAGS) -MD -MP -MF $@.dep
+
+-include *.o.dep
