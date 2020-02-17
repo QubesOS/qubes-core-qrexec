@@ -99,6 +99,7 @@ const char *policy_program = QREXEC_POLICY_PROGRAM;
 #endif
 
 volatile int children_count;
+int child_exited;
 
 libvchan_t *vchan;
 int protocol_version;
@@ -630,8 +631,6 @@ static void handle_message_from_client(int fd)
  * flag in appropriate moment.
  */
 
-int child_exited;
-
 static void sigchld_handler(int UNUSED(x))
 {
     child_exited = 1;
@@ -1047,7 +1046,6 @@ int main(int argc, char **argv)
     init(remote_domain_id);
     sigemptyset(&chld_set);
     sigaddset(&chld_set, SIGCHLD);
-    signal(SIGCHLD, sigchld_handler);
     /*
      * The main event loop. Waits for one of the following events:
      * - message from client
