@@ -463,3 +463,5 @@ class TestClient(unittest.TestCase):
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
         ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
