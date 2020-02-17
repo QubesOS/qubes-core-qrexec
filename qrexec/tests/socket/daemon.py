@@ -55,6 +55,11 @@ exit 1
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tempdir)
+        self.daemon = None
+
+    def tearDown(self):
+        self.stop_daemon()
+        super().tearDown()
 
     def start_daemon(self):
         policy_program_path = os.path.join(self.tempdir, 'qrexec-policy-exec')
@@ -80,7 +85,6 @@ exit 1
             cmd,
             env=env,
         )
-        self.addCleanup(self.stop_daemon)
 
     def stop_daemon(self):
         if self.daemon:
