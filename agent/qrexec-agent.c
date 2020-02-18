@@ -77,6 +77,8 @@ static pid_t wait_for_session_pid = -1;
 
 static int trigger_fd;
 
+static int terminate_requested;
+
 static int meminfo_write_started = 0;
 
 static const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
@@ -827,6 +829,11 @@ static void sigchld_handler(int x __attribute__((__unused__)))
     signal(SIGCHLD, sigchld_handler);
 }
 
+static void sigterm_handler(int x __attribute__((__unused__)))
+{
+    terminate_requested = 1;
+}
+
 static int find_connection(int pid)
 {
     int i;
@@ -1022,12 +1029,13 @@ int main(int argc, char **argv)
 
     init();
     signal(SIGCHLD, sigchld_handler);
+    signal(SIGTERM, sigterm_handler);
     signal(SIGPIPE, SIG_IGN);
     sigemptyset(&chld_set);
     sigaddset(&chld_set, SIGCHLD);
 
 
-    for (;;) {
+    while (!terminate_requested) {
         sigprocmask(SIG_BLOCK, &chld_set, NULL);
         if (child_exited)
             reap_children();
