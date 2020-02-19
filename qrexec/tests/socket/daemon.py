@@ -182,6 +182,19 @@ exit 1
         client = self.connect_client()
         client.handshake()
 
+    def test_terminate_before_restart(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        agent.close()
+
+        util.wait_until(
+            lambda: not os.path.exists(
+                os.path.join(self.tempdir, 'qrexec.{}'.format(self.domain))),
+            'socket deleted')
+
+        self.stop_daemon()
+
     def test_client_exec(self):
         agent = self.start_daemon_with_agent()
         agent.handshake()
