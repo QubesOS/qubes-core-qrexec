@@ -76,7 +76,7 @@ exit 1
             self.domain_name,
         ]
         if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-f'] + cmd
+            cmd = ['strace', '-fD'] + cmd
         self.daemon = subprocess.Popen(
             cmd,
             env=env,
@@ -280,7 +280,7 @@ class TestClient(unittest.TestCase):
             '--socket-dir=' + self.tempdir,
         ] + args
         if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-f'] + cmd
+            cmd = ['strace', '-fD'] + cmd
         self.client = subprocess.Popen(
             cmd,
             env=env,

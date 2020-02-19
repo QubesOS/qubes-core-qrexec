@@ -67,7 +67,7 @@ class TestAgentBase(unittest.TestCase):
             '--agent-socket=' + os.path.join(self.tempdir, 'agent.sock'),
         ]
         if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-f'] + cmd
+            cmd = ['strace', '-fD'] + cmd
         self.agent = subprocess.Popen(
             cmd,
             env=env,
