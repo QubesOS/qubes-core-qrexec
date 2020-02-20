@@ -22,7 +22,10 @@
 #ifndef _QREXEC_H
 #define _QREXEC_H
 
-/* See also http://wiki.qubes-os.org/trac/wiki/Qrexec */
+/* For information on qrexec, see:
+ * - https://www.qubes-os.org/doc/qrexec/
+ * - https://www.qubes-os.org/doc/qrexec-internals/
+*/
 
 #include <stdint.h>
 
@@ -42,6 +45,7 @@
 #define NOGUI_CMD_PREFIX "nogui:"
 #define NOGUI_CMD_PREFIX_LEN (sizeof(NOGUI_CMD_PREFIX)-1)
 #define VCHAN_BASE_PORT 512
+#define MAX_QREXEC_CMD_LEN 65535UL
 
 /* protocol version */
 enum {
@@ -119,7 +123,7 @@ struct msg_header {
 struct exec_params {
     uint32_t connect_domain; /* target domain name */
     uint32_t connect_port;   /* target vchan port for i/o exchange */
-    char cmdline[0];         /* command line to execute, null terminated, size = msg_header.len - sizeof(struct exec_params) */
+    char cmdline[];          /* command line to execute, null terminated, size = msg_header.len - sizeof(struct exec_params) */
 };
 
 struct service_params {
@@ -161,5 +165,6 @@ enum {
 #define MEMINFO_WRITER_PIDFILE "/var/run/meminfo-writer.pid"
 #define QUBES_RPC_MULTIPLEXER_PATH "/usr/lib/qubes/qubes-rpc-multiplexer"
 #define QREXEC_DAEMON_SOCKET_DIR "/var/run/qubes"
+#define QREXEC_POLICY_PROGRAM "/usr/bin/qrexec-policy-exec"
 
 #endif /* _QREXEC_H */

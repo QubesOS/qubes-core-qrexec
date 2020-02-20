@@ -1,4 +1,4 @@
-# -*- encoding: utf8 -*-
+# -*- encoding: utf-8 -*-
 #
 # The Qubes OS Project, http://www.qubes-os.org
 #
@@ -21,6 +21,7 @@
 
 import functools
 import socket
+import subprocess
 import unittest.mock
 import asyncio
 
@@ -1242,7 +1243,21 @@ class TC_40_evaluate(unittest.TestCase):
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls, [])
 
-
+    @unittest.mock.patch('qrexec.utils.qubesd_call')
+    @unittest.mock.patch('subprocess.check_call')
+    def test_125_execute_call_error(self, mock_subprocess,
+            mock_qubesd_call):
+        rule = parser.Rule.from_line(None,
+            '* * @anyvm @anyvm allow',
+            filepath='filename', lineno=12)
+        request = parser.Request('test.service', '+', 'test-vm1',
+            'test-vm2', system_info=SYSTEM_INFO)
+        resolution = parser.AllowResolution(
+            rule, request, user=None, target='test-vm2')
+        mock_subprocess.side_effect = \
+            subprocess.CalledProcessError(cmd=['qrexec-policy'], returncode=1)
+        with self.assertRaises(exc.AccessDenied):
+            resolution.execute('some-ident')
 
 
 #class TC_30_Misc(qubes.tests.QubesTestCase):

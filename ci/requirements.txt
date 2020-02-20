@@ -8,3 +8,4 @@ pydbus
 pytest-asyncio
 asynctest
 pyinotify
+psutil

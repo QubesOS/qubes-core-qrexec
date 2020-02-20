@@ -147,6 +147,16 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/qrexec_policy_daemon.py
 %{python3_sitelib}/qrexec/tests/policy_cache.py
 
+%dir %{python3_sitelib}/qrexec/tests/socket
+%dir %{python3_sitelib}/qrexec/tests/socket/__pycache__
+%{python3_sitelib}/qrexec/tests/socket/__pycache__/*
+%{python3_sitelib}/qrexec/tests/socket/__init__.py
+%{python3_sitelib}/qrexec/tests/socket/agent.py
+%{python3_sitelib}/qrexec/tests/socket/daemon.py
+%{python3_sitelib}/qrexec/tests/socket/qrexec.py
+%{python3_sitelib}/qrexec/tests/socket/util.py
+
+
 %dir %{python3_sitelib}/qrexec/glade
 %{python3_sitelib}/qrexec/glade/PolicyCreateConfirmationWindow.glade
 %{python3_sitelib}/qrexec/glade/RPCConfirmationWindow.glade

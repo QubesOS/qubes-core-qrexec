@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
-#define _GNU_SOURCE
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <sys/un.h>
@@ -32,20 +31,23 @@
 #include "qrexec.h"
 #include "qrexec-agent.h"
 
-void handle_vchan_error(const char *op)
+const bool qrexec_is_fork_server = false;
+
+_Noreturn void handle_vchan_error(const char *op)
 {
     fprintf(stderr, "Error while vchan %s, exiting\n", op);
     exit(1);
 }
 
-void do_exec(char *cmd __attribute__((__unused__))) {
+_Noreturn void do_exec(char *cmd __attribute__((unused)), char const* user __attribute__((__unused__))) {
     fprintf(stderr, "BUG: do_exec function shouldn't be called!\n");
-    exit(1);
+    abort();
 }
 
-int connect_unix_socket(char *path)
+static int connect_unix_socket(const char *path)
 {
-    int s, len;
+    int s;
+    size_t len;
     struct sockaddr_un remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -57,14 +59,14 @@ int connect_unix_socket(char *path)
     strncpy(remote.sun_path, path,
             sizeof(remote.sun_path) - 1);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
-    if (connect(s, (struct sockaddr *) &remote, len) == -1) {
+    if (connect(s, (struct sockaddr *) &remote, (socklen_t)len) == -1) {
         perror("connect");
         exit(1);
     }
     return s;
 }
 
-char *get_program_name(char *prog)
+static char *get_program_name(char *prog)
 {
     char *basename = rindex(prog, '/');
     if (basename)
@@ -76,7 +78,7 @@ char *get_program_name(char *prog)
 /* Target specification with keyword have changed from $... to @... . Convert
  * the argument appropriately, to avoid breaking user tools.
  */
-void convert_target_name_keyword(char *target)
+static void convert_target_name_keyword(char *target)
 {
     size_t i;
     size_t len = strlen(target);
@@ -91,16 +93,17 @@ enum {
     opt_no_filter_stderr = 'T'+128,
 };
 
-struct option longopts[] = {
+static struct option longopts[] = {
     { "buffer-size", required_argument, 0,  'b' },
     { "filter-escape-chars-stdout", no_argument, 0, 't'},
     { "filter-escape-chars-stderr", no_argument, 0, 'T'},
     { "no-filter-escape-chars-stdout", no_argument, 0, opt_no_filter_stdout},
     { "no-filter-escape-chars-stderr", no_argument, 0, opt_no_filter_stderr},
+    { "agent-socket", required_argument, 0, 'a'},
     { NULL, 0, 0, 0},
 };
 
-_Noreturn void usage(const char *argv0) {
+_Noreturn static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [options] target_vmname program_ident [local_program [local program arguments]]\n",
             argv0);
@@ -110,6 +113,8 @@ _Noreturn void usage(const char *argv0) {
     fprintf(stderr, "  -T, --filter-escape-chars-stderr - filter non-ASCII and control characters on stderr (default if stderr is a terminal)\n");
     fprintf(stderr, "  --no-filter-escape-chars-stdout - opposite to --filter-escape-chars-stdout\n");
     fprintf(stderr, "  --no-filter-escape-chars-stderr - opposite to --filter-escape-chars-stderr\n");
+    fprintf(stderr, "  --agent-socket=PATH - path to connect to, default: %s\n",
+            QREXEC_AGENT_TRIGGER_PATH);
     exit(2);
 }
 
@@ -121,16 +126,18 @@ int main(int argc, char **argv)
     struct exec_params exec_params;
     size_t service_name_len;
     char *service_name;
-    int ret, i;
+    ssize_t ret;
+    int i;
     int start_local_process = 0;
     char *abs_exec_path;
     pid_t child_pid = 0;
     int inpipe[2], outpipe[2];
     int buffer_size = 0;
     int opt;
+    const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
 
     while (1) {
-        opt = getopt_long(argc, argv, "+tT", longopts, NULL);
+        opt = getopt_long(argc, argv, "+tTa:", longopts, NULL);
         if (opt == -1)
             break;
         switch (opt) {
@@ -148,6 +155,9 @@ int main(int argc, char **argv)
                 break;
             case opt_no_filter_stderr:
                 replace_chars_stderr = 0;
+                break;
+            case 'a':
+                agent_trigger_path = strdup(optarg);
                 break;
             case '?':
                 usage(argv[0]);
@@ -172,7 +182,7 @@ int main(int argc, char **argv)
 
     service_name_len = strlen(service_name) + 1;
 
-    trigger_fd = connect_unix_socket(QREXEC_AGENT_TRIGGER_PATH);
+    trigger_fd = connect_unix_socket(agent_trigger_path);
 
     hdr.type = MSG_TRIGGER_SERVICE3;
     hdr.len = sizeof(params) + service_name_len;
@@ -270,5 +280,5 @@ int main(int argc, char **argv)
         }
     }
 
-    return ret;
+    return (int)ret;
 }

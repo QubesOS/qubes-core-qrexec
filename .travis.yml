@@ -11,7 +11,7 @@ install:
  - git clone https://github.com/QubesOS/qubes-builder ~/qubes-builder
 script: ~/qubes-builder/scripts/travis-build
 env:
- - DIST_DOM0=fc29 USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
+ - DIST_DOM0=fc31 USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
  - DISTS_VM=fc29 USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
  - DISTS_VM=fc30 USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
  - DISTS_VM=stretch USE_QUBES_REPO_VERSION=4.1 USE_QUBES_REPO_TESTING=1
@@ -22,11 +22,11 @@ jobs:
   include:
     - python: '3.7'
       script: pylint qrexec
-    - install: 
+    - install:
        - pip install --quiet codecov
        - docker build -t qrexec-test ci
       env: DOCKER_RUN="docker run -v $TRAVIS_BUILD_DIR:$TRAVIS_BUILD_DIR -v /tmp/.X11-unix:/tmp/.X11-unix -w $TRAVIS_BUILD_DIR -e DISPLAY=$DISPLAY -- qrexec-test"
-      script: $DOCKER_RUN python3 -m coverage run -m pytest qrexec/tests -o python_files=*.py -v
+      script: $DOCKER_RUN ./run-tests
 #    - python: '3.7'
 #      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
     - stage: deploy
