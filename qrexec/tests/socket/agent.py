@@ -46,6 +46,8 @@ class TestAgentBase(unittest.TestCase):
 
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
+        os.mkdir(os.path.join(self.tempdir, 'local-rpc'))
+        os.mkdir(os.path.join(self.tempdir, 'rpc'))
         self.addCleanup(shutil.rmtree, self.tempdir)
 
     def start_agent(self):
@@ -53,13 +55,19 @@ class TestAgentBase(unittest.TestCase):
         env['LD_LIBRARY_PATH'] = os.path.join(ROOT_PATH, 'libqrexec')
         env['VCHAN_DOMAIN'] = str(self.domain)
         env['VCHAN_SOCKET_DIR'] = self.tempdir
+        env['QREXEC_SERVICE_PATH'] = ':'.join([
+            os.path.join(self.tempdir, 'local-rpc'),
+            os.path.join(self.tempdir, 'rpc'),
+        ])
+        env['QREXEC_MULTIPLEXER_PATH'] = os.path.join(
+            ROOT_PATH, 'lib', 'qubes-rpc-multiplexer')
         cmd = [
             os.path.join(ROOT_PATH, 'agent', 'qrexec-agent'),
             '--no-fork-server',
             '--agent-socket=' + os.path.join(self.tempdir, 'agent.sock'),
         ]
         if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-f'] + cmd
+            cmd = ['strace', '-fD'] + cmd
         self.agent = subprocess.Popen(
             cmd,
             env=env,
@@ -243,6 +251,95 @@ class TestAgent(TestAgentBase):
             source_params[:64] + ident + source_params[64+len(ident):])
 
         return ident
+
+
+@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
+                 'socket tests not set up')
+class TestAgentExecQubesRpc(TestAgentBase):
+    def execute_qubesrpc(self, service: str, src_domain_name: str):
+        self.start_agent()
+
+        dom0 = self.connect_dom0()
+        dom0.handshake()
+
+        user = getpass.getuser()
+        cmdline = '{}:QUBESRPC {} {}\0'.format(
+            user, service, src_domain_name).encode('ascii')
+
+        dom0.send_message(
+            qrexec.MSG_EXEC_CMDLINE,
+            struct.pack('<LL', self.target_domain, self.target_port) +
+            cmdline)
+
+        target = self.connect_target()
+        target.handshake()
+        return target
+
+    def make_executable_service(self, dir_name, service_name, content):
+        service_path = os.path.join(self.tempdir, dir_name, service_name)
+        with open(service_path, 'w') as f:
+            f.write(content)
+        os.chmod(service_path, 0o700)
+
+    def test_exec_service(self):
+        self.make_executable_service('rpc', 'qubes.Service', '''\
+#!/bin/sh
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+''')
+        target = self.execute_qubesrpc('qubes.Service+arg', 'domX')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: domX\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    def test_exec_service_with_arg(self):
+        self.make_executable_service('local-rpc', 'qubes.Service+arg', '''\
+#!/bin/sh
+echo "specific service"
+''')
+        self.make_executable_service('rpc', 'qubes.Service', '''\
+#!/bin/sh
+echo "general service"
+''')
+        target = self.execute_qubesrpc('qubes.Service+arg', 'domX')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b'specific service\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    def test_connect_socket(self):
+        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+
+        target = self.execute_qubesrpc('qubes.SocketService+arg', 'domX')
+
+        server.accept()
+        expected = b'qubes.SocketService+arg domX\0'
+        self.assertEqual(server.recvall(len(expected)), expected)
+
+        message = b'stdin data'
+        target.send_message(qrexec.MSG_DATA_STDIN, message)
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        self.assertEqual(server.recvall(len(message)), message)
+
+        server.sendall(b'stdout data')
+        server.close()
+        messages = target.recv_all_messages()
+        # No stderr
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b'stdout data'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
 
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
