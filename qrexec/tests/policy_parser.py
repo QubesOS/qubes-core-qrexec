@@ -725,7 +725,7 @@ class TC_20_Policy(unittest.TestCase):
 
 # comment
 * * test-vm2 test-vm3 ask
-    # comment with trailing whitespace:    
+    # comment with trailing whitespace:    ''' '''
 * * @anyvm @anyvm ask
 ''')
 
@@ -774,12 +774,12 @@ class TC_20_Policy(unittest.TestCase):
             ''',
             'new-syntax': '''\
                 test-vm2 test-vm3 ask
-                # comment with whitespace  
+                # comment with whitespace  ''' '''
                 @anyvm @dispvm ask default_target=@dispvm
             ''',
             'old-syntax': '''\
                 test-vm2 test-vm3 ask
-                # comment with whitespace  
+                # comment with whitespace  ''' '''
                 $anyvm $dispvm ask,default_target=$dispvm
             ''',
             })
