@@ -5,4 +5,7 @@ pylint
 sphinx
 codecov
 pydbus
+pytest-asyncio
+asynctest
+pyinotify
 psutil

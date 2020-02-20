@@ -28,6 +28,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <err.h>
 #include <string.h>
 #include <assert.h>
 #include <getopt.h>
@@ -35,6 +38,8 @@
 #include "libqrexec-utils.h"
 
 #define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
+#define QREXEC_SOCKET_PATH "/var/run/qubes/policy.sock"
+
 
 enum client_state {
     CLIENT_INVALID = 0,	// table slot not used
@@ -721,6 +726,73 @@ static void sanitize_name(char * untrusted_s_signed, char *extra_allowed_chars)
  * Called when agent sends a message asking to execute a predefined command.
  */
 
+static int connect_daemon_socket(
+        const int remote_domain_id,
+        const char *remote_domain_name,
+        const char *target_domain,
+        const char *service_name,
+        const struct service_params *request_id
+) {
+    int result;
+    int command_size;
+    char response[32];
+    char *command;
+    int daemon_socket;
+    struct sockaddr_un daemon_socket_address = {
+        .sun_family = AF_UNIX,
+        .sun_path = QREXEC_SOCKET_PATH
+    };
+
+    daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (daemon_socket < 0) {
+         perror("socket creation failed");
+         return -1;
+    }
+
+    result = connect(daemon_socket, (struct sockaddr *) &daemon_socket_address,
+            sizeof(daemon_socket_address));
+    if (result < 0) {
+         perror("connection to socket failed");
+         return -1;
+    }
+
+    command_size = asprintf(&command, "domain_id=%d\n"
+        "source=%s\n"
+        "intended_target=%s\n"
+        "service_and_arg=%s\n"
+        "process_ident=%s\n\n",
+        remote_domain_id, remote_domain_name, target_domain,
+        service_name, request_id->ident);
+    if (command_size < 0) {
+         perror("failed to construct request");
+         return -1;
+    }
+
+    result = send(daemon_socket, command, command_size, 0);
+    free(command);
+    if (result < 0) {
+         perror("send to socket failed");
+         return -1;
+    }
+
+    result = recv(daemon_socket, response, sizeof(response), 0);
+    if (result < 0) {
+         perror("error reading from socket");
+         return -1;
+    }
+    else {
+        if (!strncmp(response, "result=allow\n", sizeof("result=allow\n")-1)) {
+            return 0;
+        } else if (!strncmp(response, "result=deny\n", sizeof("result=deny\n")-1)) {
+            return 1;
+        } else {
+            warnx("invalid response");
+            return -1;
+        }
+    }
+}
+
+
 static void handle_execute_service(
         const int remote_domain_id,
         const char *remote_domain_name,
@@ -729,6 +801,7 @@ static void handle_execute_service(
         const struct service_params *request_id)
 {
     int i;
+    int result;
     int policy_pending_slot;
     pid_t pid;
     char remote_domain_id_str[10];
@@ -751,6 +824,15 @@ static void handle_execute_service(
             policy_pending[policy_pending_slot].params = *request_id;
             return;
     }
+
+    result = connect_daemon_socket(remote_domain_id, remote_domain_name,
+                                   target_domain, service_name, request_id);
+    if (result >= 0) {
+        _exit(result);
+    } else {
+        warnx("invalid response");
+    }
+
     for (i = 3; i < MAX_FDS; i++)
         close(i);
     signal(SIGCHLD, SIG_DFL);
@@ -767,6 +849,7 @@ static void handle_execute_service(
     perror("execl");
     _exit(1);
 }
+
 
 static void handle_connection_terminated()
 {

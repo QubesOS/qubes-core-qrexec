@@ -43,6 +43,7 @@ BuildRequires:  qubes-core-qrexec-devel
 Requires:   python3
 Requires:   qubes-core-dom0
 Requires:   qubes-core-qrexec
+Requires:   python3-inotify
 
 Conflicts:  qubes-core-dom0 < 4.0.9999
 Conflicts:  qubes-core-dom0-linux < 4.0.9999
@@ -60,6 +61,12 @@ The Qubes qrexec files for installation on Dom0.
 export BACKEND_VMM=@BACKEND_VMM@
 make all-dom0
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
+
+%post
+%systemd_post qubes-qrexec-policy-daemon.service
+
+%preun
+%systemd_preun qubes-qrexec-policy-daemon.service
 
 %install
 make install-dom0 \
@@ -95,6 +102,8 @@ rm -f %{name}-%{version}
 %dir %{_sysconfdir}/qubes-rpc/policy/include
 
 %{_sysconfdir}/qubes-rpc/policy.RegisterArgument
+
+/lib/systemd/system/qubes-qrexec-policy-daemon.service
 
 %changelog
 @CHANGELOG@

@@ -11,4 +11,4 @@ fi
 
 set -x
 
-python3 -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v "$@"
+python3 -m coverage run -m pytest qrexec/tests -o python_files=*.py -v "$@"

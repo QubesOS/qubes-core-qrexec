@@ -1,0 +1,7 @@
+[Unit]
+Description=Qubes remote exec policy daemon
+After=qubesd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qrexec-policy-daemon

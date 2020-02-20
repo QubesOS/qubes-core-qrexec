@@ -6,6 +6,7 @@ usr/bin/qrexec-fork-server
 usr/bin/qrexec-policy-graph
 usr/bin/qrexec-policy-restore
 usr/bin/qrexec-policy-exec
+usr/bin/qrexec-policy-daemon
 usr/bin/qrexec-policy
 usr/bin/qrexec-policy-agent
 usr/bin/qubes-policy
