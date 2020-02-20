@@ -518,6 +518,8 @@ class AllowResolution(AbstractResolution):
         finally:
             if dispvm:
                 self.cleanup_dispvm(target)
+        if process.returncode != 0:
+            raise AccessDenied('qrexec-client failed')
 
     def spawn_dispvm(self):
         '''

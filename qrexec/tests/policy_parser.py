@@ -1121,6 +1121,7 @@ class TC_40_evaluate(unittest.TestCase):
         request = _req('test-vm1', 'test-vm2')
         resolution = parser.AllowResolution(
             rule, request, user=None, target='test-vm2')
+        mock_subprocess.return_value.returncode = 0
         await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
@@ -1143,6 +1144,7 @@ class TC_40_evaluate(unittest.TestCase):
         request = _req('test-vm1', 'dom0')
         resolution = parser.AllowResolution(
             rule, request, user=None, target='dom0')
+        mock_subprocess.return_value.returncode = 0
         await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
@@ -1162,6 +1164,7 @@ class TC_40_evaluate(unittest.TestCase):
         request = _req('test-vm1', '@adminvm')
         resolution = parser.AllowResolution(
             rule, request, user=None, target='@adminvm')
+        mock_subprocess.return_value.returncode = 0
         await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
@@ -1186,6 +1189,7 @@ class TC_40_evaluate(unittest.TestCase):
         mock_qubesd_call.side_effect = (lambda target, call:
             b'dispvm-name' if call == 'admin.vm.CreateDisposable' else
             unittest.mock.DEFAULT)
+        mock_subprocess.return_value.returncode = 0
         await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('default-dvm', 'admin.vm.CreateDisposable'),
@@ -1212,6 +1216,7 @@ class TC_40_evaluate(unittest.TestCase):
             rule, request, user=None, target='test-vm2')
         mock_qubesd_call.side_effect = \
             exc.QubesMgmtException('QubesVMNotHaltedError')
+        mock_subprocess.return_value.returncode = 0
         await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
@@ -1244,9 +1249,12 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(mock_subprocess.mock_calls, [])
 
     @unittest.mock.patch('qrexec.utils.qubesd_call')
-    @unittest.mock.patch('subprocess.check_call')
-    def test_125_execute_call_error(self, mock_subprocess,
-            mock_qubesd_call):
+    def test_125_execute_call_error(self, mock_qubesd_call):
+        with unittest.mock.patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess:
+            asyncio.run(self._test_125_execute_call_error(mock_subprocess, mock_qubesd_call))
+
+    async def _test_125_execute_call_error(self, mock_subprocess,
+            __mock_qubesd_call):
         rule = parser.Rule.from_line(None,
             '* * @anyvm @anyvm allow',
             filepath='filename', lineno=12)
@@ -1254,10 +1262,9 @@ class TC_40_evaluate(unittest.TestCase):
             'test-vm2', system_info=SYSTEM_INFO)
         resolution = parser.AllowResolution(
             rule, request, user=None, target='test-vm2')
-        mock_subprocess.side_effect = \
-            subprocess.CalledProcessError(cmd=['qrexec-policy'], returncode=1)
+        mock_subprocess.return_value.returncode = 1
         with self.assertRaises(exc.AccessDenied):
-            resolution.execute('some-ident')
+            await resolution.execute('some-ident')
 
 
 #class TC_30_Misc(qubes.tests.QubesTestCase):
