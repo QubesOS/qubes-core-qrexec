@@ -490,6 +490,10 @@ class AllowResolution(AbstractResolution):
         '''Execute the allowed action'''
         assert self.target is not None
 
+        # XXX remove when #951 gets fixed
+        if self.request.source == self.target:
+            raise AccessDenied('loopback qrexec connection not supported')
+
         target = self.target
 
         if target == '@adminvm':
@@ -781,10 +785,6 @@ class Allow(ActionType):
                     'policy define \'allow\' action to @dispvm at {}:{} '
                     'but no DispVM base is set for this VM'.format(
                         self.rule.filepath, self.rule.lineno))
-
-        # XXX remove when #951 gets fixed
-        if request.source == target:
-            raise AccessDenied('loopback qrexec connection not supported')
 
         return request.allow_resolution_type(self.rule, request,
             user=self.user, target=target)
