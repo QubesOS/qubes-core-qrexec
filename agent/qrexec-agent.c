@@ -1055,4 +1055,6 @@ int main(int argc, char **argv)
 
         handle_terminated_fork_client(&rdset);
     }
+
+    libvchan_close(ctrl_vchan);
 }

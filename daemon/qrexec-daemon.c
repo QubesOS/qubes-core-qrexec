@@ -40,6 +40,9 @@
 #define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
 #define QREXEC_SOCKET_PATH "/var/run/qubes/policy.sock"
 
+#ifdef COVERAGE
+void __gcov_flush();
+#endif
 
 enum client_state {
     CLIENT_INVALID = 0,	// table slot not used
@@ -104,8 +107,8 @@ const char *policy_program = QREXEC_POLICY_PROGRAM;
 #endif
 
 volatile int children_count;
-int child_exited;
-int terminate_requested;
+volatile int child_exited;
+volatile int terminate_requested;
 
 libvchan_t *vchan;
 int protocol_version;
@@ -1061,6 +1064,18 @@ static int handle_agent_restart(int xid) {
     }
     policy_pending_max = -1;
 
+    /* Restore default SIGTERM handling: libvchan_client_init() might block
+     * indefinitely, so we want the program to be killable.
+     */
+    signal(SIGTERM, SIG_DFL);
+    if (terminate_requested)
+        return -1;
+
+#ifdef COVERAGE
+    /* Dump coverage in case we are killed here. */
+    __gcov_flush();
+#endif
+
     vchan = libvchan_client_init(remote_domain_id, VCHAN_BASE_PORT);
     if (!vchan) {
         perror("cannot connect to qrexec agent");
@@ -1072,6 +1087,8 @@ static int handle_agent_restart(int xid) {
         return -1;
     }
     fprintf(stderr, "qrexec-agent has reconnected\n");
+
+    signal(SIGTERM, sigterm_handler);
 
     qrexec_daemon_unix_socket_fd =
         create_qrexec_socket(xid, remote_domain_name);
@@ -1190,6 +1207,9 @@ int main(int argc, char **argv)
                 && FD_ISSET(i, &read_fdset))
                 handle_message_from_client(i);
     }
+
+    if (vchan)
+        libvchan_close(vchan);
 }
 
 // vim:ts=4:sw=4:et:
