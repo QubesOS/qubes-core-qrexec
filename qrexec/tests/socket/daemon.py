@@ -25,6 +25,7 @@ import tempfile
 import shutil
 import struct
 from typing import Tuple
+import time
 
 import psutil
 
@@ -80,7 +81,7 @@ exit 1
             self.domain_name,
         ]
         if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-f'] + cmd
+            cmd = ['strace', '-fD'] + cmd
         self.daemon = subprocess.Popen(
             cmd,
             env=env,
@@ -185,6 +186,19 @@ exit 1
         client = self.connect_client()
         client.handshake()
 
+    def test_terminate_before_restart(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        agent.close()
+
+        util.wait_until(
+            lambda: not os.path.exists(
+                os.path.join(self.tempdir, 'qrexec.{}'.format(self.domain))),
+            'socket deleted')
+
+        self.stop_daemon()
+
     def test_client_exec(self):
         agent = self.start_daemon_with_agent()
         agent.handshake()
@@ -238,6 +252,10 @@ exit 1
         self.assertEqual(port, 514)
         agent.send_message(qrexec.MSG_CONNECTION_TERMINATED,
                            struct.pack('<LL', domain1, port))
+
+        # TODO: race condition here
+        time.sleep(0.1)
+
         port = self.client_exec(domain2)
         self.assertEqual(port, 514)
 
@@ -279,7 +297,7 @@ class TestClient(unittest.TestCase):
             '--socket-dir=' + self.tempdir,
         ] + args
         if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-f'] + cmd
+            cmd = ['strace', '-fD'] + cmd
         self.client = subprocess.Popen(
             cmd,
             env=env,
@@ -422,7 +440,11 @@ class TestClient(unittest.TestCase):
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_command_and_connect_vm(self):
-        cmd = 'echo Hello world'
+        # TODO: This test fails occasionally without the initial 'read', there
+        # is possibly a race condition where the client disconnects too soon
+        # without sending all the data. (It might matter only for the
+        # socket-based vchan implementation).
+        cmd = 'read; echo Hello world'
         request_id = 'SOCKET11'
         src_domain_name = 'src_domain'
         src_domain = 43
@@ -458,3 +480,5 @@ class TestClient(unittest.TestCase):
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
         ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)

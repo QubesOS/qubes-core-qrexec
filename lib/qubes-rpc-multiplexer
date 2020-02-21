@@ -1,5 +1,9 @@
 #!/bin/sh -l
 
+if [ -z "$QREXEC_SERVICE_PATH" ]; then
+    QREXEC_SERVICE_PATH=/usr/local/etc/qubes-rpc:/etc/qubes-rpc
+fi
+
 # write stderr to both calling party and local log; be very careful about
 # closing file descriptors here - if either stdout or stderr will not be closed
 # when service process does the same - service call will hang (waiting for EOF
@@ -13,9 +17,6 @@ mkfifo $return_stderr_pipe
 { tee $return_stderr_pipe 2>/dev/null <$stderr_pipe |\
        logger -t "$1-$2" >/dev/null 2>&1; rm -f $stderr_pipe; } &
 exec 2>$stderr_pipe
-
-QUBES_RPC=/etc/qubes-rpc
-LOCAL_QUBES_RPC=/usr/local/etc/qubes-rpc
 
 if ! [ $# = 2 -o $# = 4 ] ; then
 	echo "$0: bad argument count, usage: $0 SERVICE-NAME REMOTE-DOMAIN-NAME [REQUESTED_TARGET_TYPE REQUESTED_TARGET]" >&2
@@ -35,13 +36,20 @@ if [ "${QREXEC_SERVICE_FULL_NAME}" != "${SERVICE_WITHOUT_ARGUMENT}" ]; then
     export QREXEC_SERVICE_ARGUMENT="${QREXEC_SERVICE_FULL_NAME#*+}"
 fi
 
-for CFG_FILE in $LOCAL_QUBES_RPC/"$1" $QUBES_RPC/"$1" \
-        $LOCAL_QUBES_RPC/"${SERVICE_WITHOUT_ARGUMENT}" \
-        $QUBES_RPC/"${SERVICE_WITHOUT_ARGUMENT}"; do
-	if [ -s "$CFG_FILE" ]; then
+
+ifs=$IFS
+IFS=:
+for DIR in $QREXEC_SERVICE_PATH; do
+    CFG_FILE="$DIR/$1"
+    if [ -s "$CFG_FILE" ]; then
         break
-	fi
+    fi
+    CFG_FILE="$DIR/$SERVICE_WITHOUT_ARGUMENT"
+    if [ -s "$CFG_FILE" ]; then
+        break
+    fi
 done
+IFS=$ifs
 
 if [ -x "$CFG_FILE" ] ; then
     # shellcheck disable=SC2086

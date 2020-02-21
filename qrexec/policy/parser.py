@@ -31,7 +31,7 @@ import itertools
 import logging
 import pathlib
 import string
-import subprocess
+import asyncio
 
 from typing import (
     Iterable,
@@ -459,7 +459,7 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         self.user = user
 
     @abc.abstractmethod
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         '''
         Execute the action. For allow, this runs the qrexec. For ask, it asks
         user and then (depending on verdict) runs the call.
@@ -486,9 +486,13 @@ class AllowResolution(AbstractResolution):
             user=ask_resolution.user,
             target=target)
 
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         '''Execute the allowed action'''
         assert self.target is not None
+
+        # XXX remove when #951 gets fixed
+        if self.request.source == self.target:
+            raise AccessDenied('loopback qrexec connection not supported')
 
         target = self.target
 
@@ -512,12 +516,14 @@ class AllowResolution(AbstractResolution):
         if dispvm:
             qrexec_opts.append('-W')
         try:
-            subprocess.check_call([QREXEC_CLIENT] + qrexec_opts + [cmd])
-        except subprocess.CalledProcessError:
-            raise AccessDenied('qrexec-client failed')
+            command = [QREXEC_CLIENT] + qrexec_opts + [cmd]
+            process = await asyncio.create_subprocess_exec(*command)
+            await process.communicate()
         finally:
             if dispvm:
                 self.cleanup_dispvm(target)
+        if process.returncode != 0:
+            raise AccessDenied('qrexec-client failed')
 
     def spawn_dispvm(self):
         '''
@@ -616,7 +622,7 @@ class AskResolution(AbstractResolution):
         return self.request.allow_resolution_type.from_ask_resolution(self,
             target=target)
 
-    def execute(self, caller_ident):
+    async def execute(self, caller_ident):
         '''Ask the user for permission.
 
         This method should be overloaded in children classes. This
@@ -630,7 +636,7 @@ class AskResolution(AbstractResolution):
 #
 # request
 #
-
+#pylint: disable=too-many-instance-attributes
 class Request:
     '''Qrexec request
 
@@ -781,10 +787,6 @@ class Allow(ActionType):
                     'policy define \'allow\' action to @dispvm at {}:{} '
                     'but no DispVM base is set for this VM'.format(
                         self.rule.filepath, self.rule.lineno))
-
-        # XXX remove when #951 gets fixed
-        if request.source == target:
-            raise AccessDenied('loopback qrexec connection not supported')
 
         return request.allow_resolution_type(self.rule, request,
             user=self.user, target=target)
@@ -1359,7 +1361,7 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
     ...     'qrexec.Service', '+argument', 'source-name', 'target-name',
     ...     system_info=qrexec.utils.get_system_info())
     >>> resolution = policy.evaluate(request)
-    >>> resolution.execute('process-ident')
+    >>> await resolution.execute('process-ident')  # asynchroneous method
     '''
 
     def handle_compat40(self, *, filepath, lineno):
