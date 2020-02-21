@@ -24,10 +24,13 @@ from . import parser
 
 
 class PolicyCache:
-    def __init__(self, path, use_legacy=True):
+    def __init__(self, path=POLICYPATH, use_legacy=True, lazy_load=False):
         self.path = path
-        self.outdated = False
-        self.policy = parser.FilePolicy(policy_path=self.path)
+        self.outdated = lazy_load
+        if lazy_load:
+            self.policy = None
+        else:
+            self.policy = parser.FilePolicy(policy_path=self.path)
 
         # default policy paths are listed manually, for compatibility with R4.0
         # to be removed in Qubes 5.0
