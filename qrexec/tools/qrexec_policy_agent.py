@@ -469,60 +469,6 @@ class RPCConfirmationWindow:
         return False
 
 
-class PolicyCreateConfirmationWindow:
-    # pylint: disable=too-few-public-methods
-    _source_file = pkg_resources.resource_filename('qrexec',
-        os.path.join('glade', "PolicyCreateConfirmationWindow.glade"))
-    _source_id = {'window': "PolicyCreateConfirmationWindow",
-                  'ok': "okButton",
-                  'cancel': "cancelButton",
-                  'source': "sourceEntry",
-                  'service': "serviceEntry",
-                  'confirm': "confirmEntry",
-                  }
-
-    def __init__(self, source, service):
-        self._gtk_builder = Gtk.Builder()
-        self._gtk_builder.add_from_file(self._source_file)
-        self._window = self._gtk_builder.get_object(
-            self._source_id['window'])
-        self._rpc_ok_button = self._gtk_builder.get_object(
-            self._source_id['ok'])
-        self._rpc_cancel_button = self._gtk_builder.get_object(
-            self._source_id['cancel'])
-        self._service_entry = self._gtk_builder.get_object(
-            self._source_id['service'])
-        self._source_entry = self._gtk_builder.get_object(
-            self._source_id['source'])
-        self._confirm_entry = self._gtk_builder.get_object(
-            self._source_id['confirm'])
-
-        self._source_entry.set_text(source)
-        self._service_entry.set_text(service)
-
-        # make OK button the default
-        ok_button = self._window.get_widget_for_response(Gtk.ResponseType.OK)
-        ok_button.set_can_default(True)
-        ok_button.grab_default()
-
-    def run(self):
-        self._window.set_keep_above(True)
-        self._window.connect("delete-event", Gtk.main_quit)
-        self._window.show_all()
-
-        response = self._window.run()
-
-        self._window.hide()
-        if response == Gtk.ResponseType.OK:
-            return self._confirm_entry.get_text() == 'YES'
-        return False
-
-
-def confirm_create(source, service):
-    window = PolicyCreateConfirmationWindow(source, service)
-
-    return window.run()
-
 def confirm_rpc(entries_info, source, rpc_operation, targets_list, target=None):
     window = RPCConfirmationWindow(entries_info, source, rpc_operation,
         targets_list, target)
@@ -543,11 +489,6 @@ class PolicyAgent:
           <arg type='a{ss}' name='icons' direction='in'/>
           <arg type='s' name='response' direction='out'/>
         </method>
-        <method name='ConfirmPolicyCreate'>
-          <arg type='s' name='source' direction='in'/>
-          <arg type='s' name='service_name' direction='in'/>
-          <arg type='b' name='response' direction='out'/>
-        </method>
       </interface>
     </node>
     """
@@ -565,14 +506,6 @@ class PolicyAgent:
             entries_info, source, service_name,
             targets, default_target or None)
         return response or ''
-
-    @staticmethod
-    def ConfirmPolicyCreate(source, service_name):
-        # pylint: disable=invalid-name
-
-        response = confirm_create(
-            source, service_name)
-        return response
 
 
 def main():

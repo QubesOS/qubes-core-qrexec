@@ -158,7 +158,6 @@ rm -f %{name}-%{version}
 
 
 %dir %{python3_sitelib}/qrexec/glade
-%{python3_sitelib}/qrexec/glade/PolicyCreateConfirmationWindow.glade
 %{python3_sitelib}/qrexec/glade/RPCConfirmationWindow.glade
 
 %files devel
