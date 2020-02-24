@@ -163,7 +163,8 @@ int handle_input(
             goto out;
         }
         hdr.len = (uint32_t)len;
-        if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0)
+        /* do not fail on sending EOF (think: close()), it will be handled just below */
+        if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0 && hdr.len != 0)
             goto out;
 
         if (len && !write_vchan_all(vchan, buf, len))
