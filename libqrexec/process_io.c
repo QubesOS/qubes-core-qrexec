@@ -271,7 +271,7 @@ int process_io(const struct process_io_request *req) {
                         vchan, stdout_fd, stdout_msg_type,
                         data_protocol_version)) {
                 case REMOTE_ERROR:
-                    handle_vchan_error("send");
+                    handle_vchan_error("send(handle_input stdout)");
                     break;
                 case REMOTE_EOF:
                     close_stdout(stdout_fd, !use_stdio_socket);
@@ -284,7 +284,7 @@ int process_io(const struct process_io_request *req) {
                         vchan, stderr_fd, MSG_DATA_STDERR,
                         data_protocol_version)) {
                 case REMOTE_ERROR:
-                    handle_vchan_error("send");
+                    handle_vchan_error("send(handle_input stderr)");
                     break;
                 case REMOTE_EOF:
                     close_stderr(stderr_fd);
