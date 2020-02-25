@@ -3,6 +3,7 @@
 #
 # Copyright (C) 2017 Marek Marczykowski-Górecki
 #                               <marmarek@invisiblethingslab.com>
+# Copyright (C) 2020 Paweł Marczewski <pawel@invisiblethingslab.com>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -18,361 +19,219 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
-import tempfile
-import unittest.mock
+from unittest import mock
 from pathlib import PosixPath
-import asynctest
 
-from ..policy import parser
+import asynctest
+import pytest
+
+from ..exc import AccessDenied
 from ..tools import qrexec_policy_exec
 
+# Disable warnings that conflict with Pytest's use of fixtures.
+# pylint: disable=redefined-outer-name, unused-argument
 
-class TC_00_qrexec_policy(unittest.TestCase):
-    async def async_none(self, *_args, **_kwargs):
-        pass
 
-    def setUp(self):
-        super(TC_00_qrexec_policy, self).setUp()
-        self.system_info = {
-            'domains': {'dom0': {'icon': 'black', 'template_for_dispvms': False},
-                'test-vm1': {'icon': 'red', 'template_for_dispvms': False},
-                'test-vm2': {'icon': 'red', 'template_for_dispvms': False},
-                'test-vm3': {'icon': 'green', 'template_for_dispvms': True}, }}
+class TestPolicy:
+    def __init__(self):
+        self.resolution_type = None
+        self.targets_for_ask = None
+        self.default_target = None
+        self.target = None
+        self.rule = mock.NonCallableMock()
+        self.rule.filepath = 'file'
+        self.rulelineno = 42
 
-        self.policy_patch = unittest.mock.patch(
-            'qrexec.policy.parser.FilePolicy')
-        self.policy_mock = self.policy_patch.start()
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.execute.side_effect':
-                self.async_none
-        })
+    def set_ask(self, targets_for_ask, default_target=None):
+        self.resolution_type = 'ask'
+        self.targets_for_ask = targets_for_ask
+        self.default_target = default_target
 
-        self.request_patch = unittest.mock.patch(
-            'qrexec.policy.parser.Request')
-        self.request_mock = self.request_patch.start()
-        self.request_mock.configure_mock(**{
-            'return_value.source': 'source',
-            'return_value.intended_target': 'target',
-            'return_value.service': 'service',
-            'return_value.argument': 'argument',
-            'return_value.system_info': self.system_info,
-            'return_value.allow_resolution_type.from_ask_resolution.return_value.execute.side_effect': asynctest.CoroutineMock(**{"return_value.target":unittest.mock.Mock()}),
-        })
+    def set_allow(self, target):
+        self.resolution_type = 'allow'
+        self.target = target
 
-        self.system_info_patch = unittest.mock.patch(
-            'qrexec.utils.get_system_info')
-        self.system_info_mock = self.system_info_patch.start()
+    def set_deny(self):
+        self.resolution_type = 'deny'
 
-        self.system_info_mock.return_value = self.system_info
+    def evaluate(self, request):
+        assert self.resolution_type is not None
 
-        self.dbus_patch = unittest.mock.patch('pydbus.SystemBus')
-        self.dbus_mock = self.dbus_patch.start()
+        if self.resolution_type == 'ask':
+            return request.ask_resolution_type(
+                self.rule, request, user='user',
+                targets_for_ask=self.targets_for_ask,
+                default_target=self.default_target)
 
-        self.policy_dir = tempfile.TemporaryDirectory()
-        self.policydir_patch = unittest.mock.patch('qrexec.POLICYPATH',
-            self.policy_dir.name)
-        self.policydir_patch.start()
+        if self.resolution_type == 'allow':
+            return request.allow_resolution_type(
+                self.rule, request, user='user', target=self.target)
 
-    def tearDown(self):
-        self.policydir_patch.stop()
-        self.policy_dir.cleanup()
-        self.dbus_patch.start()
-        self.system_info_patch.stop()
-        self.request_patch.stop()
-        self.policy_patch.stop()
-        super(TC_00_qrexec_policy, self).tearDown()
+        if self.resolution_type == 'deny':
+            raise AccessDenied('denied')
 
-    def test_000_allow(self):
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.action':
-                parser.Action.allow,
-        })
-        retval = qrexec_policy_exec.main(
-            ['--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 0)
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-            ('().evaluate().execute', ('process_ident,source,source-id', ), {}),
-        ])
-        # remove call used above:
-        del self.request_mock.mock_calls[-1]
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type':  qrexec_policy_exec.LogAllowedResolution,
-            })
-        ])
+        assert False, self.resolution_type
+        return None
 
-    def test_010_ask_allow(self):
-        rule_mock = unittest.mock.Mock()
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.side_effect':
-                lambda req: qrexec_policy_exec.DBusAskResolution(rule_mock, req,
-                    targets_for_ask=['test-vm1', 'test-vm2'],
-                    default_target=None,
-                    user=None),
-        })
-        self.dbus_mock.configure_mock(**{
-            'return_value.get.return_value.Ask.return_value': 'test-vm1'
-        })
-        retval = qrexec_policy_exec.main(
-            ['--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 0)
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-        ])
-        # remove call used above:
-        del self.request_mock.mock_calls[-1]
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
-            }),
-            ('().allow_resolution_type.from_ask_resolution',
-                (unittest.mock.ANY, ), {'target': 'test-vm1'}),
-            ('().allow_resolution_type.from_ask_resolution().execute',
-                ('process_ident,source,source-id', ), {}),
-        ])
-        icons = {
-            'dom0': 'black',
-            'test-vm1': 'red',
-            'test-vm2': 'red',
-            'test-vm3': 'green',
-            '@dispvm:test-vm3': 'green',
+
+@pytest.fixture
+def policy():
+    """
+    Mock for FilePolicy object that will evaluate the requests.
+    """
+
+    policy = TestPolicy()
+    with mock.patch('qrexec.policy.parser.FilePolicy') as mock_policy:
+        mock_policy.return_value = policy
+        yield policy
+
+    assert mock_policy.mock_calls == [
+        mock.call(policy_path=PosixPath('/etc/qubes/policy.d'))
+    ]
+
+
+@pytest.fixture
+def system_info():
+    system_info = {
+        'domains': {
+            'dom0': {'icon': 'black', 'template_for_dispvms': False},
+            'test-vm1': {'icon': 'red', 'template_for_dispvms': False},
+            'test-vm2': {'icon': 'red', 'template_for_dispvms': False},
+            'test-vm3': {'icon': 'green', 'template_for_dispvms': True},
         }
-        self.assertEqual(self.dbus_mock.mock_calls, [
-            ('', (), {}),
-            ('().get', ('org.qubesos.PolicyAgent',
-                '/org/qubesos/PolicyAgent'), {}),
-            ('().get().Ask', ('source', 'service', ['test-vm1', 'test-vm2'],
-            '', icons), {}),
-        ])
+    }
+    with mock.patch('qrexec.utils.get_system_info') as mock_system_info:
+        mock_system_info.return_value = system_info
+        yield system_info
 
-    def test_011_ask_deny(self):
-        rule_mock = unittest.mock.Mock()
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.side_effect':
-                lambda req: qrexec_policy_exec.DBusAskResolution(rule_mock, req,
-                    targets_for_ask=['test-vm1', 'test-vm2'],
-                    default_target=None,
-                    user=None),
-        })
-        self.dbus_mock.configure_mock(**{
-            'return_value.get.return_value.Ask.return_value': ''
-        })
-        retval = qrexec_policy_exec.main(
-            ['--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 1)
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-        ])
-        # remove call used above:
-        del self.request_mock.mock_calls[-1]
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
-            }),
-        ])
-        icons = {
-            'dom0': 'black',
-            'test-vm1': 'red',
-            'test-vm2': 'red',
-            'test-vm3': 'green',
-            '@dispvm:test-vm3': 'green',
-        }
-        self.assertEqual(self.dbus_mock.mock_calls, [
-            ('', (), {}),
-            ('().get', ('org.qubesos.PolicyAgent',
-                '/org/qubesos/PolicyAgent'), {}),
-            ('().get().Ask', ('source', 'service', ['test-vm1', 'test-vm2'],
-            '', icons), {}),
-        ])
 
-    def test_012_ask_default_target(self):
-        rule_mock = unittest.mock.Mock()
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.side_effect':
-                lambda req: qrexec_policy_exec.DBusAskResolution(rule_mock, req,
-                    targets_for_ask=['test-vm1', 'test-vm2'],
-                    default_target='test-vm1',
-                    user=None),
-        })
-        self.dbus_mock.configure_mock(**{
-            'return_value.get.return_value.Ask.return_value': 'test-vm1'
-        })
-        retval = qrexec_policy_exec.main(
-            ['--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 0)
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-        ])
-        # remove call used above:
-        del self.request_mock.mock_calls[-1]
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
-            }),
-            ('().allow_resolution_type.from_ask_resolution',
-                (unittest.mock.ANY, ), {'target': 'test-vm1'}),
-            ('().allow_resolution_type.from_ask_resolution().execute',
-                ('process_ident,source,source-id', ), {}),
-        ])
-        icons = {
-            'dom0': 'black',
-            'test-vm1': 'red',
-            'test-vm2': 'red',
-            'test-vm3': 'green',
-            '@dispvm:test-vm3': 'green',
-        }
-        self.assertEqual(self.dbus_mock.mock_calls, [
-            ('', (), {}),
-            ('().get', ('org.qubesos.PolicyAgent',
-                '/org/qubesos/PolicyAgent'), {}),
-            ('().get().Ask', ('source', 'service', ['test-vm1', 'test-vm2'],
-            'test-vm1', icons), {}),
-        ])
+@pytest.fixture
+def icons(system_info):
+    return {
+        'dom0': 'black',
+        'test-vm1': 'red',
+        'test-vm2': 'red',
+        'test-vm3': 'green',
+        '@dispvm:test-vm3': 'green',
+    }
 
-    def test_020_deny(self):
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.action':
-                parser.Action.deny,
-            'return_value.evaluate.return_value.execute.side_effect':
-                parser.AccessDenied,
-        })
-        retval = qrexec_policy_exec.main(
-            ['--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 1)
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-            ('().evaluate().execute', ('process_ident,source,source-id',), {}),
-        ])
-        # remove call used above:
-        del self.request_mock.mock_calls[-1]
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.DBusAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.LogAllowedResolution,
-            }),
-        ])
-        self.assertEqual(self.dbus_mock.mock_calls, [])
 
-    def test_030_just_evaluate_allow(self):
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.action':
-                parser.Action.allow,
-        })
-        retval = qrexec_policy_exec.main(
+@pytest.fixture
+def execute():
+    """
+    Mock for execute() for allowed action. It is supposed to call the qrexec.
+    """
+
+    with mock.patch('qrexec.policy.parser.AllowResolution.execute',
+                    asynctest.CoroutineMock()) as mock_execute:
+        yield mock_execute
+
+
+@pytest.fixture
+def dbus_ask():
+    """
+    Mock for Ask() method forwarded to the qrexec-policy-agent.
+    """
+
+    dbus_ask = mock.MagicMock()
+    with mock.patch('pydbus.SystemBus') as mock_dbus:
+        mock_dbus.return_value.get.return_value.Ask = dbus_ask
+        yield dbus_ask
+
+
+def test_000_allow(system_info, policy, execute):
+    policy.set_allow('test-vm1')
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 0
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
+def test_010_ask_allow(system_info, icons, policy, dbus_ask, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'])
+    dbus_ask.return_value = 'test-vm1'
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 0
+    assert dbus_ask.mock_calls == [
+        mock.call('source', 'service', ['test-vm1', 'test-vm2'], '', icons),
+    ]
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
+def test_011_ask_deny(system_info, icons, policy, dbus_ask, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'])
+    dbus_ask.return_value = ''
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert dbus_ask.mock_calls == [
+        mock.call('source', 'service', ['test-vm1', 'test-vm2'], '', icons),
+    ]
+    assert execute.mock_calls == []
+
+
+def test_012_default_target(system_info, icons, policy, dbus_ask, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'], 'test-vm1')
+    dbus_ask.return_value = 'test-vm1'
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 0
+    assert dbus_ask.mock_calls == [
+        mock.call('source', 'service', ['test-vm1', 'test-vm2'], 'test-vm1',
+                  icons),
+    ]
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
+def test_020_deny(system_info, policy, execute):
+    policy.set_deny()
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert execute.mock_calls == []
+
+
+def test_030_just_evaluate_allow(system_info, policy, execute):
+    policy.set_allow('test-vm1')
+    with pytest.raises(SystemExit) as e:
+        qrexec_policy_exec.main(
             ['--just-evaluate',
-             '--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 0)
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-            ('().evaluate().execute', ('process_ident,source,source-id',), {}),
-        ])
-        # remove call used above:
-        del self.request_mock.mock_calls[-1]
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.JustEvaluateAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.JustEvaluateAllowResolution,
-            }),
-        ])
-        self.assertEqual(self.dbus_mock.mock_calls, [])
+             'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert e.value.code == 0
+    assert execute.mock_calls == []
 
-    def test_031_just_evaluate_deny(self):
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.action':
-                parser.Action.deny,
-            'return_value.evaluate.return_value.execute.side_effect':
-                parser.AccessDenied,
-        })
-        retval = qrexec_policy_exec.main(
+
+def test_031_just_evaluate_deny(system_info, policy, execute):
+    policy.set_deny()
+    retval = qrexec_policy_exec.main(
+        ['--just-evaluate',
+         'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert execute.mock_calls == []
+
+
+def test_032_just_evaluate_ask(system_info, policy, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'])
+    with pytest.raises(SystemExit) as e:
+        qrexec_policy_exec.main(
             ['--just-evaluate',
-             '--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 1)
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-            ('().evaluate().execute', ('process_ident,source,source-id',), {}),
-        ])
-        # remove call used above:
-        del self.request_mock.mock_calls[-1]
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.JustEvaluateAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.JustEvaluateAllowResolution,
-            }),
-        ])
-        self.assertEqual(self.dbus_mock.mock_calls, [])
+             'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert e.value.code == 1
+    assert execute.mock_calls == []
 
-    def test_032_just_evaluate_ask(self):
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.action':
-                parser.Action.ask,
-            'return_value.evaluate.return_value.execute.side_effect':
-                parser.AccessDenied,
-        })
-        retval = qrexec_policy_exec.main(
-            ['--just-evaluate',
-             '--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 1)
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.JustEvaluateAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.JustEvaluateAllowResolution,
-            }),
-        ])
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-            ('().evaluate().execute', ('process_ident,source,source-id',), {}),
-        ])
-        self.assertEqual(self.dbus_mock.mock_calls, [])
 
-    def test_033_just_evaluate_ask_assume_yes(self):
-        self.policy_mock.configure_mock(**{
-            'return_value.evaluate.return_value.action':
-                parser.Action.ask,
-        })
-        retval = qrexec_policy_exec.main(
+def test_033_just_evaluate_ask_assume_yes(system_info, policy, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'])
+    with pytest.raises(SystemExit) as e:
+        qrexec_policy_exec.main(
             ['--just-evaluate', '--assume-yes-for-ask',
-             '--path=' + self.policy_dir.name,
-             'source-id', 'source', 'target', 'service', 'process_ident'])
-        self.assertEqual(retval, 0)
-        self.assertEqual(self.request_mock.mock_calls, [
-            ('', ('service', '+', 'source', 'target'), {
-                'system_info': self.system_info,
-                'ask_resolution_type': qrexec_policy_exec.AssumeYesForAskResolution,
-                'allow_resolution_type': qrexec_policy_exec.JustEvaluateAllowResolution,
-            }),
-        ])
-        self.assertEqual(self.policy_mock.mock_calls, [
-            ('', (), {'policy_path': PosixPath(self.policy_dir.name)}),
-            ('().evaluate', (self.request_mock(),), {}),
-            ('().evaluate().execute', ('process_ident,source,source-id', ), {}),
-        ])
-        self.assertEqual(self.dbus_mock.mock_calls, [])
+             'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert e.value.code == 0
+    assert execute.mock_calls == []
