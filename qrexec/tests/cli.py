@@ -200,11 +200,10 @@ def test_020_deny(system_info, policy, execute):
 
 def test_030_just_evaluate_allow(system_info, policy, execute):
     policy.set_allow('test-vm1')
-    with pytest.raises(SystemExit) as e:
-        qrexec_policy_exec.main(
-            ['--just-evaluate',
-             'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
-    assert e.value.code == 0
+    retval = qrexec_policy_exec.main(
+        ['--just-evaluate',
+         'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 0
     assert execute.mock_calls == []
 
 
@@ -219,19 +218,17 @@ def test_031_just_evaluate_deny(system_info, policy, execute):
 
 def test_032_just_evaluate_ask(system_info, policy, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
-    with pytest.raises(SystemExit) as e:
-        qrexec_policy_exec.main(
-            ['--just-evaluate',
-             'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
-    assert e.value.code == 1
+    retval = qrexec_policy_exec.main(
+        ['--just-evaluate',
+         'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
     assert execute.mock_calls == []
 
 
 def test_033_just_evaluate_ask_assume_yes(system_info, policy, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
-    with pytest.raises(SystemExit) as e:
-        qrexec_policy_exec.main(
-            ['--just-evaluate', '--assume-yes-for-ask',
-             'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
-    assert e.value.code == 0
+    retval = qrexec_policy_exec.main(
+        ['--just-evaluate', '--assume-yes-for-ask',
+         'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 0
     assert execute.mock_calls == []

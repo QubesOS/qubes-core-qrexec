@@ -37,14 +37,20 @@ def create_default_policy(service_name):
         policy.write(DEFAULT_POLICY)
 
 
+class JustEvaluateResult(Exception):
+    def __init__(self, exit_code):
+        super().__init__()
+        self.exit_code = exit_code
+
+
 class JustEvaluateAllowResolution(parser.AllowResolution):
     async def execute(self, caller_ident):
-        sys.exit(0)
+        raise JustEvaluateResult(0)
 
 
 class JustEvaluateAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
-        sys.exit(1)
+        raise JustEvaluateResult(1)
 
 
 class AssumeYesForAskResolution(parser.AskResolution):
@@ -204,6 +210,8 @@ async def handle_request(
     except exc.AccessDenied as err:
         log.info('%s denied: %s', log_prefix, err)
         return 1
+    except JustEvaluateResult as err:
+        return err.exit_code
     return 0
 
 
