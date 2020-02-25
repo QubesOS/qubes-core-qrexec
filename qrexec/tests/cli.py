@@ -94,10 +94,18 @@ def policy():
 def system_info():
     system_info = {
         'domains': {
-            'dom0': {'icon': 'black', 'template_for_dispvms': False},
-            'test-vm1': {'icon': 'red', 'template_for_dispvms': False},
-            'test-vm2': {'icon': 'red', 'template_for_dispvms': False},
-            'test-vm3': {'icon': 'green', 'template_for_dispvms': True},
+            'dom0': {'icon': 'black', 'template_for_dispvms': False,
+                     'guivm': None},
+            'source': {'icon': 'red', 'template_for_dispvms': False,
+                       'guivm': 'gui'},
+            'test-vm1': {'icon': 'red', 'template_for_dispvms': False,
+                         'guivm': None},
+            'test-vm2': {'icon': 'red', 'template_for_dispvms': False,
+                         'guivm': None},
+            'test-vm3': {'icon': 'green', 'template_for_dispvms': True,
+                         'guivm': None},
+            'gui': {'icon': 'orange', 'template_for_dispvms': False,
+                    'guivm': None},
         }
     }
     with mock.patch('qrexec.utils.get_system_info') as mock_system_info:
@@ -109,10 +117,12 @@ def system_info():
 def icons(system_info):
     return {
         'dom0': 'black',
+        'source': 'red',
         'test-vm1': 'red',
         'test-vm2': 'red',
         'test-vm3': 'green',
         '@dispvm:test-vm3': 'green',
+        'gui': 'orange',
     }
 
 
@@ -128,15 +138,14 @@ def execute():
 
 
 @pytest.fixture
-def dbus_ask():
+def agent_service():
     """
-    Mock for Ask() method forwarded to the qrexec-policy-agent.
+    Mock for call_socket_service() used to contact the qrexec-policy-agent.
     """
 
-    dbus_ask = mock.MagicMock()
-    with mock.patch('pydbus.SystemBus') as mock_dbus:
-        mock_dbus.return_value.get.return_value.Ask = dbus_ask
-        yield dbus_ask
+    with mock.patch('qrexec.tools.qrexec_policy_exec.call_socket_service',
+                    asynctest.CoroutineMock()) as mock_call_socket_service:
+        yield mock_call_socket_service
 
 
 def test_000_allow(system_info, policy, execute):
@@ -149,45 +158,74 @@ def test_000_allow(system_info, policy, execute):
     ]
 
 
-def test_010_ask_allow(system_info, icons, policy, dbus_ask, execute):
+def test_010_ask_allow(system_info, icons, policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
-    dbus_ask.return_value = 'test-vm1'
+    agent_service.return_value = 'test-vm1'
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 0
-    assert dbus_ask.mock_calls == [
-        mock.call('source', 'service', ['test-vm1', 'test-vm2'], '', icons),
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Ask', 'dom0', {
+            'source': 'source',
+            'service': 'service',
+            'targets': ['test-vm1', 'test-vm2'],
+            'default_target': '',
+            'icons': icons,
+        }),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
     ]
 
 
-def test_011_ask_deny(system_info, icons, policy, dbus_ask, execute):
+def test_011_ask_deny(system_info, icons, policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
-    dbus_ask.return_value = ''
+    agent_service.return_value = ''
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
-    assert dbus_ask.mock_calls == [
-        mock.call('source', 'service', ['test-vm1', 'test-vm2'], '', icons),
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Ask', 'dom0', {
+            'source': 'source',
+            'service': 'service',
+            'targets': ['test-vm1', 'test-vm2'],
+            'default_target': '',
+            'icons': icons,
+        }),
     ]
     assert execute.mock_calls == []
 
 
-def test_012_default_target(system_info, icons, policy, dbus_ask, execute):
+def test_012_ask_default_target(system_info, icons, policy, agent_service,
+                                execute):
     policy.set_ask(['test-vm1', 'test-vm2'], 'test-vm1')
-    dbus_ask.return_value = 'test-vm1'
+    agent_service.return_value = 'test-vm1'
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 0
-    assert dbus_ask.mock_calls == [
-        mock.call('source', 'service', ['test-vm1', 'test-vm2'], 'test-vm1',
-                  icons),
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Ask', 'dom0', {
+            'source': 'source',
+            'service': 'service',
+            'targets': ['test-vm1', 'test-vm2'],
+            'default_target': 'test-vm1',
+            'icons': icons,
+        }),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
     ]
+
+
+def test_013_ask_no_guivm(system_info, icons, policy, agent_service,
+                          execute):
+    system_info['domains']['source']['guivm'] = None
+    policy.set_ask(['test-vm1', 'test-vm2'])
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert agent_service.mock_calls == []
+    assert execute.mock_calls == []
 
 
 def test_020_deny(system_info, policy, execute):

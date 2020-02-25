@@ -39,14 +39,12 @@ install-dom0: all-dom0
 	+$(MAKE) install -C daemon
 	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc-dom0/*
+	ln -s /var/run/qubes/policy.Ask $(DESTDIR)/etc/qubes-rpc/policy.Ask
 	install -d $(DESTDIR)/etc/qubes-rpc/policy -m 775
 	install -d $(DESTDIR)/etc/qubes-rpc/policy/include -m 775
 	install -d $(DESTDIR)/etc/xdg/autostart -m 755
 	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
 		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
-	install -d $(DESTDIR)/etc/dbus-1/system.d
-	install -m 644 policy-agent-extra/dbus-org.qubesos.PolicyAgent.conf \
-		$(DESTDIR)/etc/dbus-1/system.d/org.qubesos.PolicyAgent.conf
 	install -d $(DESTDIR)/etc/qubes/policy.d -m 775
 	install -d $(DESTDIR)/etc/qubes/policy.d/include -m 775
 	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/*

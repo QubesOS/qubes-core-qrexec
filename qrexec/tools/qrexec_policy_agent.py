@@ -25,9 +25,10 @@ decisions.'''
 
 import itertools
 import os
+import argparse
+import asyncio
 
 import pkg_resources
-import pydbus
 
 # pylint: disable=import-error,wrong-import-position
 import gi
@@ -35,7 +36,13 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib
 # pylint: enable=import-error
 
+# pylint: disable=wrong-import-order
+import gbulb
+gbulb.install()
+
+from .. import SOCKET_PATH
 from ..utils import sanitize_domain_name, sanitize_service_name
+from ..server import run_server
 
 # pylint: enable=wrong-import-position
 
@@ -445,12 +452,12 @@ class RPCConfirmationWindow:
     def _close(self):
         self._rpc_window.close()
 
+    async def _wait_for_close(self):
+        await gbulb.wait_signal(self._rpc_window, 'delete-event')
+
     def _show(self):
         self._rpc_window.set_keep_above(True)
-        self._rpc_window.connect("delete-event", Gtk.main_quit)
         self._rpc_window.show_all()
-
-        Gtk.main()
 
     def _new_vm_list_modeler(self):
         return VMListModeler(self._entries_info)
@@ -461,59 +468,60 @@ class RPCConfirmationWindow:
                     self._rpc_ok_button,
                     1)
 
-    def confirm_rpc(self):
+    async def confirm_rpc(self):
         self._show()
+        await self._wait_for_close()
 
         if self._confirmed:
             return self._target_name
         return False
 
 
-def confirm_rpc(entries_info, source, rpc_operation, targets_list, target=None):
+async def confirm_rpc(entries_info, source, rpc_operation, targets_list, target=None):
     window = RPCConfirmationWindow(entries_info, source, rpc_operation,
         targets_list, target)
 
-    return window.confirm_rpc()
+    return await window.confirm_rpc()
 
 
-class PolicyAgent:
-    # pylint: disable=too-few-public-methods
-    dbus = """
-    <node>
-      <interface name='org.qubesos.PolicyAgent'>
-        <method name='Ask'>
-          <arg type='s' name='source' direction='in'/>
-          <arg type='s' name='service_name' direction='in'/>
-          <arg type='as' name='targets' direction='in'/>
-          <arg type='s' name='default_target' direction='in'/>
-          <arg type='a{ss}' name='icons' direction='in'/>
-          <arg type='s' name='response' direction='out'/>
-        </method>
-      </interface>
-    </node>
-    """
+async def handle_ask(params, __method, __source_domain):
+    source = params['source']
+    service_name = params['service']
+    targets = params['targets']
+    default_target = params['default_target']
 
-    @staticmethod
-    def Ask(source, service_name, targets, default_target,
-            icons):
-        # pylint: disable=invalid-name
-        entries_info = {}
-        for entry in icons:
-            entries_info[entry] = {}
-            entries_info[entry]['icon'] = icons.get(entry, None)
+    entries_info = {}
+    for domain_name, icon in params['icons'].items():
+        entries_info[domain_name] = {'icon': icon}
 
-        response = confirm_rpc(
-            entries_info, source, service_name,
-            targets, default_target or None)
-        return response or ''
+    target = await confirm_rpc(
+        entries_info, source, service_name,
+        targets, default_target or None)
+
+    if target:
+        return target
+    return ''
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    '-s', '--socket-path', metavar='DIR', type=str,
+    default=SOCKET_PATH,
+    help='path to qubes-rpc directory')
 
 
 def main():
-    loop = GLib.MainLoop()
-    bus = pydbus.SystemBus()
-    obj = PolicyAgent()
-    bus.publish('org.qubesos.PolicyAgent', obj)
-    loop.run()
+    args = parser.parse_args()
+
+    loop = asyncio.get_event_loop()
+    tasks = [
+        run_server(
+            'policy.Ask', handle_ask, args.socket_path
+        )
+    ]
+    loop.run_until_complete(asyncio.wait(tasks))
+
 
 if __name__ == '__main__':
     main()

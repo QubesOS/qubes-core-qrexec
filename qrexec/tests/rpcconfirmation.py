@@ -64,6 +64,9 @@ class MockRPCConfirmationWindow(RPCConfirmationWindow):
     def _show(self):
         self.test_called_show = True
 
+    async def _wait_for_close(self):
+        pass
+
     def _clicked_ok(self, button):
         super()._clicked_ok(button)
         self.test_clicked_ok = True
@@ -146,24 +149,24 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
         self.assertEquals("&lt;script&gt;.<b>inject</b>",
                           self.window._escape_and_format_rpc_text("<script>.inject"))
 
-    def test_lifecycle_open_select_ok(self):
-        self._lifecycle_start(select_target=True)
+    async def test_lifecycle_open_select_ok(self):
+        await self._lifecycle_start(select_target=True)
         self._lifecycle_click(click_type="ok")
 
-    def test_lifecycle_open_select_cancel(self):
-        self._lifecycle_start(select_target=True)
+    async def test_lifecycle_open_select_cancel(self):
+        await self._lifecycle_start(select_target=True)
         self._lifecycle_click(click_type="cancel")
 
-    def test_lifecycle_open_select_exit(self):
-        self._lifecycle_start(select_target=True)
+    async def test_lifecycle_open_select_exit(self):
+        await self._lifecycle_start(select_target=True)
         self._lifecycle_click(click_type="exit")
 
-    def test_lifecycle_open_cancel(self):
-        self._lifecycle_start(select_target=False)
+    async def test_lifecycle_open_cancel(self):
+        await self._lifecycle_start(select_target=False)
         self._lifecycle_click(click_type="cancel")
 
-    def test_lifecycle_open_exit(self):
-        self._lifecycle_start(select_target=False)
+    async def test_lifecycle_open_exit(self):
+        await self._lifecycle_start(select_target=False)
         self._lifecycle_click(click_type="exit")
 
     def _lifecycle_click(self, click_type):
@@ -190,7 +193,7 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
         self.assertTrue(self.window.test_called_close)
 
 
-    def _lifecycle_start(self, select_target):
+    async def _lifecycle_start(self, select_target):
         self.assertFalse(self.window.test_called_close)
         self.assertFalse(self.window.test_called_show)
 
@@ -204,11 +207,8 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
         self.flush_gtk_events(self._test_time*2)
         self.assert_initial_state(True)
 
-        try:
-            # We expect the call to exit immediately, since no window is opened
-            self.window.confirm_rpc()
-        except Exception:
-            pass
+        # We expect the call to exit immediately, since no window is opened
+        await self.window.confirm_rpc()
 
         self.assertFalse(self.window.test_called_close)
         self.assertTrue(self.window.test_called_show)
@@ -249,8 +249,8 @@ class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
                  source_name="test-source", rpc_operation="test.Operation",
                  target_name="test-target")
 
-    def test_lifecycle_open_ok(self):
-        self._lifecycle_start(select_target=False)
+    async def test_lifecycle_open_ok(self):
+        await self._lifecycle_start(select_target=False)
         self._lifecycle_click(click_type="ok")
 
     def assert_initial_state(self, after_focus_timer):
@@ -278,8 +278,8 @@ class RPCConfirmationWindowTestWithDispVMTarget(RPCConfirmationWindowTestBase):
                  source_name="test-source", rpc_operation="test.Operation",
                  target_name="@dispvm:test-disp6")
 
-    def test_lifecycle_open_ok(self):
-        self._lifecycle_start(select_target=False)
+    async def test_lifecycle_open_ok(self):
+        await self._lifecycle_start(select_target=False)
         self._lifecycle_click(click_type="ok")
 
     def assert_initial_state(self, after_focus_timer):

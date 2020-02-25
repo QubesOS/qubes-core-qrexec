@@ -120,6 +120,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/client_vm.py
 %{python3_sitelib}/qrexec/exc.py
 %{python3_sitelib}/qrexec/utils.py
+%{python3_sitelib}/qrexec/server.py
 
 %dir %{python3_sitelib}/qrexec/policy
 %dir %{python3_sitelib}/qrexec/policy/__pycache__

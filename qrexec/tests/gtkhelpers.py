@@ -22,6 +22,7 @@
 
 import time
 import unittest
+import asynctest
 import os
 
 import gi  # isort:skip
@@ -56,7 +57,7 @@ class MockComboEntry:
 
 
 @unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
-class GtkTestCase(unittest.TestCase):
+class GtkTestCase(asynctest.TestCase):
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
         self._smallest_wait = 0.01
