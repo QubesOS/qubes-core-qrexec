@@ -30,6 +30,7 @@ from .. import exc
 from .. import utils
 from ..policy import parser
 from ..policy.utils import PolicyCache
+from ..server import call_socket_service
 
 
 def create_default_policy(service_name):
@@ -59,12 +60,16 @@ class AssumeYesForAskResolution(parser.AskResolution):
             True, self.request.target).execute(caller_ident)
 
 
-class DBusAskResolution(parser.AskResolution):
+class AgentAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
-        import pydbus
-        bus = pydbus.SystemBus()
-        proxy = bus.get('org.qubesos.PolicyAgent',
-            '/org/qubesos/PolicyAgent')
+        guivm = \
+            self.request.system_info['domains'][self.request.source]['guivm']
+        if not guivm:
+            log = logging.getLogger('policy')
+            log.error('%s not allowed from %s: the resolution was "ask", '
+                      'but source domain has no GuiVM',
+                      self.request.service, self.request.source)
+            return self.handle_user_response(False, None)
 
         # prepare icons
         icons = {name: self.request.system_info['domains'][name]['icon']
@@ -79,8 +84,18 @@ class DBusAskResolution(parser.AskResolution):
             icons[dispvm_api_name] = \
                 icons[dispvm_api_name].replace('app', 'disp')
 
-        response = proxy.Ask(self.request.source, self.request.service,
-            self.targets_for_ask, self.default_target or '', icons)
+        params = {
+            'source': self.request.source,
+            'service': self.request.service,
+            'targets': self.targets_for_ask,
+            'default_target': self.default_target or '',
+            'icons': icons,
+        }
+
+        service = 'policy.Ask'
+        source_domain = 'dom0'
+        response = await call_socket_service(
+            guivm, service, source_domain, params)
 
         if response:
             return await self.handle_user_response(True, response).execute(
@@ -103,7 +118,7 @@ class LogAllowedResolution(parser.AllowResolution):
 def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask,
                              allow_resolution_type):
     ret = {
-        'ask_resolution_type': DBusAskResolution,
+        'ask_resolution_type': AgentAskResolution,
         'allow_resolution_type': allow_resolution_type}
     if just_evaluate:
         ret['ask_resolution_type'] = JustEvaluateAskResolution
