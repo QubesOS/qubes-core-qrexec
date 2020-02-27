@@ -109,6 +109,7 @@ rm -f %{name}-%{version}
 
 /lib/systemd/user/qubes-qrexec-policy-agent.service
 /lib/systemd/user/qubes-qrexec-policy-agent.socket
+/lib/systemd/user/sockets.target.wants/qubes-qrexec-policy-agent.socket
 
 %dir %{python3_sitelib}/qrexec-*.egg-info
 %{python3_sitelib}/qrexec-*.egg-info/*
