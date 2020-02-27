@@ -40,9 +40,9 @@ from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib
 import gbulb
 gbulb.install()
 
-from .. import SOCKET_PATH
+from .. import POLICY_AGENT_SOCKET_PATH
 from ..utils import sanitize_domain_name, sanitize_service_name
-from ..server import run_server
+from ..server import start_server
 
 # pylint: enable=wrong-import-position
 
@@ -484,7 +484,13 @@ async def confirm_rpc(entries_info, source, rpc_operation, targets_list, target=
     return await window.confirm_rpc()
 
 
-async def handle_ask(params, __method, __source_domain):
+async def handle_request(params, method, __source_domain):
+    if method == 'policy.Ask':
+        return await handle_ask(params)
+    raise Exception('unknown method: {}'.format(method))
+
+
+async def handle_ask(params):
     source = params['source']
     service_name = params['service']
     targets = params['targets']
@@ -507,8 +513,15 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     '-s', '--socket-path', metavar='DIR', type=str,
-    default=SOCKET_PATH,
-    help='path to qubes-rpc directory')
+    default=POLICY_AGENT_SOCKET_PATH,
+    help='path to socket')
+
+
+async def run_server(socket_path):
+    server = await start_server(handle_request, socket_path,
+                                socket_activated=True)
+    async with server:
+        await server.serve_forever()
 
 
 def main():
@@ -516,9 +529,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     tasks = [
-        run_server(
-            'policy.Ask', handle_ask, args.socket_path
-        )
+        run_server(args.socket_path),
     ]
     loop.run_until_complete(asyncio.wait(tasks))
 

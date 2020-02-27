@@ -41,6 +41,8 @@ BuildRequires:	qubes-libvchan-devel
 BuildRequires:  python3-rpm-macros
 
 Requires:   python%{python3_pkgversion}
+Requires:   python3-gbulb
+Requires:   python3-systemd
 Conflicts:  qubes-utils-libs < 4.1.0
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 Conflicts:  qubes-core-dom0-linux < 4.1.0
@@ -103,6 +105,11 @@ rm -f %{name}-%{version}
 
 /usr/lib/qubes/qubes-rpc-multiplexer
 
+%{_sysconfdir}/qubes-rpc/policy.Ask
+
+/lib/systemd/user/qubes-qrexec-policy-agent.service
+/lib/systemd/user/qubes-qrexec-policy-agent.socket
+
 %dir %{python3_sitelib}/qrexec-*.egg-info
 %{python3_sitelib}/qrexec-*.egg-info/*
 
@@ -147,6 +154,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/policy_parser.py
 %{python3_sitelib}/qrexec/tests/qrexec_policy_daemon.py
 %{python3_sitelib}/qrexec/tests/policy_cache.py
+%{python3_sitelib}/qrexec/tests/server.py
 
 %dir %{python3_sitelib}/qrexec/tests/socket
 %dir %{python3_sitelib}/qrexec/tests/socket/__pycache__

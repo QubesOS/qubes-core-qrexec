@@ -11,6 +11,8 @@ Build-Depends:
  dh-systemd (>= 1.5),
  lsb-release,
  python3-setuptools,
+ python3-gbulb,
+ python3-systemd,
  pandoc,
 Standards-Version: 3.9.5
 Homepage: https://www.qubes-os.org

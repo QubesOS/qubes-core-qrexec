@@ -1,0 +1,11 @@
+[Unit]
+Description=Qubes remote exec policy agent socket
+ConditionUser=!root
+ConditionGroup=qubes
+PartOf=qubes-qrexec-policy-agent.service
+
+[Socket]
+ListenStream=/var/run/qubes/policy-agent.sock
+
+[Install]
+WantedBy=sockets.target

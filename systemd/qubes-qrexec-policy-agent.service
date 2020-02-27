@@ -1,0 +1,12 @@
+[Unit]
+Description=Qubes remote exec policy agent
+ConditionUser=!root
+ConditionGroup=qubes
+Requires=qubes-qrexec-policy-agent.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qrexec-policy-agent
+
+[Install]
+WantedBy=default.target

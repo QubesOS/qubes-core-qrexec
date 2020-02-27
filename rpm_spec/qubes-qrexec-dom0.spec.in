@@ -40,10 +40,9 @@ BuildRequires:	qubes-libvchan-devel
 BuildRequires:  qubes-core-qrexec-devel
 
 Requires:   python3
+Requires:   python3-inotify
 Requires:   qubes-core-dom0
 Requires:   qubes-core-qrexec
-Requires:   python3-inotify
-Requires:   python3-gbulb
 
 Conflicts:  qubes-core-dom0 < 4.0.9999
 Conflicts:  qubes-core-dom0-linux < 4.0.9999
@@ -90,8 +89,6 @@ rm -f %{name}-%{version}
 %{_sbindir}/qrexec-daemon
 /usr/lib/qubes/qrexec-client
 
-%{_sysconfdir}/xdg/autostart/qrexec-policy-agent.desktop
-
 %dir %{_sysconfdir}/qubes/policy.d
 %dir %{_sysconfdir}/qubes/policy.d/include
 %{_sysconfdir}/qubes/policy.d/README
@@ -100,7 +97,6 @@ rm -f %{name}-%{version}
 %attr(2775,root,qubes) %dir %{_sysconfdir}/qubes-rpc/policy
 %dir %{_sysconfdir}/qubes-rpc/policy/include
 
-%{_sysconfdir}/qubes-rpc/policy.Ask
 %{_sysconfdir}/qubes-rpc/policy.RegisterArgument
 
 /lib/systemd/system/qubes-qrexec-policy-daemon.service
