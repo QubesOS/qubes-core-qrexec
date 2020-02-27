@@ -28,6 +28,9 @@ import os.path
 import asyncio
 import subprocess
 import json
+import socket
+
+from systemd.daemon import listen_fds
 
 from . import QREXEC_CLIENT, RPC_PATH
 
@@ -51,14 +54,19 @@ async def client_connected(reader, writer, handler):
         await writer.wait_closed()
 
 
-async def run_server(service, handler, rpc_path=RPC_PATH):
-    path = os.path.join(rpc_path, service)
-    if os.path.exists(path):
-        os.unlink(path)
-    server = await asyncio.start_unix_server(
-        lambda reader, writer: client_connected(reader, writer, handler), path)
-    async with server:
-        await server.serve_forever()
+def start_server(handler, socket_path, socket_activated=False):
+    _handler = lambda reader, writer: client_connected(reader, writer, handler)
+
+    if socket_activated:
+        fds = listen_fds()
+        if fds:
+            assert len(fds) == 1, 'too many listen_fds: {}'.format(listen_fds)
+            sock = socket.socket(fileno=fds[0])
+            return asyncio.start_unix_server(_handler, sock=sock)
+
+    if os.path.exists(socket_path):
+        os.unlink(socket_path)
+    return asyncio.start_unix_server(_handler, path=socket_path)
 
 
 def call_socket_service(
@@ -69,6 +77,7 @@ def call_socket_service(
             service, source_domain, params, rpc_path)
     return call_socket_service_remote(
         remote_domain, service, source_domain, params)
+
 
 async def call_socket_service_local(service, source_domain, params,
                                     rpc_path=RPC_PATH):

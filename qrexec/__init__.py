@@ -52,7 +52,7 @@ QUBESD_INTERNAL_SOCK = '/var/run/qubesd.internal.sock'
 QUBESD_SOCK = '/var/run/qubesd.sock'
 
 RPC_PATH = '/etc/qubes-rpc'
-SOCKET_PATH = '/var/run/qubes'
+POLICY_AGENT_SOCKET_PATH = '/var/run/qubes/policy-agent.sock'
 POLICYPATH = pathlib.Path('/etc/qubes/policy.d')
 POLICYSOCKET = pathlib.Path('/var/run/qubes/policy.sock')
 INCLUDEPATH = POLICYPATH / 'include'
