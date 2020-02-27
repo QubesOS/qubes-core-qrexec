@@ -33,6 +33,8 @@ install-base: all-base
 	install -d $(DESTDIR)/lib/systemd/user -m 755
 	install -t $(DESTDIR)/lib/systemd/user -m 644 systemd/qubes-qrexec-policy-agent.service
 	install -t $(DESTDIR)/lib/systemd/user -m 644 systemd/qubes-qrexec-policy-agent.socket
+	install -d $(DESTDIR)/lib/systemd/user/sockets.target.wants -m 755
+	ln -s /lib/systemd/user/qubes-qrexec-policy-agent.socket $(DESTDIR)/lib/systemd/user/sockets.target.wants/
 .PHONY: install-base
 
 

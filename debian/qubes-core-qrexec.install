@@ -4,6 +4,7 @@ etc/qubes-rpc/policy.Ask
 lib/systemd/system/qubes-qrexec-agent.service
 lib/systemd/user/qubes-qrexec-policy-agent.service
 lib/systemd/user/qubes-qrexec-policy-agent.socket
+lib/systemd/user/sockets.target.wants/qubes-qrexec-policy-agent.socket
 usr/bin/qrexec-client-vm
 usr/bin/qrexec-fork-server
 usr/bin/qrexec-policy-graph
