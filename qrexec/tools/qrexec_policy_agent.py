@@ -33,7 +33,7 @@ import pkg_resources
 # pylint: disable=import-error,wrong-import-position
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib
+from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib, Gio
 # pylint: enable=import-error
 
 # pylint: disable=wrong-import-order
@@ -477,36 +477,91 @@ class RPCConfirmationWindow:
         return False
 
 
-async def confirm_rpc(entries_info, source, rpc_operation, targets_list, target=None):
+async def confirm_rpc(entries_info, source, rpc_operation, targets_list,
+                      target=None):
     window = RPCConfirmationWindow(entries_info, source, rpc_operation,
-        targets_list, target)
+                                   targets_list, target)
 
     return await window.confirm_rpc()
 
 
-async def handle_request(params, method, __source_domain):
-    if method == 'policy.Ask':
-        return await handle_ask(params)
-    raise Exception('unknown method: {}'.format(method))
+class Server:
+    def __init__(self, socket_path):
+        self._socket_path = socket_path
+        self._app = Gtk.Application()
+        self._app.set_application_id('qubes.qrexec-policy-agent')
+        self._app.register()
+
+    async def run(self):
+        server = await start_server(self.handle_request, self._socket_path,
+                                    socket_activated=True)
+        async with server:
+            await server.serve_forever()
+
+    async def handle_request(self, params, method, __source_domain):
+        if method == 'policy.Ask':
+            return await self.handle_ask(params)
+        if method == 'policy.Notify':
+            return await self.handle_notify(params)
+        raise Exception('unknown method: {}'.format(method))
 
 
-async def handle_ask(params):
-    source = params['source']
-    service_name = params['service']
-    targets = params['targets']
-    default_target = params['default_target']
+    async def handle_ask(self, params):
+        source = params['source']
+        service_name = params['service']
+        targets = params['targets']
+        default_target = params['default_target']
 
-    entries_info = {}
-    for domain_name, icon in params['icons'].items():
-        entries_info[domain_name] = {'icon': icon}
+        entries_info = {}
+        for domain_name, icon in params['icons'].items():
+            entries_info[domain_name] = {'icon': icon}
 
-    target = await confirm_rpc(
-        entries_info, source, service_name,
-        targets, default_target or None)
+        target = await confirm_rpc(
+            entries_info, source, service_name,
+            targets, default_target or None)
 
-    if target:
-        return target
-    return ''
+        if target:
+            return target
+        return ''
+
+    async def handle_notify(self, params):
+        resolution = params['resolution']
+        service_name = params['service']
+        source = params['source']
+        target = params['target']
+
+        assert resolution in ['allow', 'deny'], resolution
+
+        self.notify(resolution, service_name, source, target)
+        return ''
+
+    def notify(self, resolution, service_name, source, target):
+        if resolution == 'allow':
+            app_icon = None
+            summary = 'Allowed {service_name}'
+            body = ('Allowed <b>{service_name}</b> '
+                    'from <b>{source}</b> to <b>{target}</b>')
+        elif resolution == 'deny':
+            app_icon = 'dialog-warning'
+            summary = 'Denied {service_name}'
+            body = ('Denied <b>{service_name}</b> '
+                    'from <b>{source}</b> to <b>{target}</b>')
+        else:
+            assert False, resolution
+
+        summary = summary.format(
+            service_name=service_name, source=source, target=target)
+        body = body.format(
+            service_name=service_name, source=source, target=target)
+
+        notification = Gio.Notification.new(summary)
+        notification.set_priority(Gio.NotificationPriority.NORMAL)
+        notification.set_body(body)
+        if app_icon:
+            icon = Gio.ThemedIcon.new(app_icon)
+            notification.set_icon(icon)
+
+        self._app.send_notification(None, notification)
 
 
 parser = argparse.ArgumentParser()
@@ -517,19 +572,14 @@ parser.add_argument(
     help='path to socket')
 
 
-async def run_server(socket_path):
-    server = await start_server(handle_request, socket_path,
-                                socket_activated=True)
-    async with server:
-        await server.serve_forever()
-
-
 def main():
     args = parser.parse_args()
 
+    server = Server(args.socket_path)
+
     loop = asyncio.get_event_loop()
     tasks = [
-        run_server(args.socket_path),
+        server.run(),
     ]
     loop.run_until_complete(asyncio.wait(tasks))
 

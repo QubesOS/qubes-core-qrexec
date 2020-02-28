@@ -112,6 +112,7 @@ rm -f %{name}-%{version}
 /usr/lib/qubes/qubes-rpc-multiplexer
 
 %{_sysconfdir}/qubes-rpc/policy.Ask
+%{_sysconfdir}/qubes-rpc/policy.Notify
 
 /lib/systemd/user/qubes-qrexec-policy-agent.service
 /lib/systemd/user/qubes-qrexec-policy-agent.socket

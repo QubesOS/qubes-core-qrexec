@@ -1,6 +1,7 @@
 etc/pam.d/qrexec
 etc/qubes/rpc-config/README
 etc/qubes-rpc/policy.Ask
+etc/qubes-rpc/policy.Notify
 lib/systemd/system/qubes-qrexec-agent.service
 lib/systemd/user/qubes-qrexec-policy-agent.service
 lib/systemd/user/qubes-qrexec-policy-agent.socket
