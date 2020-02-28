@@ -187,10 +187,12 @@ static int qubes_connect(int s, const char *connect_path, const size_t total_pat
        result = connect(s, (struct sockaddr *) &remote, socket_len);
     while (result < 0 && (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN));
     dummy_errno = errno;
-    unlink(buf);
 out:
-    buf[path_separator_offset] = '\0';
-    rmdir(buf);
+    if (buf[path_separator_offset] == '/') {
+        unlink(buf);
+        buf[path_separator_offset] = '\0';
+        rmdir(buf);
+    }
     errno = dummy_errno;
     return result;
 }
