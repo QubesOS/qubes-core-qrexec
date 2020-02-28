@@ -121,7 +121,14 @@ class NotifyAllowedResolution(parser.AllowResolution):
 async def notify(guivm, params):
     service = 'policy.Notify'
     source_domain = 'dom0'
-    await call_socket_service(guivm, service, source_domain, params)
+    try:
+        await call_socket_service(guivm, service, source_domain, params)
+    # pylint: disable=broad-except
+    except Exception:
+        # qrexec-policy-agent might be dead or malfunctioning, log exception
+        # but do not fail the whole operation
+        log = logging.getLogger('policy')
+        log.exception('error calling qrexec-policy-agent in %s', guivm)
 
 
 class LogAllowedResolution(NotifyAllowedResolution):

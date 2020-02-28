@@ -180,6 +180,26 @@ def test_001_allow_notify(policy, execute, agent_service):
     ]
 
 
+def test_002_allow_notify_failed(policy, execute, agent_service):
+    policy.set_allow('test-vm1', notify=True)
+    agent_service.side_effect = Exception("calling agent service failed")
+
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
+    assert retval == 0
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Notify', 'dom0', {
+            'resolution': 'allow',
+            'service': 'service',
+            'source': 'source',
+            'target': 'test-vm1',
+        })
+    ]
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
 def test_010_ask_allow(icons, policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
     agent_service.return_value = 'test-vm1'
