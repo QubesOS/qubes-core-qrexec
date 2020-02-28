@@ -42,7 +42,7 @@ gbulb.install()
 
 from .. import POLICY_AGENT_SOCKET_PATH
 from ..utils import sanitize_domain_name, sanitize_service_name
-from ..server import start_server
+from ..server import SocketService
 
 # pylint: enable=wrong-import-position
 
@@ -485,26 +485,19 @@ async def confirm_rpc(entries_info, source, rpc_operation, targets_list,
     return await window.confirm_rpc()
 
 
-class Server:
-    def __init__(self, socket_path):
-        self._socket_path = socket_path
+class PolicyAgent(SocketService):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._app = Gtk.Application()
         self._app.set_application_id('qubes.qrexec-policy-agent')
         self._app.register()
 
-    async def run(self):
-        server = await start_server(self.handle_request, self._socket_path,
-                                    socket_activated=True)
-        async with server:
-            await server.serve_forever()
-
-    async def handle_request(self, params, method, __source_domain):
-        if method == 'policy.Ask':
+    async def handle_request(self, params, service, source_domain):
+        if service == 'policy.Ask':
             return await self.handle_ask(params)
-        if method == 'policy.Notify':
+        if service == 'policy.Notify':
             return await self.handle_notify(params)
-        raise Exception('unknown method: {}'.format(method))
-
+        raise Exception('unknown service name: {}'.format(service))
 
     async def handle_ask(self, params):
         source = params['source']
@@ -575,11 +568,11 @@ parser.add_argument(
 def main():
     args = parser.parse_args()
 
-    server = Server(args.socket_path)
+    agent = PolicyAgent(args.socket_path, socket_activated=True)
 
     loop = asyncio.get_event_loop()
     tasks = [
-        server.run(),
+        agent.run(),
     ]
     loop.run_until_complete(asyncio.wait(tasks))
 

@@ -35,38 +35,51 @@ from systemd.daemon import listen_fds
 from . import QREXEC_CLIENT, RPC_PATH
 
 
-async def client_connected(reader, writer, handler):
-    try:
-        data = await reader.read()
-        data = data.decode('ascii')
-        assert '\0' in data, data
+class SocketService:
+    def __init__(self, socket_path, socket_activated=False):
+        self._socket_path = socket_path
+        self._socket_activated = socket_activated
 
-        header, json_data = data.split('\0', 1)
-        service, source_domain = header.split(' ')
-        params = json.loads(json_data)
+    async def run(self):
+        server = await self.start()
+        async with server:
+            await server.serve_forever()
 
-        response = await handler(params, service, source_domain)
+    async def start(self):
+        if self._socket_activated:
+            fds = listen_fds()
+            if fds:
+                assert len(fds) == 1, 'too many listen_fds: {}'.format(
+                    listen_fds)
+                sock = socket.socket(fileno=fds[0])
+                return await asyncio.start_unix_server(self._client_connected,
+                                                       sock=sock)
 
-        writer.write(response.encode('ascii'))
-        await writer.drain()
-    finally:
-        writer.close()
-        await writer.wait_closed()
+        if os.path.exists(self._socket_path):
+            os.unlink(self._socket_path)
+        return await asyncio.start_unix_server(self._client_connected,
+                                               path=self._socket_path)
 
+    async def _client_connected(self, reader, writer):
+        try:
+            data = await reader.read()
+            data = data.decode('ascii')
+            assert '\0' in data, data
 
-def start_server(handler, socket_path, socket_activated=False):
-    _handler = lambda reader, writer: client_connected(reader, writer, handler)
+            header, json_data = data.split('\0', 1)
+            service, source_domain = header.split(' ')
+            params = json.loads(json_data)
 
-    if socket_activated:
-        fds = listen_fds()
-        if fds:
-            assert len(fds) == 1, 'too many listen_fds: {}'.format(listen_fds)
-            sock = socket.socket(fileno=fds[0])
-            return asyncio.start_unix_server(_handler, sock=sock)
+            response = await self.handle_request(params, service, source_domain)
 
-    if os.path.exists(socket_path):
-        os.unlink(socket_path)
-    return asyncio.start_unix_server(_handler, path=socket_path)
+            writer.write(response.encode('ascii'))
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    async def handle_request(self, params, service, source_domain):
+        raise NotImplementedError()
 
 
 def call_socket_service(

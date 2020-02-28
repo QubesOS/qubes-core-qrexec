@@ -26,18 +26,19 @@ from unittest import mock
 
 import pytest
 
-from ..server import start_server, call_socket_service_local
+from ..server import SocketService, call_socket_service_local
 
 # Disable warnings that conflict with Pytest's use of fixtures.
 # pylint: disable=redefined-outer-name, unused-argument
 
 
-async def handler(params, method, source_domain):
-    return json.dumps({
-        'params': params,
-        'method': method,
-        'source_domain': source_domain
-    })
+class TestService(SocketService):
+    async def handle_request(self, params, method, source_domain):
+        return json.dumps({
+            'params': params,
+            'method': method,
+            'source_domain': source_domain
+        })
 
 
 @pytest.fixture
@@ -52,16 +53,19 @@ def temp_dir():
 @pytest.fixture(params=['normal', 'socket_activated'])
 async def server(temp_dir, request):
     socket_path = os.path.join(temp_dir, 'Service')
+
     if request.param == 'socket_activated':
+        service = TestService(socket_path, socket_activated=True)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.bind(socket_path)
         fd = sock.detach()
         with mock.patch('qrexec.server.listen_fds') as mock_listen_fds:
             mock_listen_fds.return_value = [fd]
-            server = await start_server(handler, socket_path,
-                                        socket_activated=True)
+            server = await service.start()
     else:
-        server = await start_server(handler, socket_path)
+        service = TestService(socket_path)
+        server = await service.start()
+
     try:
         await server.start_serving()
         yield socket_path
