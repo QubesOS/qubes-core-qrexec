@@ -25,9 +25,8 @@ import asyncio
 import logging
 import os
 
-from .qrexec_policy_exec import handle_request
+from .qrexec_policy_exec import handle_request, NotifyAllowedResolution
 from .. import POLICYPATH, POLICYSOCKET
-from ..policy.parser import AllowResolution
 from ..policy.utils import PolicyCache
 
 argparser = argparse.ArgumentParser(description='Evaluate qrexec policy daemon')
@@ -48,7 +47,7 @@ ALLOWED_REQUEST_ARGUMENTS = REQUIRED_REQUEST_ARGUMENTS + \
                             OPTIONAL_REQUEST_ARGUMENTS
 
 
-class DaemonAllowResolution(AllowResolution):
+class DaemonAllowResolution(NotifyAllowedResolution):
     async def execute(self, caller_ident):
 
         log_prefix = 'qrexec: {request.service}{request.argument}: ' \

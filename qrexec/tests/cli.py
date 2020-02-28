@@ -29,7 +29,7 @@ from ..exc import AccessDenied
 from ..tools import qrexec_policy_exec
 
 # Disable warnings that conflict with Pytest's use of fixtures.
-# pylint: disable=redefined-outer-name, unused-argument
+# pylint: disable=redefined-outer-name
 
 
 class TestPolicy:
@@ -42,17 +42,20 @@ class TestPolicy:
         self.rule.filepath = 'file'
         self.rulelineno = 42
 
-    def set_ask(self, targets_for_ask, default_target=None):
+    def set_ask(self, targets_for_ask, default_target=None, notify=False):
         self.resolution_type = 'ask'
         self.targets_for_ask = targets_for_ask
         self.default_target = default_target
+        self.rule.action.notify = notify
 
-    def set_allow(self, target):
+    def set_allow(self, target, notify=False):
         self.resolution_type = 'allow'
         self.target = target
+        self.rule.action.notify = notify
 
-    def set_deny(self):
+    def set_deny(self, notify=True):
         self.resolution_type = 'deny'
+        self.rule.action.notify = notify
 
     def evaluate(self, request):
         assert self.resolution_type is not None
@@ -68,13 +71,13 @@ class TestPolicy:
                 self.rule, request, user='user', target=self.target)
 
         if self.resolution_type == 'deny':
-            raise AccessDenied('denied')
+            raise AccessDenied('denied', notify=self.rule.action.notify)
 
         assert False, self.resolution_type
         return None
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def policy():
     """
     Mock for FilePolicy object that will evaluate the requests.
@@ -90,7 +93,7 @@ def policy():
     ]
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def system_info():
     system_info = {
         'domains': {
@@ -114,7 +117,7 @@ def system_info():
 
 
 @pytest.fixture
-def icons(system_info):
+def icons():
     return {
         'dom0': 'black',
         'source': 'red',
@@ -126,7 +129,7 @@ def icons(system_info):
     }
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def execute():
     """
     Mock for execute() for allowed action. It is supposed to call the qrexec.
@@ -137,7 +140,7 @@ def execute():
         yield mock_execute
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def agent_service():
     """
     Mock for call_socket_service() used to contact the qrexec-policy-agent.
@@ -148,21 +151,40 @@ def agent_service():
         yield mock_call_socket_service
 
 
-def test_000_allow(system_info, policy, execute):
+def test_000_allow(policy, execute, agent_service):
     policy.set_allow('test-vm1')
     retval = qrexec_policy_exec.main(
-        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+        ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
     assert retval == 0
+    assert agent_service.mock_calls == []
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
     ]
 
 
-def test_010_ask_allow(system_info, icons, policy, agent_service, execute):
+def test_001_allow_notify(policy, execute, agent_service):
+    policy.set_allow('test-vm1', notify=True)
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
+    assert retval == 0
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Notify', 'dom0', {
+            'resolution': 'allow',
+            'service': 'service',
+            'source': 'source',
+            'target': 'test-vm1',
+        })
+    ]
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
+def test_010_ask_allow(icons, policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
     agent_service.return_value = 'test-vm1'
     retval = qrexec_policy_exec.main(
-        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+        ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
     assert retval == 0
     assert agent_service.mock_calls == [
         mock.call('gui', 'policy.Ask', 'dom0', {
@@ -178,7 +200,33 @@ def test_010_ask_allow(system_info, icons, policy, agent_service, execute):
     ]
 
 
-def test_011_ask_deny(system_info, icons, policy, agent_service, execute):
+def test_011_ask_allow_notify(icons, policy, agent_service, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'], notify=True)
+    agent_service.return_value = 'test-vm1'
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
+    assert retval == 0
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Ask', 'dom0', {
+            'source': 'source',
+            'service': 'service',
+            'targets': ['test-vm1', 'test-vm2'],
+            'default_target': '',
+            'icons': icons,
+        }),
+        mock.call('gui', 'policy.Notify', 'dom0', {
+            'resolution': 'allow',
+            'service': 'service',
+            'source': 'source',
+            'target': 'test-vm1',
+        }),
+    ]
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
+def test_015_ask_deny(icons, policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
     agent_service.return_value = ''
     retval = qrexec_policy_exec.main(
@@ -196,8 +244,31 @@ def test_011_ask_deny(system_info, icons, policy, agent_service, execute):
     assert execute.mock_calls == []
 
 
-def test_012_ask_default_target(system_info, icons, policy, agent_service,
-                                execute):
+def test_016_ask_deny_notify(icons, policy, agent_service, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'], notify=True)
+    agent_service.return_value = ''
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Ask', 'dom0', {
+            'source': 'source',
+            'service': 'service',
+            'targets': ['test-vm1', 'test-vm2'],
+            'default_target': '',
+            'icons': icons,
+        }),
+        mock.call('gui', 'policy.Notify', 'dom0', {
+            'resolution': 'deny',
+            'service': 'service',
+            'source': 'source',
+            'target': 'test-vm1',
+        }),
+    ]
+    assert execute.mock_calls == []
+
+
+def test_017_ask_default_target(icons, policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'], 'test-vm1')
     agent_service.return_value = 'test-vm1'
     retval = qrexec_policy_exec.main(
@@ -217,8 +288,7 @@ def test_012_ask_default_target(system_info, icons, policy, agent_service,
     ]
 
 
-def test_013_ask_no_guivm(system_info, icons, policy, agent_service,
-                          execute):
+def test_013_ask_no_guivm(policy, system_info, agent_service, execute):
     system_info['domains']['source']['guivm'] = None
     policy.set_ask(['test-vm1', 'test-vm2'])
     retval = qrexec_policy_exec.main(
@@ -228,45 +298,66 @@ def test_013_ask_no_guivm(system_info, icons, policy, agent_service,
     assert execute.mock_calls == []
 
 
-def test_020_deny(system_info, policy, execute):
+def test_020_deny(policy, agent_service, execute):
     policy.set_deny()
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Notify', 'dom0', {
+            'resolution': 'deny',
+            'service': 'service',
+            'source': 'source',
+            'target': 'test-vm1',
+        }),
+    ]
     assert execute.mock_calls == []
 
 
-def test_030_just_evaluate_allow(system_info, policy, execute):
+def test_021_deny_no_notify(policy, agent_service, execute):
+    policy.set_deny(notify=False)
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert agent_service.mock_calls == []
+    assert execute.mock_calls == []
+
+
+def test_030_just_evaluate_allow(policy, agent_service, execute):
     policy.set_allow('test-vm1')
     retval = qrexec_policy_exec.main(
         ['--just-evaluate',
          'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 0
+    assert agent_service.mock_calls == []
     assert execute.mock_calls == []
 
 
-def test_031_just_evaluate_deny(system_info, policy, execute):
+def test_031_just_evaluate_deny(policy, agent_service, execute):
     policy.set_deny()
     retval = qrexec_policy_exec.main(
         ['--just-evaluate',
          'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
+    assert agent_service.mock_calls == []
     assert execute.mock_calls == []
 
 
-def test_032_just_evaluate_ask(system_info, policy, execute):
+def test_032_just_evaluate_ask(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
     retval = qrexec_policy_exec.main(
         ['--just-evaluate',
          'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
+    assert agent_service.mock_calls == []
     assert execute.mock_calls == []
 
 
-def test_033_just_evaluate_ask_assume_yes(system_info, policy, execute):
+def test_033_just_evaluate_ask_assume_yes(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
     retval = qrexec_policy_exec.main(
         ['--just-evaluate', '--assume-yes-for-ask',
          'source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 0
+    assert agent_service.mock_calls == []
     assert execute.mock_calls == []

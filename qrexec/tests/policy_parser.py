@@ -24,6 +24,7 @@ import socket
 import subprocess
 import unittest.mock
 import asyncio
+import pytest
 
 from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
@@ -515,6 +516,9 @@ class TC_10_Rule(unittest.TestCase):
             'test.Service +argument @anyvm @anyvm allow extra',  # trailing words
             'test.Service +argument @anyvm @default allow',  # @default allow without target=
 
+            'test.Service +argument @anyvm @anyvm allow notify',  # missing =yes/=no
+            'test.Service +argument @anyvm @anyvm allow notify=xx',  # invalid notify
+
             '* +argument @anyvm @default allow', # specific argument for * service
         ]
         for line in invalid_lines:
@@ -620,6 +624,35 @@ class TC_10_Rule(unittest.TestCase):
 #       self.assertEqual(
 #           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
 #           '@adminvm')
+
+
+@pytest.mark.parametrize('action_name,action,default', [
+    ('deny', parser.Action.deny.value, True),
+    ('ask', parser.Action.ask.value, False),
+    ('allow', parser.Action.allow.value, False),
+])
+def test_line_ask_notify(action_name, action, default):
+    line = parser.Rule.from_line(
+        None,
+        'test.Service +argument @anyvm @adminvm {}'.format(action_name),
+        filepath='filename', lineno=12)
+    assert isinstance(line.action, action)
+    assert line.action.notify is default
+
+    line = parser.Rule.from_line(
+        None,
+        'test.Service +argument @anyvm @adminvm {} notify=yes'.format(action_name),
+        filepath='filename', lineno=12)
+    assert isinstance(line.action, action)
+    assert line.action.notify is True
+
+    line = parser.Rule.from_line(
+        None,
+        'test.Service +argument @anyvm @adminvm {} notify=no'.format(action_name),
+        filepath='filename', lineno=12)
+    assert isinstance(line.action, action)
+    assert line.action.notify is False
+
 
 class TC_11_Rule_service(unittest.TestCase):
     def test_020_line_simple(self):
@@ -892,6 +925,18 @@ class TC_30_Resolution(unittest.TestCase):
         self.assertIs(resolution.request, self.request)
         self.assertIs(resolution.user, None)
         self.assertIs(resolution.target, 'test-vm2')
+        self.assertFalse(resolution.notify)
+
+    def test_001_allow_notify(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm allow notify=yes',
+            filepath='filename', lineno=12)
+        resolution = parser.AllowResolution(rule, self.request,
+            user=None, target='test-vm2')
+        self.assertIs(resolution.rule, rule)
+        self.assertIs(resolution.request, self.request)
+        self.assertIs(resolution.user, None)
+        self.assertIs(resolution.target, 'test-vm2')
+        self.assertTrue(resolution.notify)
 
     #
     # ask
@@ -910,6 +955,7 @@ class TC_30_Resolution(unittest.TestCase):
         self.assertIs(resolution.request, self.request)
         self.assertIs(resolution.user, None)
         self.assertCountEqual(resolution.targets_for_ask, ['test-vm2'])
+        self.assertFalse(resolution.notify)
 
     def test_101_ask_init(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
@@ -924,6 +970,22 @@ class TC_30_Resolution(unittest.TestCase):
         self.assertCountEqual(resolution.targets_for_ask,
             ['test-vm2', 'test-vm3'])
         self.assertIs(resolution.default_target, 'test-vm2')
+        self.assertFalse(resolution.notify)
+
+    def test_102_ask_notify(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask notify=yes',
+            filepath='filename', lineno=12)
+        resolution = parser.AskResolution(rule, self.request,
+            user=None, targets_for_ask=['test-vm2'], default_target='test-vm2')
+
+        with self.assertRaises(AttributeError):
+            resolution.target
+
+        self.assertIs(resolution.rule, rule)
+        self.assertIs(resolution.request, self.request)
+        self.assertIs(resolution.user, None)
+        self.assertCountEqual(resolution.targets_for_ask, ['test-vm2'])
+        self.assertTrue(resolution.notify)
 
     def test_103_ask_default_target_None(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
@@ -947,8 +1009,16 @@ class TC_40_evaluate(unittest.TestCase):
     def test_000_deny(self):
         policy = parser.TestPolicy(policy='''\
             * * @anyvm @anyvm deny''')
-        with self.assertRaises(exc.AccessDenied):
+        with self.assertRaises(exc.AccessDenied) as e:
             policy.evaluate(_req('test-vm1', 'test-vm2'))
+        self.assertTrue(e.exception.notify)
+
+    def test_001_deny_no_notify(self):
+        policy = parser.TestPolicy(policy='''\
+            * * @anyvm @anyvm deny notify=no''')
+        with self.assertRaises(exc.AccessDenied) as e:
+            policy.evaluate(_req('test-vm1', 'test-vm2'))
+        self.assertFalse(e.exception.notify)
 
     def test_030_eval_simple(self):
         policy = parser.TestPolicy(policy='''\
@@ -1060,7 +1130,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.target, '@adminvm')
         self.assertEqual(resolution.request.target, '@adminvm')
 
-    def test_110_handle_user_response(self):
+    def test_110_handle_user_response_allow(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         request = parser.Request('test.service', '+', 'test-vm1',
@@ -1072,8 +1142,23 @@ class TC_40_evaluate(unittest.TestCase):
         resolution = resolution.handle_user_response(True, 'test-vm2')
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.target, 'test-vm2')
+        self.assertFalse(resolution.notify)
 
-    def test_111_handle_user_response(self):
+    def test_111_handle_user_response_allow_notify(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask notify=yes',
+            filepath='filename', lineno=12)
+        request = parser.Request('test.service', '+', 'test-vm1',
+            'test-vm2', system_info=SYSTEM_INFO)
+        resolution = parser.AskResolution(
+            rule, request, user=None,
+            targets_for_ask=['test-vm1', 'test-vm2'],
+            default_target=None)
+        resolution = resolution.handle_user_response(True, 'test-vm2')
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.target, 'test-vm2')
+        self.assertTrue(resolution.notify)
+
+    def test_112_handle_user_response_deny_invalid(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         request = parser.Request('test.service', '+', 'test-vm1',
@@ -1082,10 +1167,11 @@ class TC_40_evaluate(unittest.TestCase):
             rule, request, user=None,
             targets_for_ask=['test-vm2', 'test-vm3'],
             default_target=None)
-        with self.assertRaises(exc.AccessDenied):
+        with self.assertRaises(exc.AccessDenied) as e:
             resolution.handle_user_response(True, 'test-no-dvm')
+        self.assertTrue(e.exception.notify)
 
-    def test_112_handle_user_response(self):
+    def test_113_handle_user_response_deny_normal(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
             filepath='filename', lineno=12)
         request = _req('test-vm1', 'test-vm2')
@@ -1093,10 +1179,23 @@ class TC_40_evaluate(unittest.TestCase):
             rule, request, user=None,
             targets_for_ask=['test-vm1', 'test-vm2'],
             default_target=None)
-        with self.assertRaises(exc.AccessDenied):
+        with self.assertRaises(exc.AccessDenied) as e:
             resolution.handle_user_response(False, '')
+        self.assertFalse(e.exception.notify)
 
-    def test_113_handle_user_response_with_default_target(self):
+    def test_114_handle_user_response_deny_normal_notify(self):
+        rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask notify=yes',
+            filepath='filename', lineno=12)
+        request = _req('test-vm1', 'test-vm2')
+        resolution = parser.AskResolution(
+            rule, request, user=None,
+            targets_for_ask=['test-vm1', 'test-vm2'],
+            default_target=None)
+        with self.assertRaises(exc.AccessDenied) as e:
+            resolution.handle_user_response(False, '')
+        self.assertTrue(e.exception.notify)
+
+    def test_115_handle_user_response_with_default_target(self):
         rule = parser.Rule.from_line(None,
             '* * @anyvm @anyvm ask default_target=test-vm2',
             filepath='filename', lineno=12)

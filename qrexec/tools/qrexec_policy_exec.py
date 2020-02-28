@@ -69,7 +69,7 @@ class AgentAskResolution(parser.AskResolution):
             log.error('%s not allowed from %s: the resolution was "ask", '
                       'but source domain has no GuiVM',
                       self.request.service, self.request.source)
-            return self.handle_user_response(False, None)
+            return await self.handle_user_response(False, None)
 
         # prepare icons
         icons = {name: self.request.system_info['domains'][name]['icon']
@@ -100,10 +100,31 @@ class AgentAskResolution(parser.AskResolution):
         if response:
             return await self.handle_user_response(True, response).execute(
                 caller_ident)
-        return self.handle_user_response(False, None)
+        return await self.handle_user_response(False, None)
 
 
-class LogAllowedResolution(parser.AllowResolution):
+class NotifyAllowedResolution(parser.AllowResolution):
+    async def execute(self, caller_ident):
+        if self.notify:
+            guivm = \
+                self.request.system_info['domains'][self.request.source]['guivm']
+            if guivm:
+                await notify(guivm, {
+                    'resolution': 'allow',
+                    'service': self.request.service,
+                    'source': self.request.source,
+                    'target': self.request.target,
+                })
+        await super().execute(caller_ident)
+
+
+async def notify(guivm, params):
+    service = 'policy.Notify'
+    source_domain = 'dom0'
+    await call_socket_service(guivm, service, source_domain, params)
+
+
+class LogAllowedResolution(NotifyAllowedResolution):
     async def execute(self, caller_ident):
         log_prefix = 'qrexec: {request.service}{request.argument}: ' \
                      '{request.source} -> {request.target}:'.format(
@@ -112,7 +133,7 @@ class LogAllowedResolution(parser.AllowResolution):
         log = logging.getLogger('policy')
         log.info('%s allowed to %s', log_prefix, self.target)
 
-        await super(LogAllowedResolution, self).execute(caller_ident)
+        await super().execute(caller_ident)
 
 
 def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask,
@@ -196,6 +217,7 @@ async def handle_request(
         service, argument = service_and_arg[:i], service_and_arg[i:]
     except ValueError:
         service, argument = service_and_arg, '+'
+
     try:
         if policy_cache:
             policy = policy_cache.get_policy()
@@ -224,6 +246,18 @@ async def handle_request(
         return 1
     except exc.AccessDenied as err:
         log.info('%s denied: %s', log_prefix, err)
+
+        if err.notify and not just_evaluate:
+            guivm = \
+                system_info['domains'][source]['guivm']
+            if guivm:
+                await notify(guivm, {
+                    'resolution': 'deny',
+                    'service': service,
+                    'source': source,
+                    'target': intended_target,
+                })
+
         return 1
     except JustEvaluateResult as err:
         return err.exit_code
