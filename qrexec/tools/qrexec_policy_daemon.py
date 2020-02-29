@@ -51,7 +51,7 @@ ALLOWED_REQUEST_ARGUMENTS = REQUIRED_REQUEST_ARGUMENTS + \
 class DaemonAllowResolution(AllowResolution):
     async def execute(self, caller_ident):
 
-        log_prefix = 'qrexec: {request.service}+{request.argument}: ' \
+        log_prefix = 'qrexec: {request.service}{request.argument}: ' \
                      '{request.source} -> {request.target}:'.format(
                       request=self.request)
 
