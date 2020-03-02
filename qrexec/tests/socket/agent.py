@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public License along
 # with this program; if not, see <http://www.gnu.org/licenses/>.
-
+import sys
 import unittest
 import subprocess
 import os.path
@@ -25,8 +25,9 @@ import tempfile
 import shutil
 import struct
 import getpass
-import psutil
 
+import psutil
+import pytest
 
 from . import qrexec
 from . import util
@@ -275,14 +276,11 @@ class TestAgentExecQubesRpc(TestAgentBase):
         target.handshake()
         return target
 
-    def make_executable_service(self, dir_name, service_name, content):
-        service_path = os.path.join(self.tempdir, dir_name, service_name)
-        with open(service_path, 'w') as f:
-            f.write(content)
-        os.chmod(service_path, 0o700)
+    def make_executable_service(self, *args):
+        util.make_executable_service(self.tempdir, *args)
 
     def test_exec_service(self):
-        self.make_executable_service('rpc', 'qubes.Service', '''\
+        util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
 #!/bin/sh
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
 ''')
@@ -294,6 +292,17 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_STDERR, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    @pytest.mark.xfail
+    def test_exec_service_fail(self):
+        target = self.execute_qubesrpc('qubes.Service+arg', 'domX')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\177\0\0\0')
         ])
 
     def test_exec_service_with_arg(self):
@@ -486,12 +495,18 @@ class TestClientVm(unittest.TestCase):
             os.path.join(ROOT_PATH, 'agent', 'qrexec-client-vm'),
             '--agent-socket=' + os.path.join(self.tempdir, 'agent.sock'),
         ] + args
+        stderr_dup = os.dup(sys.stderr.fileno())
+        if os.environ.get('USE_STRACE'):
+            cmd = ['strace', '-fD', '-o', '/proc/self/fd/%d' % stderr_dup] + cmd
         self.client = subprocess.Popen(
             cmd,
             env=env,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            pass_fds=(stderr_dup,),
         )
+        os.close(stderr_dup)
         self.addCleanup(self.stop_client)
 
     def stop_client(self):
@@ -550,3 +565,123 @@ class TestClientVm(unittest.TestCase):
         self.assertEqual(self.client.stdout.read(), b'')
         self.assertEqual(self.client.stderr.read(), b'Request refused\n')
         self.assertEqual(self.client.returncode, 126)
+
+    def test_run_client_failed(self):
+        server = self.connect_server()
+        self.start_client([self.target_domain_name, 'qubes.ServiceName'])
+        server.accept()
+
+        message_type, data = server.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(
+            data,
+            struct.pack('<64s32s',
+                        self.target_domain_name.encode(), b'SOCKET') +
+            b'qubes.ServiceName\0')
+
+        server.sendall(struct.pack('<LL',
+                                   self.target_domain, self.target_port))
+
+        target_client = self.connect_target_client()
+        target_client.handshake()
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
+        target_client.send_message(qrexec.MSG_DATA_EXIT_CODE,
+                                   struct.pack('<L', 127))
+        # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
+        # and also no MSG_DATA_STDIN after receiving MSG_DATA_EXIT_CODE
+        self.assertListEqual(target_client.recv_all_messages(), [])
+        self.assertEqual(self.client.stdout.read(), b'')
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 127)
+
+    def test_run_client_with_local_proc(self):
+        server = self.connect_server()
+        self.start_client([
+            self.target_domain_name, 'qubes.ServiceName', '/bin/cat'])
+        server.accept()
+
+        message_type, data = server.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(
+            data,
+            struct.pack('<64s32s',
+                        self.target_domain_name.encode(), b'SOCKET') +
+            b'qubes.ServiceName\0')
+
+        server.sendall(struct.pack('<LL',
+                                   self.target_domain, self.target_port))
+
+        target_client = self.connect_target_client()
+        target_client.handshake()
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
+        self.assertEqual(target_client.recv_message(),
+                         (qrexec.MSG_DATA_STDIN, b'stdout data\n'))
+        self.assertEqual(target_client.recv_message(),
+                         (qrexec.MSG_DATA_STDIN, b''))
+        target_client.send_message(qrexec.MSG_DATA_EXIT_CODE,
+                                   struct.pack('<L', 42))
+        # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
+        self.assertListEqual(target_client.recv_all_messages(), [])
+        self.assertEqual(self.client.stdout.read(), b'')
+        self.assertEqual(self.client.stderr.read(), b'')
+        self.client.wait()
+        # FIXME: right now it qrexec-client-vm returns local process exit code,
+        #  and fallbacks to the remote only if no local process is present,
+        #  consider unifying it
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_client_with_local_proc_failed(self):
+        server = self.connect_server()
+        self.start_client([
+            self.target_domain_name, 'qubes.ServiceName', '/bin/cat'])
+        server.accept()
+
+        message_type, data = server.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(
+            data,
+            struct.pack('<64s32s',
+                        self.target_domain_name.encode(), b'SOCKET') +
+            b'qubes.ServiceName\0')
+
+        server.sendall(struct.pack('<LL',
+                                   self.target_domain, self.target_port))
+
+        target_client = self.connect_target_client()
+        target_client.handshake()
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
+        target_client.send_message(qrexec.MSG_DATA_EXIT_CODE,
+                                   struct.pack('<L', 127))
+        # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
+        self.assertListEqual(target_client.recv_all_messages(), [])
+        target_client.close()
+        self.assertEqual(self.client.stdout.read(), b'')
+        self.client.wait()
+        # FIXME: right now it qrexec-client-vm returns local process exit code,
+        #  and fallbacks to the remote only if no local process is present,
+        #  consider unifying it
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_client_with_local_proc_refused(self):
+        server = self.connect_server()
+        flag_file = os.path.join(self.tempdir, 'flag')
+        self.start_client([
+            self.target_domain_name, 'qubes.ServiceName',
+            '/bin/touch', flag_file])
+        server.accept()
+
+        message_type, data = server.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(
+            data,
+            struct.pack('<64s32s',
+                        self.target_domain_name.encode(), b'SOCKET') +
+            b'qubes.ServiceName\0')
+
+        server.conn.close()
+        self.client.wait()
+        self.assertEqual(self.client.stdout.read(), b'')
+        self.assertEqual(self.client.stderr.read(), b'Request refused\n')
+        self.assertEqual(self.client.returncode, 126)
+        self.assertFalse(os.path.exists(flag_file))

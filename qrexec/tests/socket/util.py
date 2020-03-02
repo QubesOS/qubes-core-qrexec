@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public License along
 # with this program; if not, see <http://www.gnu.org/licenses/>.
-
+import os
 import time
 
 
@@ -37,3 +37,10 @@ def sort_messages(messages):
     # Python sort is stable, so it will not reorder messages with the same
     # type.
     return sorted(messages, key=lambda m: m[0])
+
+
+def make_executable_service(tempdir, dir_name, service_name, content):
+    service_path = os.path.join(tempdir, dir_name, service_name)
+    with open(service_path, 'w') as f:
+        f.write(content)
+    os.chmod(service_path, 0o700)

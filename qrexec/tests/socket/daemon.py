@@ -28,6 +28,7 @@ from typing import Tuple
 import time
 
 import psutil
+import pytest
 
 from . import qrexec
 from . import util
@@ -285,13 +286,23 @@ class TestClient(unittest.TestCase):
 
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
+        os.mkdir(os.path.join(self.tempdir, 'rpc'))
         self.addCleanup(shutil.rmtree, self.tempdir)
+
+    def make_executable_service(self, *args):
+        util.make_executable_service(self.tempdir, *args)
 
     def start_client(self, args):
         env = os.environ.copy()
         env['LD_LIBRARY_PATH'] = os.path.join(ROOT_PATH, 'libqrexec')
         env['VCHAN_DOMAIN'] = '0'
         env['VCHAN_SOCKET_DIR'] = self.tempdir
+        env['QREXEC_SERVICE_PATH'] = ':'.join([
+            os.path.join(self.tempdir, 'local-rpc'),
+            os.path.join(self.tempdir, 'rpc'),
+        ])
+        env['QREXEC_MULTIPLEXER_PATH'] = os.path.join(
+            ROOT_PATH, 'lib', 'qubes-rpc-multiplexer')
         cmd = [
             os.path.join(ROOT_PATH, 'daemon', 'qrexec-client'),
             '--socket-dir=' + self.tempdir,
@@ -439,12 +450,7 @@ class TestClient(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
-    def test_run_dom0_command_and_connect_vm(self):
-        # TODO: This test fails occasionally without the initial 'read', there
-        # is possibly a race condition where the client disconnects too soon
-        # without sending all the data. (It might matter only for the
-        # socket-based vchan implementation).
-        cmd = 'read; echo Hello world'
+    def connect_service_request(self, cmd):
         request_id = 'SOCKET11'
         src_domain_name = 'src_domain'
         src_domain = 43
@@ -473,10 +479,90 @@ class TestClient(unittest.TestCase):
 
         source.accept()
         source.handshake()
+        return source
 
+    def test_run_dom0_command_and_connect_vm(self):
+        # TODO: This test fails occasionally without the initial 'read', there
+        # is possibly a race condition where the client disconnects too soon
+        # without sending all the data. (It might matter only for the
+        # socket-based vchan implementation).
+        cmd = 'read; echo Hello world'
+        source = self.connect_service_request(cmd)
         source.send_message(qrexec.MSG_DATA_STDIN, b'')
         self.assertEqual(source.recv_all_messages(), [
             (qrexec.MSG_DATA_STDOUT, b'Hello world\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_service_exec(self):
+        util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
+        #!/bin/sh
+        read input
+        echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
+        ''')
+        cmd = 'QUBESRPC qubes.Service+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
+        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+        self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: src_domain, '
+                                     b'input: stdin data\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_service_socket(self):
+        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        server.accept()
+
+        expected = b'qubes.SocketService+arg src_domain name src_domain\0'
+        self.assertEqual(server.recvall(len(expected)), expected)
+
+        message = b'stdin data'
+        source.send_message(qrexec.MSG_DATA_STDIN, message)
+        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+        self.assertEqual(server.recvall(len(message)), message)
+
+        server.sendall(b'stdout data')
+        server.close()
+
+        self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b'stdout data'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    @pytest.mark.xfail
+    def test_run_dom0_service_socket_no_read(self):
+        """Socket based service that don't read its input stream"""
+        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        server.accept()
+        server.sendall(b'stdout data')
+        server.close()
+
+        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data')
+        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+
+        self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b'stdout data'),
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
         ])
