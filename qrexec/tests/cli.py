@@ -233,6 +233,20 @@ def test_003_allow_execution_failed(policy, execute, agent_service):
     ]
 
 
+def test_004_allow_no_guivm(policy, system_info, execute, agent_service):
+    system_info['domains']['source']['guivm'] = None
+    policy.set_allow('test-vm1', notify=True)
+    execute.side_effect = ExecutionFailed()
+
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
+    assert retval == 1
+    assert agent_service.mock_calls == []
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
 def test_010_ask_allow(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
     agent_service.return_value = 'allow:test-vm1'
@@ -337,6 +351,16 @@ def test_020_deny(policy, agent_service, execute):
 
 def test_021_deny_no_notify(policy, agent_service, execute):
     policy.set_deny(notify=False)
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert agent_service.mock_calls == []
+    assert execute.mock_calls == []
+
+
+def test_022_deny_no_guivm(policy, system_info, agent_service, execute):
+    system_info['domains']['source']['guivm'] = None
+    policy.set_deny()
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
