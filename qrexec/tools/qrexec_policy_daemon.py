@@ -25,7 +25,7 @@ import asyncio
 import logging
 import os
 
-from .qrexec_policy_exec import handle_request, NotifyAllowedResolution
+from .qrexec_policy_exec import handle_request
 from .. import POLICYPATH, POLICYSOCKET
 from ..policy.utils import PolicyCache
 
@@ -45,23 +45,6 @@ OPTIONAL_REQUEST_ARGUMENTS = ('assume_yes_for_ask', 'just_evaluate')
 
 ALLOWED_REQUEST_ARGUMENTS = REQUIRED_REQUEST_ARGUMENTS + \
                             OPTIONAL_REQUEST_ARGUMENTS
-
-
-class DaemonAllowResolution(NotifyAllowedResolution):
-    async def execute(self, caller_ident):
-
-        log_prefix = 'qrexec: {request.service}{request.argument}: ' \
-                     '{request.source} -> {request.target}:'.format(
-                      request=self.request)
-
-        log = logging.getLogger('policy')
-        log.info('%s allowed to %s', log_prefix, self.target)
-
-        if hasattr(self.request, "origin_writer"):
-            self.request.origin_writer.write(b"result=allow\n")
-            await self.request.origin_writer.drain()
-
-        await super(DaemonAllowResolution, self).execute(caller_ident)
 
 
 async def handle_client_connection(log, policy_cache,
@@ -107,16 +90,11 @@ async def handle_client_connection(log, policy_cache,
                 'error parsing policy request: required argument missing')
             return
 
-        resolution_handler = DaemonAllowResolution
-
         result = await handle_request(**args, log=log,
-                                      allow_resolution_type=resolution_handler,
-                                      origin_writer=writer,
                                       policy_cache=policy_cache)
 
-        if result:
-            writer.write(b"result=deny\n")
-            await writer.drain()
+        writer.write(b"result=allow\n" if result == 0 else b"result=deny\n")
+        await writer.drain()
 
     finally:
         writer.close()

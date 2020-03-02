@@ -231,7 +231,7 @@ def main(args=None):
 async def handle_request(
         domain_id, source, intended_target, service_and_arg, process_ident,
         log, just_evaluate=False, assume_yes_for_ask=False,
-        allow_resolution_type=None, origin_writer=None, policy_cache=None):
+        allow_resolution_type=None, policy_cache=None):
     # Add source domain information, required by qrexec-client for establishing
     # connection
     caller_ident = process_ident + "," + source + "," + domain_id
@@ -266,8 +266,6 @@ async def handle_request(
                 just_evaluate=just_evaluate,
                 assume_yes_for_ask=assume_yes_for_ask,
                 allow_resolution_type=allow_resolution_class))
-        if origin_writer:
-            request.origin_writer = origin_writer
         resolution = policy.evaluate(request)
         await resolution.execute(caller_ident)
 
