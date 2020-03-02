@@ -1,7 +1,7 @@
 CC=gcc
 override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
    $(shell pkg-config --cflags vchan-$(BACKEND_VMM)) -fstack-protector \
-   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC -std=c11 -D_POSIX_C_SOURCE=200809L \
+   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC -std=gnu11 -D_POSIX_C_SOURCE=200809L \
    -D_GNU_SOURCE $(CFLAGS)
 override LDFLAGS += -pie -Wl,-z,relro,-z,now -shared
 
