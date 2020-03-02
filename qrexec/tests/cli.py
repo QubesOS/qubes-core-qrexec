@@ -25,7 +25,7 @@ from pathlib import PosixPath
 import asynctest
 import pytest
 
-from ..exc import AccessDenied
+from ..exc import AccessDenied, ExecutionFailed
 from ..tools import qrexec_policy_exec
 
 # Disable warnings that conflict with Pytest's use of fixtures.
@@ -194,6 +194,32 @@ def test_002_allow_notify_failed(policy, execute, agent_service):
             'source': 'source',
             'target': 'test-vm1',
         })
+    ]
+    assert execute.mock_calls == [
+        mock.call('process_ident,source,source-id'),
+    ]
+
+
+def test_003_allow_execution_failed(policy, execute, agent_service):
+    policy.set_allow('test-vm1', notify=True)
+    execute.side_effect = ExecutionFailed()
+
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
+    assert retval == 1
+    assert agent_service.mock_calls == [
+        mock.call('gui', 'policy.Notify', 'dom0', {
+            'resolution': 'allow',
+            'service': 'service',
+            'source': 'source',
+            'target': 'test-vm1',
+        }),
+        mock.call('gui', 'policy.Notify', 'dom0', {
+            'resolution': 'fail',
+            'service': 'service',
+            'source': 'source',
+            'target': 'test-vm1',
+        }),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),

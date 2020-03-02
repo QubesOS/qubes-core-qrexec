@@ -1226,7 +1226,7 @@ class TC_40_evaluate(unittest.TestCase):
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call(QREXEC_CLIENT, '-d', 'test-vm2',
-             '-c', 'some-ident',
+             '-c', 'some-ident', '-E',
              'DEFAULT:QUBESRPC test.Service+argument test-vm1'),
              unittest.mock.call().communicate()])
 
@@ -1248,7 +1248,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call([QREXEC_CLIENT, '-d', 'dom0',
-             '-c', 'some-ident',
+             '-c', 'some-ident', '-E',
              'QUBESRPC test.Service+argument test-vm1 name dom0'])])
 
     @unittest.mock.patch('qrexec.utils.qubesd_call')
@@ -1268,7 +1268,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(mock_qubesd_call.mock_calls, [])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call(QREXEC_CLIENT, '-d', '@adminvm',
-             '-c', 'some-ident',
+             '-c', 'some-ident', '-E',
              'QUBESRPC test.Service+argument test-vm1 keyword adminvm'),
              unittest.mock.call().communicate()])
 
@@ -1296,7 +1296,7 @@ class TC_40_evaluate(unittest.TestCase):
              unittest.mock.call('dispvm-name', 'admin.vm.Kill')])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call(QREXEC_CLIENT, '-d', 'dispvm-name',
-             '-c', 'some-ident', '-W',
+             '-c', 'some-ident', '-E', '-W',
              'DEFAULT:QUBESRPC test.Service+argument test-vm1'),
              unittest.mock.call().communicate()])
 
@@ -1321,7 +1321,7 @@ class TC_40_evaluate(unittest.TestCase):
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
         self.assertEqual(mock_subprocess.mock_calls,
             [unittest.mock.call(QREXEC_CLIENT, '-d', 'test-vm2',
-             '-c', 'some-ident',
+             '-c', 'some-ident', '-E',
              'DEFAULT:QUBESRPC test.Service+argument test-vm1'),
              unittest.mock.call().communicate()])
 
@@ -1362,7 +1362,7 @@ class TC_40_evaluate(unittest.TestCase):
         resolution = parser.AllowResolution(
             rule, request, user=None, target='test-vm2')
         mock_subprocess.return_value.returncode = 1
-        with self.assertRaises(exc.AccessDenied):
+        with self.assertRaises(exc.ExecutionFailed):
             await resolution.execute('some-ident')
 
 

@@ -44,7 +44,7 @@ from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
 from .. import exc
 from .. import utils
 from ..exc import (
-    AccessDenied, PolicySyntaxError, QubesMgmtException)
+    AccessDenied, PolicySyntaxError, QubesMgmtException, ExecutionFailed)
 
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + '_.-')
 
@@ -514,7 +514,7 @@ class AllowResolution(AbstractResolution):
             self.ensure_target_running()
             dispvm = False
 
-        qrexec_opts = ['-d', target, '-c', caller_ident]
+        qrexec_opts = ['-d', target, '-c', caller_ident, '-E']
         if dispvm:
             qrexec_opts.append('-W')
         try:
@@ -525,8 +525,7 @@ class AllowResolution(AbstractResolution):
             if dispvm:
                 self.cleanup_dispvm(target)
         if process.returncode != 0:
-            # Return "request refused" to the remote end.
-            raise AccessDenied('qrexec-client failed', notify=False)
+            raise ExecutionFailed('qrexec-client failed: {}'.format(command))
 
     def spawn_dispvm(self):
         '''

@@ -49,3 +49,6 @@ class QubesMgmtException(Exception):
     def __init__(self, exc_type):
         super(QubesMgmtException, self).__init__()
         self.exc_type = exc_type
+
+class ExecutionFailed(Exception):
+    ''' Something went wrong while executing the service '''

@@ -105,17 +105,29 @@ class AgentAskResolution(parser.AskResolution):
 
 class NotifyAllowedResolution(parser.AllowResolution):
     async def execute(self, caller_ident):
+        guivm = \
+            self.request.system_info['domains'][self.request.source]['guivm']
+
         if self.notify:
-            guivm = \
-                self.request.system_info['domains'][self.request.source]['guivm']
             if guivm:
                 await notify(guivm, {
                     'resolution': 'allow',
                     'service': self.request.service,
                     'source': self.request.source,
-                    'target': self.request.target,
+                    'target': self.target,
                 })
-        await super().execute(caller_ident)
+        try:
+            await super().execute(caller_ident)
+        except exc.ExecutionFailed:
+            if guivm:
+                await notify(guivm, {
+                    'resolution': 'fail',
+                    'service': self.request.service,
+                    'source': self.request.source,
+                    'target': self.target,
+                })
+            # Handle in handle_request()
+            raise
 
 
 async def notify(guivm, params):
@@ -265,6 +277,11 @@ async def handle_request(
                     'target': intended_target,
                 })
 
+        return 1
+    except exc.ExecutionFailed as err:
+        # Return 1, so that the source receives MSG_SERVICE_REFUSED instead of
+        # hanging indefinitely.
+        log.error('%s error while executing: %s', log_prefix, err)
         return 1
     except JustEvaluateResult as err:
         return err.exit_code

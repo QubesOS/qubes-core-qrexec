@@ -41,6 +41,8 @@
 static int replace_chars_stdout = 0;
 static int replace_chars_stderr = 0;
 
+static int exit_with_code = 1;
+
 #define VCHAN_BUFFER_SIZE 65536
 
 #define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
@@ -299,12 +301,13 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
 
     exit_code = process_io(&req);
     libvchan_close(vchan);
-    exit(exit_code);
+    exit(exit_with_code ? exit_code : 0);
 }
 
 static struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
     { "socket-dir", required_argument, 0, 'd'+128 },
+    { "no-exit-code", no_argument, 0, 'E' },
     { NULL, 0, 0, 0 },
 };
 
@@ -318,6 +321,7 @@ _Noreturn static void usage(const char *const name)
             "Options:\n"
             "  -h, --help - display usage\n"
             "  -e - exit after sending cmd\n"
+            "  -E, --no-exit-code - always exit with 0 after command exits\n"
             "  -t - enables replacing problematic bytes with '_' in command output, -T is the same for stderr\n"
             "  -W - waits for connection end even in case of VM-VM (-c)\n"
             "  -c - connect to existing process (response to trigger service call)\n"
@@ -446,7 +450,7 @@ int main(int argc, char **argv)
 
     setup_logging("qrexec-client");
 
-    while ((opt = getopt_long(argc, argv, "hd:l:ec:tTw:W", longopts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hd:l:eEc:tTw:W", longopts, NULL)) != -1) {
         switch (opt) {
             case 'd':
                 domname = xstrdup(optarg);
@@ -456,6 +460,9 @@ int main(int argc, char **argv)
                 break;
             case 'e':
                 just_exec = 1;
+                break;
+            case 'E':
+                exit_with_code = 0;
                 break;
             case 'c':
                 parse_connect(optarg, &request_id, &src_domain_name, &src_domain_id);

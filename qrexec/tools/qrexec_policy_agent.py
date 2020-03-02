@@ -523,7 +523,7 @@ class PolicyAgent(SocketService):
         source = params['source']
         target = params['target']
 
-        assert resolution in ['allow', 'deny'], resolution
+        assert resolution in ['allow', 'deny', 'fail'], resolution
 
         self.notify(resolution, service_name, source, target)
         return ''
@@ -531,14 +531,19 @@ class PolicyAgent(SocketService):
     def notify(self, resolution, service_name, source, target):
         if resolution == 'allow':
             app_icon = None
-            summary = 'Allowed {service_name}'
+            summary = 'Allowed: {service_name}'
             body = ('Allowed <b>{service_name}</b> '
                     'from <b>{source}</b> to <b>{target}</b>')
         elif resolution == 'deny':
-            app_icon = 'dialog-warning'
-            summary = 'Denied {service_name}'
+            app_icon = 'dialog-error'
+            summary = 'Denied: {service_name}'
             body = ('Denied <b>{service_name}</b> '
                     'from <b>{source}</b> to <b>{target}</b>')
+        elif resolution == 'fail':
+            app_icon = 'dialog-warning'
+            summary = 'Failed: {service_name}'
+            body = ('Failed to execute <b>{service_name}</b> '
+                    '(from <b>{source}</b> to <b>{target}</b>)')
         else:
             assert False, resolution
 
