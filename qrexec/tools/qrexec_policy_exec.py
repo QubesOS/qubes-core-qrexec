@@ -69,7 +69,8 @@ class AgentAskResolution(parser.AskResolution):
             log.error('%s not allowed from %s: the resolution was "ask", '
                       'but source domain has no GuiVM',
                       self.request.service, self.request.source)
-            return await self.handle_user_response(False, None)
+            self.handle_user_response(False, None)
+            assert False, 'handle_user_response should throw'
 
         # prepare icons
         icons = {name: self.request.system_info['domains'][name]['icon']
@@ -94,13 +95,23 @@ class AgentAskResolution(parser.AskResolution):
 
         service = 'policy.Ask'
         source_domain = 'dom0'
-        response = await call_socket_service(
+        ask_response = await call_socket_service(
             guivm, service, source_domain, params)
 
-        if response:
-            return await self.handle_user_response(True, response).execute(
-                caller_ident)
-        return await self.handle_user_response(False, None)
+        if ask_response == 'deny':
+            self.handle_user_response(False, None)
+            assert False, 'handle_user_response should throw'
+
+        if ask_response.startswith('allow:'):
+            target = ask_response[len('allow:'):]
+            resolution = self.handle_user_response(True, target)
+            return await resolution.execute(caller_ident)
+
+        log = logging.getLogger('policy')
+        log.error('invalid ask response for %s: %s',
+                  self.request.service, ask_response)
+        self.handle_invalid_response()
+        assert False, 'handle_invalid_response should throw'
 
 
 class NotifyAllowedResolution(parser.AllowResolution):

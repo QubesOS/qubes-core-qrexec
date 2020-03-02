@@ -116,7 +116,6 @@ def system_info():
         yield system_info
 
 
-@pytest.fixture
 def icons():
     return {
         'dom0': 'black',
@@ -124,8 +123,8 @@ def icons():
         'test-vm1': 'red',
         'test-vm2': 'red',
         'test-vm3': 'green',
-        '@dispvm:test-vm3': 'green',
         'gui': 'orange',
+        '@dispvm:test-vm3': 'green',
     }
 
 
@@ -151,6 +150,34 @@ def agent_service():
         yield mock_call_socket_service
 
 
+def notify_call(resolution):
+    """
+    Mock call() object for policy.Notify.
+    """
+
+    return mock.call('gui', 'policy.Notify', 'dom0', {
+        'resolution': resolution,
+        'service': 'service',
+        'source': 'source',
+        'target': 'test-vm1',
+    })
+
+
+def ask_call(default_target=''):
+    """
+    Mock call() object for policy.Ask.
+    """
+
+    return mock.call('gui', 'policy.Ask', 'dom0', {
+        'source': 'source',
+        'service': 'service',
+        'targets': ['test-vm1', 'test-vm2'],
+        'default_target': default_target,
+        'icons': icons(),
+    })
+
+
+
 def test_000_allow(policy, execute, agent_service):
     policy.set_allow('test-vm1')
     retval = qrexec_policy_exec.main(
@@ -168,12 +195,7 @@ def test_001_allow_notify(policy, execute, agent_service):
         ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
     assert retval == 0
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Notify', 'dom0', {
-            'resolution': 'allow',
-            'service': 'service',
-            'source': 'source',
-            'target': 'test-vm1',
-        })
+        notify_call('allow'),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
@@ -188,12 +210,7 @@ def test_002_allow_notify_failed(policy, execute, agent_service):
         ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
     assert retval == 0
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Notify', 'dom0', {
-            'resolution': 'allow',
-            'service': 'service',
-            'source': 'source',
-            'target': 'test-vm1',
-        })
+        notify_call('allow'),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
@@ -208,130 +225,93 @@ def test_003_allow_execution_failed(policy, execute, agent_service):
         ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
     assert retval == 1
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Notify', 'dom0', {
-            'resolution': 'allow',
-            'service': 'service',
-            'source': 'source',
-            'target': 'test-vm1',
-        }),
-        mock.call('gui', 'policy.Notify', 'dom0', {
-            'resolution': 'fail',
-            'service': 'service',
-            'source': 'source',
-            'target': 'test-vm1',
-        }),
+        notify_call('allow'),
+        notify_call('fail'),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
     ]
 
 
-def test_010_ask_allow(icons, policy, agent_service, execute):
+def test_010_ask_allow(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
-    agent_service.return_value = 'test-vm1'
+    agent_service.return_value = 'allow:test-vm1'
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
     assert retval == 0
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Ask', 'dom0', {
-            'source': 'source',
-            'service': 'service',
-            'targets': ['test-vm1', 'test-vm2'],
-            'default_target': '',
-            'icons': icons,
-        }),
+        ask_call(),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
     ]
 
 
-def test_011_ask_allow_notify(icons, policy, agent_service, execute):
+def test_011_ask_allow_notify(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'], notify=True)
-    agent_service.return_value = 'test-vm1'
+    agent_service.return_value = 'allow:test-vm1'
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service+arg', 'process_ident'])
     assert retval == 0
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Ask', 'dom0', {
-            'source': 'source',
-            'service': 'service',
-            'targets': ['test-vm1', 'test-vm2'],
-            'default_target': '',
-            'icons': icons,
-        }),
-        mock.call('gui', 'policy.Notify', 'dom0', {
-            'resolution': 'allow',
-            'service': 'service',
-            'source': 'source',
-            'target': 'test-vm1',
-        }),
+        ask_call(),
+        notify_call('allow'),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
     ]
 
 
-def test_015_ask_deny(icons, policy, agent_service, execute):
+def test_015_ask_deny(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'])
-    agent_service.return_value = ''
+    agent_service.return_value = 'deny'
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Ask', 'dom0', {
-            'source': 'source',
-            'service': 'service',
-            'targets': ['test-vm1', 'test-vm2'],
-            'default_target': '',
-            'icons': icons,
-        }),
+        ask_call(),
     ]
     assert execute.mock_calls == []
 
 
-def test_016_ask_deny_notify(icons, policy, agent_service, execute):
+def test_016_ask_deny_notify(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'], notify=True)
-    agent_service.return_value = ''
+    agent_service.return_value = 'deny'
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Ask', 'dom0', {
-            'source': 'source',
-            'service': 'service',
-            'targets': ['test-vm1', 'test-vm2'],
-            'default_target': '',
-            'icons': icons,
-        }),
-        mock.call('gui', 'policy.Notify', 'dom0', {
-            'resolution': 'deny',
-            'service': 'service',
-            'source': 'source',
-            'target': 'test-vm1',
-        }),
+        ask_call(),
+        notify_call('deny'),
     ]
     assert execute.mock_calls == []
 
 
-def test_017_ask_default_target(icons, policy, agent_service, execute):
+def test_017_ask_default_target(policy, agent_service, execute):
     policy.set_ask(['test-vm1', 'test-vm2'], 'test-vm1')
-    agent_service.return_value = 'test-vm1'
+    agent_service.return_value = 'allow:test-vm1'
     retval = qrexec_policy_exec.main(
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 0
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Ask', 'dom0', {
-            'source': 'source',
-            'service': 'service',
-            'targets': ['test-vm1', 'test-vm2'],
-            'default_target': 'test-vm1',
-            'icons': icons,
-        }),
+        ask_call(default_target='test-vm1'),
     ]
     assert execute.mock_calls == [
         mock.call('process_ident,source,source-id'),
     ]
+
+
+def test_018_ask_invalid_response(policy, agent_service, execute):
+    policy.set_ask(['test-vm1', 'test-vm2'])
+    agent_service.return_value = 'xxx'
+    retval = qrexec_policy_exec.main(
+        ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
+    assert retval == 1
+    assert agent_service.mock_calls == [
+        ask_call(),
+        notify_call('deny'),
+    ]
+    assert execute.mock_calls == []
 
 
 def test_013_ask_no_guivm(policy, system_info, agent_service, execute):
@@ -350,12 +330,7 @@ def test_020_deny(policy, agent_service, execute):
         ['source-id', 'source', 'test-vm1', 'service', 'process_ident'])
     assert retval == 1
     assert agent_service.mock_calls == [
-        mock.call('gui', 'policy.Notify', 'dom0', {
-            'resolution': 'deny',
-            'service': 'service',
-            'source': 'source',
-            'target': 'test-vm1',
-        }),
+        notify_call('deny'),
     ]
     assert execute.mock_calls == []
 

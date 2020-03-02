@@ -514,8 +514,8 @@ class PolicyAgent(SocketService):
             targets, default_target or None)
 
         if target:
-            return target
-        return ''
+            return 'allow:{}'.format(target)
+        return 'deny'
 
     async def handle_notify(self, params):
         resolution = params['resolution']

@@ -625,6 +625,13 @@ class AskResolution(AbstractResolution):
         return self.request.allow_resolution_type.from_ask_resolution(self,
             target=target)
 
+    def handle_invalid_response(self):
+        '''
+        Handle invalid response for the 'ask' action. Throws AccessDenied.
+        '''
+        # pylint: disable=no-self-use
+        raise AccessDenied('invalid response')
+
     async def execute(self, caller_ident):
         '''Ask the user for permission.
 
