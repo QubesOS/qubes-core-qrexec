@@ -568,3 +568,24 @@ class TestClient(unittest.TestCase):
         ])
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
+
+    def test_close_stdin_early(self):
+        # Make sure that we cover the error on writing stdin into living
+        # process.
+        source = self.connect_service_request('''
+read
+exec <&-
+echo closed stdin
+sleep 1
+''')
+        source.send_message(qrexec.MSG_DATA_STDIN, b'data 1\n')
+        self.assertEqual(source.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'closed stdin\n'))
+        source.send_message(qrexec.MSG_DATA_STDIN, b'data 2\n')
+        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+
+        messages = source.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])

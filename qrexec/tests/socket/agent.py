@@ -405,15 +405,22 @@ class TestAgentStreams(TestAgentBase):
         ])
 
     def test_close_stdin_early(self):
-        target = self.execute('head -n1')
-
+        # Make sure that we cover the error on writing stdin into living
+        # process.
+        target = self.execute('''
+read
+exec <&-
+echo closed stdin
+sleep 1
+''')
         target.send_message(qrexec.MSG_DATA_STDIN, b'data 1\n')
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'closed stdin\n'))
         target.send_message(qrexec.MSG_DATA_STDIN, b'data 2\n')
         target.send_message(qrexec.MSG_DATA_STDIN, b'')
 
         messages = target.recv_all_messages()
         self.assertListEqual(util.sort_messages(messages), [
-            (qrexec.MSG_DATA_STDOUT, b'data 1\n'),
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_STDERR, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
