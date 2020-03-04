@@ -17,6 +17,7 @@
 
 import pathlib
 import subprocess
+import asyncio
 
 from .utils import prepare_subprocess_kwds
 
@@ -48,3 +49,25 @@ def call(dest, rpcname, arg=None, *, input=None):
     return subprocess.check_output(
         [QREXEC_CLIENT, '-d', dest, 'DEFAULT:QUBESRPC {} dom0'.format(rpcname)],
         **prepare_subprocess_kwds(input)).decode()
+
+
+async def call_async(dest, rpcname, arg=None, *, input=None):
+    '''
+    Invoke qrexec call from dom0 (async version).
+    '''
+    # pylint: disable=redefined-builtin
+
+    assert '+' not in rpcname
+    if arg is not None:
+        rpcname = '{}+{}'.format(rpcname, arg)
+
+    command = [QREXEC_CLIENT, '-d', dest,
+               'DEFAULT:QUBESRPC {} dom0'.format(rpcname)]
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE)
+
+    # Input cannot be None, see https://bugs.python.org/issue39744
+    stdout, _stderr = await process.communicate(input or b'')
+    return stdout

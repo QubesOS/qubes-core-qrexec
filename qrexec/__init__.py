@@ -73,9 +73,9 @@ DEFAULT_POLICY = '''\
 '''
 
 try:
-    from .client_dom0 import call
+    from .client_dom0 import call, call_async
 except ImportError:
     try:
-        from .client_vm import call
+        from .client_vm import call, call_async
     except ImportError:
         pass

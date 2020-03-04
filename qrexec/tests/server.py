@@ -33,10 +33,10 @@ from ..server import SocketService, call_socket_service_local
 
 
 class TestService(SocketService):
-    async def handle_request(self, params, method, source_domain):
+    async def handle_request(self, params, service, source_domain):
         return json.dumps({
             'params': params,
-            'method': method,
+            'service': service,
             'source_domain': source_domain
         })
 
@@ -84,7 +84,7 @@ async def test_server(server):
         response = await reader.read()
         assert json.loads(response) == {
             'params': {'request': i},
-            'method': 'Service',
+            'service': 'Service',
             'source_domain': 'source',
         }
 
@@ -97,6 +97,6 @@ async def test_call_socket_service_local(temp_dir, server):
             {'request': i}, rpc_path=temp_dir)
         assert json.loads(response) == {
             'params': {'request': i},
-            'method': 'Service',
+            'service': 'Service',
             'source_domain': 'source',
         }
