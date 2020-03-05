@@ -417,22 +417,6 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
     free(buf);
 }
 
-void do_replace_chars(char *buf, int len) {
-	int i;
-	unsigned char c;
-
-	for (i = 0; i < len; i++) {
-		c = buf[i];
-		if ((c < '\040' || c > '\176') &&  /* not printable ASCII */
-		    (c != '\t') &&                 /* not tab */
-		    (c != '\n') &&                 /* not newline */
-		    (c != '\r') &&                 /* not return */
-		    (c != '\b') &&                 /* not backspace */
-		    (c != '\a'))                   /* not bell */
-			buf[i] = '_';
-	}
-}
-
 static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
         int data_protocol_version)
 {

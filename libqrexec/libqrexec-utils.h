@@ -98,4 +98,8 @@ static inline size_t max_data_chunk_size(int protocol_version) {
         return MAX_DATA_CHUNK_V3;
 }
 #define ARRAY_SIZE(s) (sizeof(s)/sizeof(s[0]))
+
+/* Replace all non-printable characters by '_' */
+void do_replace_chars(char *buf, int len);
+
 #endif /* _LIBQREXEC_UTILS_H */

@@ -63,22 +63,6 @@ int remote_process_status = 0;
 int replace_chars_stdout = -1;
 int replace_chars_stderr = -1;
 
-void do_replace_chars(char *buf, int len) {
-    int i;
-    unsigned char c;
-
-    for (i = 0; i < len; i++) {
-        c = buf[i];
-        if ((c < '\040' || c > '\176') &&  /* not printable ASCII */
-            (c != '\t') &&                 /* not tab */
-            (c != '\n') &&                 /* not newline */
-            (c != '\r') &&                 /* not return */
-            (c != '\b') &&                 /* not backspace */
-            (c != '\a'))                   /* not bell */
-            buf[i] = '_';
-    }
-}
-
 static void sigchld_handler(int __attribute__((__unused__))x)
 {
     child_exited = 1;
