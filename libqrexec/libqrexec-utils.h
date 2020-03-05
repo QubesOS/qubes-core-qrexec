@@ -102,4 +102,34 @@ static inline size_t max_data_chunk_size(int protocol_version) {
 /* Replace all non-printable characters by '_' */
 void do_replace_chars(char *buf, int len);
 
+/* return codes for handle_remote_data */
+#define REMOTE_EXITED -2
+#define REMOTE_ERROR  -1
+#define REMOTE_EOF     0
+#define REMOTE_OK      1
+
+/*
+ * Handle data from vchan. Sends MSG_DATA_STDIN and MSG_DATA_STDOUT to
+ * specified FD (unless it's -1), and MSG_DATA_STDERR to our stderr.
+ *
+ * Return codes:
+ *   REMOTE_EXITED - remote process terminated, do not send more data to it
+ *     ("status" will be set)
+ *   REMOTE_ERROR - vchan error occured
+ *   REMOTE_EOF - EOF received, do not access this FD again
+ *   REMOTE_OK - maybe some data processed, call again when buffer space and
+ *     more data available
+ *
+ * Options:
+ *   try_shutdown - attempt to use shutdown() instead of close()
+ *   replace_chars_stdout, replace_chars_stderr - remove non-printable
+ *     characters from stdout/stderr
+ */
+int handle_remote_data(
+    libvchan_t *data_vchan, int stdin_fd, int *status,
+    struct buffer *stdin_buf, int data_protocol_version,
+    bool try_shutdown,
+    bool replace_chars_stdout, bool replace_chars_stderr);
+
+
 #endif /* _LIBQREXEC_UTILS_H */

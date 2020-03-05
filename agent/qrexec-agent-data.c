@@ -228,122 +228,6 @@ out:
     return rc;
 }
 
-/* handle data from vchan and send it to specified FD
- * Return:
- *  -2 - remote process terminated, do not send more data to it
- *       in this case "status" will be set
- *  -1 - vchan error occurred
- *  0 - EOF received, do not attempt to access this FD again
- *  1 - maybe some data processed, call it again when buffer space and more data
- *      available
- */
-
-static int handle_remote_data(libvchan_t *data_vchan, int stdin_fd, int *status,
-        struct buffer *stdin_buf, int data_protocol_version)
-{
-    struct msg_header hdr;
-    const size_t max_len = max_data_chunk_size(data_protocol_version);
-    char *buf;
-    int rc = -1;
-
-    /* do not receive any data if we have something already buffered */
-    switch (flush_client_data(stdin_fd, stdin_buf)) {
-        case WRITE_STDIN_OK:
-            break;
-        case WRITE_STDIN_BUFFERED:
-            return 1;
-        case WRITE_STDIN_ERROR:
-            perror("write");
-            return 0;
-    }
-
-    buf = malloc(max_len);
-    if (!buf) {
-        fprintf(stderr, "Out of memory\n");
-        return -1;
-    }
-
-    while (libvchan_data_ready(data_vchan) > 0) {
-        if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) < 0)
-            goto out;
-        if (hdr.len > max_len) {
-            fprintf(stderr, "Too big data chunk received: %" PRIu32 " > %zu\n",
-                    hdr.len, max_len);
-            goto out;
-        }
-        if (!read_vchan_all(data_vchan, buf, hdr.len))
-            goto out;
-
-        switch (hdr.type) {
-            /* handle both directions because this can be either server or client
-             * of VM-VM connection */
-            case MSG_DATA_STDIN:
-            case MSG_DATA_STDOUT:
-                if (stdin_fd < 0)
-                    /* discard the data */
-                    continue;
-                if (hdr.len == 0) {
-                    /* restore flags */
-                    set_block(stdin_fd);
-                    if (!child_process_pid || stdin_fd == 1 ||
-                            (shutdown(stdin_fd, SHUT_WR) == -1 &&
-                             errno == ENOTSOCK)) {
-                        close(stdin_fd);
-                    }
-                    stdin_fd = -1;
-                    rc = 0;
-                    goto out;
-                } else {
-                    if (replace_chars_stdout > 0)
-                        do_replace_chars(buf, hdr.len);
-                    switch (write_stdin(stdin_fd, buf, hdr.len, stdin_buf)) {
-                        case WRITE_STDIN_OK:
-                            break;
-                        case WRITE_STDIN_BUFFERED:
-                            rc = 1;
-                            goto out;
-                        case WRITE_STDIN_ERROR:
-                            if (errno == EPIPE || errno == ECONNRESET) {
-                                if (!child_process_pid || stdin_fd == 1 ||
-                                        (shutdown(stdin_fd, SHUT_WR) == -1 &&
-                                         errno == ENOTSOCK)) {
-                                    close(stdin_fd);
-                                }
-                                stdin_fd = -1;
-                            } else {
-                                perror("write");
-                            }
-                            rc = 0;
-                            goto out;
-                    }
-                }
-                break;
-            case MSG_DATA_STDERR:
-                if (replace_chars_stderr > 0)
-                    do_replace_chars(buf, hdr.len);
-                /* stderr of remote service, log locally */
-                if (!write_all(2, buf, hdr.len)) {
-                    perror("write");
-                    /* only log the error */
-                }
-                break;
-            case MSG_DATA_EXIT_CODE:
-                /* remote process exited, so there is no sense to send any data
-                 * to it */
-                if (hdr.len < sizeof(*status))
-                    *status = 255;
-                else
-                    memcpy(status, buf, sizeof(*status));
-                rc = -2;
-                goto out;
-        }
-    }
-    rc = 1;
-out:
-    free(buf);
-    return rc;
-}
-
 static int process_child_io(libvchan_t *data_vchan,
         int stdin_fd, int stdout_fd, int stderr_fd,
         int data_protocol_version, struct buffer *stdin_buf)
@@ -480,17 +364,21 @@ static int process_child_io(libvchan_t *data_vchan,
         }
 
         /* handle_remote_data will check if any data is available */
-        switch (handle_remote_data(data_vchan, stdin_fd,
+        switch (handle_remote_data(
+                    data_vchan, stdin_fd,
                     &remote_process_status,
                     stdin_buf,
-                    data_protocol_version)) {
-            case -1:
+                    data_protocol_version,
+                    child_process_pid && stdin_fd != 1,
+                    replace_chars_stdout,
+                    replace_chars_stderr)) {
+            case REMOTE_ERROR:
                 handle_vchan_error("read");
                 break;
-            case 0:
+            case REMOTE_EOF:
                 stdin_fd = -1;
                 break;
-            case -2:
+            case REMOTE_EXITED:
                 /* remote process exited, no sense in sending more data to it;
                  * be careful to not shutdown socket inherited from parent */
                 if (!child_process_pid || stdout_fd == 0 ||
