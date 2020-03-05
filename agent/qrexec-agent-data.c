@@ -169,65 +169,6 @@ static void send_exit_code(libvchan_t *data_vchan, int status)
     fprintf(stderr, "send exit code %d\n", status);
 }
 
-/* handle data from specified FD and send over vchan link
- * Return:
- *  -1 - vchan error occurred
- *  0 - EOF received, do not attempt to access this FD again
- *  1 - some data processed, call it again when buffer space and more data
- *      available
- */
-static int handle_input(libvchan_t *vchan, int fd, int msg_type, int data_protocol_version)
-{
-    const size_t max_len = max_data_chunk_size(data_protocol_version);
-    char *buf;
-    ssize_t len;
-    struct msg_header hdr;
-    int rc = -1;
-
-    buf = malloc(max_len);
-    if (!buf) {
-        fprintf(stderr, "Out of memory\n");
-        return -1;
-    }
-
-    static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
-    hdr.type = msg_type;
-    while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
-        len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
-        if ((size_t)len > max_len)
-            len = max_len;
-        len = read(fd, buf, len);
-        if (len < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                rc = 1;
-            /* otherwise keep rc = -1 */
-            goto out;
-        }
-        hdr.len = (uint32_t)len;
-        if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0)
-            goto out;
-
-        if (len && !write_vchan_all(vchan, buf, len))
-            goto out;
-
-        if (len == 0) {
-            /* restore flags */
-            if (stdio_socket_requested < 2)
-                set_block(fd);
-            if (shutdown(fd, SHUT_RD) < 0) {
-                if (errno == ENOTSOCK)
-                    close(fd);
-            }
-            rc = 0;
-            goto out;
-        }
-    }
-    rc = 1;
-out:
-    free(buf);
-    return rc;
-}
-
 static int process_child_io(libvchan_t *data_vchan,
         int stdin_fd, int stdout_fd, int stderr_fd,
         int data_protocol_version, struct buffer *stdin_buf)
@@ -395,23 +336,27 @@ static int process_child_io(libvchan_t *data_vchan,
                 break;
         }
         if (stdout_fd >= 0 && FD_ISSET(stdout_fd, &rdset)) {
-            switch (handle_input(data_vchan, stdout_fd, stdout_msg_type,
-                        data_protocol_version)) {
-                case -1:
+            switch (handle_input(
+                        data_vchan, stdout_fd, stdout_msg_type,
+                        data_protocol_version,
+                        stdio_socket_requested < 2)) {
+                case REMOTE_ERROR:
                     handle_vchan_error("send");
                     break;
-                case 0:
+                case REMOTE_EOF:
                     stdout_fd = -1;
                     break;
             }
         }
         if (stderr_fd >= 0 && FD_ISSET(stderr_fd, &rdset)) {
-            switch (handle_input(data_vchan, stderr_fd, MSG_DATA_STDERR,
-                        data_protocol_version)) {
-                case -1:
+            switch (handle_input(
+                        data_vchan, stderr_fd, MSG_DATA_STDERR,
+                        data_protocol_version,
+                        stdio_socket_requested < 2)) {
+                case REMOTE_ERROR:
                     handle_vchan_error("send");
                     break;
-                case 0:
+                case REMOTE_EOF:
                     stderr_fd = -1;
                     break;
             }

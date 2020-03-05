@@ -342,7 +342,7 @@ static void send_exit_code(libvchan_t *vchan, int status)
     }
 }
 
-static void handle_input(libvchan_t *vchan, int data_protocol_version)
+static void _handle_input(libvchan_t *vchan, int data_protocol_version)
 {
     const size_t data_chunk_size = max_data_chunk_size(data_protocol_version);
     char *buf;
@@ -535,7 +535,7 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
 
         if (local_stdout_fd != -1
                 && FD_ISSET(local_stdout_fd, &select_set))
-            handle_input(vchan, data_protocol_version);
+            _handle_input(vchan, data_protocol_version);
     }
 }
 static struct option longopts[] = {

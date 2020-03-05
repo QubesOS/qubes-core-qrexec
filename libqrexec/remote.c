@@ -26,6 +26,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <limits.h>
+#include <assert.h>
 
 #include "libqrexec-utils.h"
 
@@ -134,6 +136,61 @@ int handle_remote_data(
                 fprintf(stderr, "unknown msg %d\n", hdr.type);
                 rc = REMOTE_ERROR;
                 goto out;
+        }
+    }
+    rc = REMOTE_OK;
+out:
+    free(buf);
+    return rc;
+}
+
+int handle_input(
+    libvchan_t *vchan, int fd, int msg_type,
+    int data_protocol_version,
+    bool set_block_on_close)
+{
+    const size_t max_len = max_data_chunk_size(data_protocol_version);
+    char *buf;
+    ssize_t len;
+    struct msg_header hdr;
+    int rc = REMOTE_ERROR;
+
+    buf = malloc(max_len);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
+        return REMOTE_ERROR;
+    }
+
+    static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
+    hdr.type = msg_type;
+    while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
+        len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
+        if ((size_t)len > max_len)
+            len = max_len;
+        len = read(fd, buf, len);
+        if (len < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                rc = REMOTE_OK;
+            /* otherwise keep rc = REMOTE_ERROR */
+            goto out;
+        }
+        hdr.len = (uint32_t)len;
+        if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0)
+            goto out;
+
+        if (len && !write_vchan_all(vchan, buf, len))
+            goto out;
+
+        if (len == 0) {
+            /* restore flags */
+            if (set_block_on_close)
+                set_block(fd);
+            if (shutdown(fd, SHUT_RD) < 0) {
+                if (errno == ENOTSOCK)
+                    close(fd);
+            }
+            rc = REMOTE_EOF;
+            goto out;
         }
     }
     rc = REMOTE_OK;
