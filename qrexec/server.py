@@ -35,7 +35,7 @@ import socket
 from systemd.daemon import listen_fds
 
 from . import RPC_PATH
-
+from .client import call_async
 
 class SocketService:
     def __init__(self, socket_path, socket_activated=False):
@@ -125,8 +125,6 @@ async def call_socket_service_local(service, source_domain, params,
 
 
 async def call_socket_service_remote(remote_domain, service, params):
-    from . import call_async
-
-    input_data = json.dumps(params).encode('ascii')
+    input_data = json.dumps(params)
     output_data = await call_async(remote_domain, service, input=input_data)
-    return output_data.decode('ascii')
+    return output_data

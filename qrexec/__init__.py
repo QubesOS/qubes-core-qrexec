@@ -1,21 +1,5 @@
 # pylint: disable=anomalous-backslash-in-string
 '''
-Functions
----------
-
-.. function:: call(dest, rpcname[, arg=None, \*, input=None])
-
-   Execute a qrexec call.
-
-   :param str dest: destination (a qube name or a valid ``@token``)
-   :param str rpcname: name of the invoked call
-   :param arg: argument of the call
-   :type arg: str or None
-   :param input: input to the qrexec call
-   :type input: str or bytes or file or None
-   :rtype: bytes
-   :raises subprocess.CalledProcessError: on failure
-
 Constants
 ---------
 
@@ -71,11 +55,3 @@ DEFAULT_POLICY = '''\
 
 @anyvm  @anyvm  ask
 '''
-
-try:
-    from .client_dom0 import call, call_async
-except ImportError:
-    try:
-        from .client_vm import call, call_async
-    except ImportError:
-        pass

@@ -3,11 +3,6 @@
 import unittest
 import unittest.mock
 
-try:
-    from qrexec import call
-except ImportError:
-    import qrexec
-    qrexec.call = unittest.mock.Mock()
 from ..policy.api import policy, _qrexec
 
 POLICY_VALID = '''\
