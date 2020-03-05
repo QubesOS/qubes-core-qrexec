@@ -26,6 +26,7 @@ import shutil
 import struct
 from typing import Tuple
 import time
+import itertools
 
 import psutil
 import pytest
@@ -585,6 +586,45 @@ sleep 1
         source.send_message(qrexec.MSG_DATA_STDIN, b'')
 
         messages = source.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    def test_buffer_stdin(self):
+        # Test to trigger WRITE_STDIN_BUFFERED.
+
+        # Values carefully selected to block stdin pipe but not block vchan.
+        data_size = 256 * 1024
+        data = bytes(itertools.islice(
+            itertools.cycle(b'abcdefghijklmnopqrstuvwxyz'),
+            data_size))
+        msg_size = 32 * 1024
+
+        fifo = os.path.join(self.tempdir, 'fifo')
+        os.mkfifo(fifo)
+        target = self.connect_service_request('read <{}; cat'.format(fifo))
+
+        for i in range(0, data_size, msg_size):
+            msg = data[i:i+msg_size]
+            target.send_message(qrexec.MSG_DATA_STDIN, msg)
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+
+        # Signal the process to start reading.
+        with open(fifo, 'a') as f:
+            f.write('end\n')
+            f.flush()
+
+        received_data = b''
+        while len(received_data) < data_size:
+            message_type, message = target.recv_message()
+            self.assertEqual(message_type, qrexec.MSG_DATA_STDOUT)
+            received_data += message
+
+        self.assertEqual(len(received_data), data_size)
+        self.assertEqual(received_data, data)
+
+        messages = target.recv_all_messages()
         self.assertListEqual(util.sort_messages(messages), [
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
