@@ -366,7 +366,7 @@ static int execute_parsed_qubes_rpc_command(
         *stdout_fd = *stdin_fd = s;
         if (stderr_fd)
             *stderr_fd = -1;
-        *pid = -1;
+        *pid = 0;
         set_nonblock(s);
         buffer_append(stdin_buffer, command->service_descriptor, strlen(command->service_descriptor) + 1);
         return 0;

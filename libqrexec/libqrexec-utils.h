@@ -22,7 +22,10 @@
 
 #ifndef _LIBQREXEC_UTILS_H
 #define _LIBQREXEC_UTILS_H
-#include <sys/select.h>
+
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+#include <signal.h>
 #include <stdbool.h>
 #include <libvchan.h>
 #include <qrexec.h>
@@ -150,5 +153,49 @@ int handle_input(
     bool set_block_on_close);
 
 int send_exit_code(libvchan_t *vchan, int status);
+
+/* Set of options for process_io(). */
+struct process_io_request {
+    libvchan_t *vchan;
+    struct buffer *stdin_buf;
+
+    // stderr_fd can be -1
+    int stdin_fd, stdout_fd, stderr_fd;
+    // 0 if no child process
+    pid_t local_pid;
+
+    /*
+      is_service true (this is a service):
+        - send local data as MSG_DATA_STDOUT
+        - send exit code
+        - wait just for local end
+        - return local exit code
+
+      is_service false (this is a client):
+        - send local data as MSG_DATA_STDIN
+        - don't send exit code
+          (TODO: should it be this way?)
+        - if there's no process, wait for remote end
+        - return local or remote exit code, whichever finished first
+          (TODO: should it be this way?)
+     */
+    bool is_service;
+
+    bool replace_chars_stdout;
+    bool replace_chars_stderr;
+    int data_protocol_version;
+
+    volatile sig_atomic_t *sigchld;
+    volatile sig_atomic_t *sigusr1;
+};
+
+/*
+ * Pass IO between vchan and local FDs.
+ *
+ * Returns local exit code, or remote exit code if there is no local process.
+ *
+ * This function uses global state and should not be called more than once.
+ */
+int process_io(const struct process_io_request *req);
 
 #endif /* _LIBQREXEC_UTILS_H */

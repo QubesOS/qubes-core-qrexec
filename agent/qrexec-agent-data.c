@@ -51,11 +51,8 @@
 
 #define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
 
-static volatile int child_exited;
-static volatile sig_atomic_t stdio_socket_requested;
-int stdout_msg_type = MSG_DATA_STDOUT;
-pid_t child_process_pid;
-int remote_process_status = 0;
+static volatile sig_atomic_t sigchld = 0;
+static volatile sig_atomic_t sigusr1 = 0;
 
 /* whether qrexec-client should replace problematic bytes with _ before printing the output;
  * positive value will enable the feature
@@ -65,12 +62,12 @@ int replace_chars_stderr = -1;
 
 static void sigchld_handler(int __attribute__((__unused__))x)
 {
-    child_exited = 1;
+    sigchld = 1;
 }
 
 static void sigusr1_handler(int __attribute__((__unused__))x)
 {
-    stdio_socket_requested = 1;
+    sigusr1 = 1;
     signal(SIGUSR1, SIG_IGN);
 }
 
@@ -157,233 +154,6 @@ static int handle_just_exec(char *cmdline)
     return 0;
 }
 
-static int process_child_io(libvchan_t *data_vchan,
-        int stdin_fd, int stdout_fd, int stderr_fd,
-        int data_protocol_version, struct buffer *stdin_buf)
-{
-    fd_set rdset, wrset;
-    int vchan_fd;
-    sigset_t selectmask;
-    int child_process_status = child_process_pid > 0 ? -1 : 0;
-    int remote_process_status = -1;
-    int ret, max_fd;
-    struct timespec zero_timeout = { 0, 0 };
-    struct timespec normal_timeout = { 10, 0 };
-
-    sigemptyset(&selectmask);
-    sigaddset(&selectmask, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &selectmask, NULL);
-    sigemptyset(&selectmask);
-
-    set_nonblock(stdin_fd);
-    if (stdout_fd != stdin_fd)
-        set_nonblock(stdout_fd);
-    else if ((stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3)) < 0)
-        abort(); // not worth handling running out of file descriptors
-    if (stderr_fd >= 0)
-        set_nonblock(stderr_fd);
-
-    while (1) {
-        if (child_exited) {
-            int status;
-            if (child_process_pid > 0 &&
-                    waitpid(child_process_pid, &status, WNOHANG) > 0) {
-                if (WIFSIGNALED(status))
-                    child_process_status = 128 + WTERMSIG(status);
-                else
-                    child_process_status = WEXITSTATUS(status);
-                if (stdin_fd >= 0) {
-                    /* restore flags */
-                    set_block(stdin_fd);
-                    if (!child_process_pid || stdin_fd == 1 ||
-                            (shutdown(stdin_fd, SHUT_WR) == -1 &&
-                             errno == ENOTSOCK)) {
-                        close(stdin_fd);
-                    }
-                    stdin_fd = -1;
-                }
-            }
-            child_exited = 0;
-        }
-
-        /* if all done, exit the loop */
-        if ((!child_process_pid || child_process_status > -1) &&
-                (child_process_pid || remote_process_status > -1) &&
-                stdin_fd == -1 && stdout_fd == -1 && stderr_fd == -1) {
-            if (child_process_status > -1) {
-                if (send_exit_code(data_vchan, child_process_status) < 0)
-                    handle_vchan_error("exit code");
-            }
-            break;
-        }
-        /* also if vchan is disconnected (and we processed all the data), there
-         * is no sense of processing further data */
-        if (!libvchan_data_ready(data_vchan) &&
-                !libvchan_is_open(data_vchan) &&
-                !buffer_len(stdin_buf)) {
-            break;
-        }
-        /* child signaled desire to use single socket for both stdin and stdout */
-        if (stdio_socket_requested == 1) {
-            if (stdout_fd != -1) {
-                do
-                    errno = 0;
-                while (dup3(stdin_fd, stdout_fd, O_CLOEXEC) &&
-                       (errno == EINTR || errno == EBUSY));
-                // other errors are fatal
-                if (errno) {
-                    fputs("Fatal error from dup3()\n", stderr);
-                    abort();
-                }
-            } else {
-                stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3);
-                // all errors are fatal
-                if (stdout_fd < 3)
-                    abort();
-            }
-            stdio_socket_requested = 2;
-        }
-        /* otherwise handle the events */
-
-        FD_ZERO(&rdset);
-        FD_ZERO(&wrset);
-        max_fd = -1;
-        vchan_fd = libvchan_fd_for_select(data_vchan);
-        if (libvchan_buffer_space(data_vchan) > (int)sizeof(struct msg_header)) {
-            if (stdout_fd >= 0) {
-                FD_SET(stdout_fd, &rdset);
-                if (stdout_fd > max_fd)
-                    max_fd = stdout_fd;
-            }
-            if (stderr_fd >= 0) {
-                FD_SET(stderr_fd, &rdset);
-                if (stderr_fd > max_fd)
-                    max_fd = stderr_fd;
-            }
-        }
-        FD_SET(vchan_fd, &rdset);
-        if (vchan_fd > max_fd)
-            max_fd = vchan_fd;
-        /* if we have something buffered for the child process, wake also on
-         * writable stdin */
-        if (stdin_fd > -1 && buffer_len(stdin_buf)) {
-            FD_SET(stdin_fd, &wrset);
-            if (stdin_fd > max_fd)
-                max_fd = stdin_fd;
-        }
-
-        if (!buffer_len(stdin_buf) && libvchan_data_ready(data_vchan) > 0) {
-            /* check for other FDs, but exit immediately */
-            ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &zero_timeout, &selectmask);
-        } else
-            ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &normal_timeout, &selectmask);
-        if (ret < 0) {
-            if (errno == EINTR)
-                continue;
-            else {
-                perror("pselect");
-                /* TODO */
-                break;
-            }
-        }
-
-        /* clear event pending flag */
-        if (FD_ISSET(vchan_fd, &rdset)) {
-            if (libvchan_wait(data_vchan) < 0)
-                handle_vchan_error("wait");
-        }
-
-        /* handle_remote_data will check if any data is available */
-        switch (handle_remote_data(
-                    data_vchan, stdin_fd,
-                    &remote_process_status,
-                    stdin_buf,
-                    data_protocol_version,
-                    child_process_pid && stdin_fd != 1,
-                    replace_chars_stdout > 0,
-                    replace_chars_stderr > 0)) {
-            case REMOTE_ERROR:
-                handle_vchan_error("read");
-                break;
-            case REMOTE_EOF:
-                stdin_fd = -1;
-                break;
-            case REMOTE_EXITED:
-                /* remote process exited, no sense in sending more data to it;
-                 * be careful to not shutdown socket inherited from parent */
-                if (!child_process_pid || stdout_fd == 0 ||
-                        (shutdown(stdout_fd, SHUT_RD) == -1 &&
-                         errno == ENOTSOCK)) {
-                    close(stdout_fd);
-                }
-                stdout_fd = -1;
-                close(stderr_fd);
-                stderr_fd = -1;
-                /* if we do not care for any local process, return remote process code */
-                if (child_process_pid == 0)
-                    return remote_process_status;
-                break;
-        }
-        if (stdout_fd >= 0 && FD_ISSET(stdout_fd, &rdset)) {
-            switch (handle_input(
-                        data_vchan, stdout_fd, stdout_msg_type,
-                        data_protocol_version,
-                        stdio_socket_requested < 2)) {
-                case REMOTE_ERROR:
-                    handle_vchan_error("send");
-                    break;
-                case REMOTE_EOF:
-                    stdout_fd = -1;
-                    break;
-            }
-        }
-        if (stderr_fd >= 0 && FD_ISSET(stderr_fd, &rdset)) {
-            switch (handle_input(
-                        data_vchan, stderr_fd, MSG_DATA_STDERR,
-                        data_protocol_version,
-                        stdio_socket_requested < 2)) {
-                case REMOTE_ERROR:
-                    handle_vchan_error("send");
-                    break;
-                case REMOTE_EOF:
-                    stderr_fd = -1;
-                    break;
-            }
-        }
-    }
-    /* make sure that all the pipes/sockets are closed, so the child process
-     * (if any) will know that the connection is terminated */
-    if (stdout_fd != -1) {
-        /* restore flags */
-        set_block(stdout_fd);
-        /* be careful to not shutdown socket inherited from parent */
-        if (!child_process_pid || stdout_fd == 0 ||
-                (shutdown(stdout_fd, SHUT_RD) == -1 && errno == ENOTSOCK)) {
-            close(stdout_fd);
-        }
-        stdout_fd = -1;
-    }
-    if (stdin_fd != -1) {
-        /* restore flags */
-        set_block(stdin_fd);
-        /* be careful to not shutdown socket inherited from parent */
-        if (!child_process_pid || stdin_fd == 1 ||
-                (shutdown(stdin_fd, SHUT_WR) == -1 && errno == ENOTSOCK)) {
-            close(stdin_fd);
-        }
-        stdin_fd = -1;
-    }
-    if (stderr_fd != -1) {
-        /* restore flags */
-        set_block(stderr_fd);
-        close(stderr_fd);
-        stderr_fd = -1;
-    }
-    if (child_process_pid == 0)
-        return remote_process_status;
-    return child_process_status;
-}
-
 /* Behaviour depends on type parameter:
  *  MSG_SERVICE_CONNECT - create vchan server, pass the data to/from given FDs
  *    (stdin_fd, stdout_fd, stderr_fd), then return remote process exit code
@@ -403,9 +173,12 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
                 int buffer_size)
 {
     libvchan_t *data_vchan;
-    int exit_code = 0;
+    int exit_code;
     pid_t pid;
     int data_protocol_version;
+    int is_service;
+    struct buffer stdin_buf;
+    struct process_io_request req;
 
     if (buffer_size == 0)
         buffer_size = VCHAN_BUFFER_SIZE;
@@ -443,32 +216,49 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
         case MSG_JUST_EXEC:
             if (send_exit_code(data_vchan, handle_just_exec(cmdline)) < 0)
                 handle_vchan_error("just_exec");
-            break;
-        case MSG_EXEC_CMDLINE: {
-            struct buffer stdin_buf;
+            libvchan_close(data_vchan);
+            return 0;
+        case MSG_EXEC_CMDLINE:
             buffer_init(&stdin_buf);
             if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd, !qrexec_is_fork_server, &stdin_buf) < 0) {
                 fputs("failed to spawn process\n", stderr);
             }
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
-            child_process_pid = pid;
-            exit_code = process_child_io(
-                    data_vchan, stdin_fd, stdout_fd, stderr_fd,
-                    data_protocol_version, &stdin_buf);
-            fprintf(stderr, "pid %d exited with %d\n", pid, exit_code);
+            is_service = true;
             break;
-        }
-        case MSG_SERVICE_CONNECT: {
-            struct buffer stdin_buf;
+        case MSG_SERVICE_CONNECT:
             buffer_init(&stdin_buf);
-            child_process_pid = 0;
-            stdout_msg_type = MSG_DATA_STDIN;
-            exit_code = process_child_io(
-                    data_vchan, stdin_fd, stdout_fd, stderr_fd,
-                    data_protocol_version, &stdin_buf);
+            pid = 0;
+            is_service = false;
             break;
-        }
+        default:
+            fprintf(stderr, "unknown request type: %d\n", type);
+            libvchan_close(data_vchan);
+            return 0;
     }
+
+    req.vchan = data_vchan;
+    req.stdin_buf = &stdin_buf;
+
+    req.stdin_fd = stdin_fd;
+    req.stdout_fd = stdout_fd;
+    req.stderr_fd = stderr_fd;
+    req.local_pid = pid;
+
+    req.is_service = is_service;
+
+    req.replace_chars_stdout = replace_chars_stdout > 0;
+    req.replace_chars_stderr = replace_chars_stderr > 0;
+    req.data_protocol_version = data_protocol_version;
+
+    req.sigchld = &sigchld;
+    req.sigusr1 = &sigusr1;
+
+    exit_code = process_io(&req);
+
+    if (type == MSG_EXEC_CMDLINE)
+        fprintf(stderr, "pid %d exited with %d\n", pid, exit_code);
+
     libvchan_close(data_vchan);
     return exit_code;
 }
