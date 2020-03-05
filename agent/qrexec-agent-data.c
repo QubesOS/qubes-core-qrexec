@@ -300,8 +300,8 @@ static int process_child_io(libvchan_t *data_vchan,
                     stdin_buf,
                     data_protocol_version,
                     child_process_pid && stdin_fd != 1,
-                    replace_chars_stdout,
-                    replace_chars_stderr)) {
+                    replace_chars_stdout > 0,
+                    replace_chars_stderr > 0)) {
             case REMOTE_ERROR:
                 handle_vchan_error("read");
                 break;

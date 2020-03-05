@@ -436,8 +436,8 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
                     data_protocol_version,
                     /* try_shutdown - TODO should it always be true? */
                     true,
-                    replace_chars_stdout,
-                    replace_chars_stderr)) {
+                    replace_chars_stdout > 0,
+                    replace_chars_stderr > 0)) {
             case REMOTE_ERROR:
                 close_vchan_and_exit(1, vchan);
                 break;
