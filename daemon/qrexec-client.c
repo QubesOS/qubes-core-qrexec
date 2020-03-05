@@ -33,6 +33,8 @@
 #include <errno.h>
 #include <assert.h>
 #include "qrexec.h"
+#include <fcntl.h>
+
 #include "libqrexec-utils.h"
 
 // whether qrexec-client should replace problematic bytes with _ before printing the output
@@ -342,81 +344,6 @@ static void send_exit_code(libvchan_t *vchan, int status)
     }
 }
 
-static void _handle_input(libvchan_t *vchan, int data_protocol_version)
-{
-    const size_t data_chunk_size = max_data_chunk_size(data_protocol_version);
-    char *buf;
-    int ret;
-    size_t max_len;
-    struct msg_header hdr;
-
-    max_len = libvchan_buffer_space(vchan);
-    if (max_len < sizeof(hdr))
-        return;
-    max_len -= sizeof(hdr);
-    if (max_len > data_chunk_size)
-        max_len = data_chunk_size;
-    if (max_len == 0)
-        return;
-
-    buf = malloc(max_len);
-    if (!buf) {
-        fprintf(stderr, "Out of memory\n");
-        close_vchan_and_exit(1, vchan);
-    }
-
-    ret = read(local_stdout_fd, buf, max_len);
-    if (ret < 0) {
-        perror("read");
-        close_vchan_and_exit(1, vchan);
-    }
-    hdr.type = is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN;
-    hdr.len = ret;
-    if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to write STDIN data to the agent\n");
-        close_vchan_and_exit(1, vchan);
-    }
-    if (ret == 0) {
-        close_stdout_fd();
-        if (local_stdin_fd == -1) {
-            // if not a remote end of service call, wait for exit status
-            if (is_service) {
-                // if pipe in opposite direction already closed, no need to stay alive
-                if (local_pid <= 0) {
-                    /* if this is "remote" service end and no real local process
-                     * exists (using own stdin/out) send also fake exit code */
-                    send_exit_code(vchan, 0);
-                    close_vchan_and_exit(0, vchan);
-                }
-            } else if (local_pid < 0) {
-                // socket-based service, so we will never get a SIGCHLD
-                close_vchan_and_exit(0, vchan);
-            }
-        }
-    }
-    if (!write_vchan_all(vchan, buf, ret)) {
-        if (!libvchan_is_open(vchan)) {
-            // agent disconnected its end of socket, so no future data will be
-            // send there; there is no sense to read from child stdout
-            //
-            // since vchan socket is buffered it doesn't mean all data was
-            // received from the agent
-            close_stdout_fd();
-            if (local_stdin_fd == -1) {
-                // since child does no longer accept data on its stdin, doesn't
-                // make sense to process the data from the daemon
-                //
-                // we don't know real exit VM process code (exiting here, before
-                // MSG_DATA_EXIT_CODE message)
-                do_exit(1);
-            }
-        } else
-            perror("write agent");
-    }
-
-    free(buf);
-}
-
 static void check_child_status(libvchan_t *vchan)
 {
     int status = 0;
@@ -457,6 +384,11 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
      * nonblocking FD for input/output
      */
     set_nonblock(local_stdin_fd);
+
+    if (local_stdout_fd != local_stdin_fd)
+        set_nonblock(local_stdout_fd);
+    else if ((local_stdout_fd = fcntl(local_stdin_fd, F_DUPFD_CLOEXEC, 3)) < 0)
+        abort(); // not worth handling running out of file descriptors
 
     for (;;) {
         vchan_fd = libvchan_fd_for_select(vchan);
@@ -534,8 +466,33 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
         }
 
         if (local_stdout_fd != -1
-                && FD_ISSET(local_stdout_fd, &select_set))
-            _handle_input(vchan, data_protocol_version);
+            && FD_ISSET(local_stdout_fd, &select_set))
+            switch (handle_input(vchan,
+                                 local_stdout_fd,
+                                 is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN,
+                                 data_protocol_version,
+                                 /* set_block_on_close */
+                                 true)) {
+                case REMOTE_ERROR:
+                    close_vchan_and_exit(1, vchan);
+                    break;
+                case REMOTE_EOF:
+                    local_stdout_fd = -1;
+                    // if not a remote end of service call, wait for exit status
+                    if (is_service) {
+                        // if pipe in opposite direction already closed, no need to stay alive
+                        if (local_pid <= 0) {
+                            /* if this is "remote" service end and no real local process
+                             * exists (using own stdin/out) send also fake exit code */
+                            send_exit_code(vchan, 0);
+                            close_vchan_and_exit(0, vchan);
+                        }
+                    } else if (local_pid < 0) {
+                        // socket-based service, so we will never get a SIGCHLD
+                        close_vchan_and_exit(0, vchan);
+                    }
+                    break;
+            }
     }
 }
 static struct option longopts[] = {
