@@ -417,102 +417,6 @@ static void handle_input(libvchan_t *vchan, int data_protocol_version)
     free(buf);
 }
 
-static int handle_vchan_data(libvchan_t *vchan, struct buffer *stdin_buf,
-        int data_protocol_version)
-{
-    int status;
-    struct msg_header hdr;
-    const size_t buf_len = max_data_chunk_size(data_protocol_version);
-    char *buf;
-
-    if (local_stdin_fd != -1) {
-        switch(flush_client_data(local_stdin_fd, stdin_buf)) {
-            case WRITE_STDIN_ERROR:
-                perror("write stdin");
-                close_stdin_fd();
-                break;
-            case WRITE_STDIN_BUFFERED:
-                return WRITE_STDIN_BUFFERED;
-            case WRITE_STDIN_OK:
-                break;
-        }
-    }
-
-    buf = malloc(buf_len);
-    if (!buf) {
-        fprintf(stderr, "Out of memory\n");
-        close_vchan_and_exit(1, vchan);
-    }
-
-    if (libvchan_recv(vchan, &hdr, sizeof hdr) < 0) {
-        perror("read vchan");
-        close_vchan_and_exit(1, vchan);
-    }
-    if (hdr.len > buf_len) {
-        fprintf(stderr, "client_header.len=%d\n", hdr.len);
-        close_vchan_and_exit(1, vchan);
-    }
-    if (!read_vchan_all(vchan, buf, hdr.len)) {
-        perror("read daemon");
-        close_vchan_and_exit(1, vchan);
-    }
-
-    switch (hdr.type) {
-        /* both directions because we can serve as either end of service call */
-        case MSG_DATA_STDIN:
-        case MSG_DATA_STDOUT:
-            if (local_stdin_fd == -1)
-                break;
-            if (replace_chars_stdout)
-                do_replace_chars(buf, hdr.len);
-            if (hdr.len == 0) {
-                close_stdin_fd();
-            } else {
-                switch (write_stdin(local_stdin_fd, buf, hdr.len, stdin_buf)) {
-                    case WRITE_STDIN_BUFFERED:
-                        free(buf);
-                        return WRITE_STDIN_BUFFERED;
-                    case WRITE_STDIN_ERROR:
-                        if (errno == EPIPE) {
-                            // local process have closed its stdin, handle data in oposite
-                            // direction (if any) before exit
-                            close_stdin_fd();
-                        } else {
-                            perror("write local stdout");
-                            close_vchan_and_exit(1, vchan);
-                        }
-                        break;
-                    case WRITE_STDIN_OK:
-                        break;
-                }
-            }
-            break;
-        case MSG_DATA_STDERR:
-            if (replace_chars_stderr)
-                do_replace_chars(buf, hdr.len);
-            write_all(2, buf, hdr.len);
-            break;
-        case MSG_DATA_EXIT_CODE:
-            if (hdr.len < sizeof(status))
-                status = 255;
-            else
-                memcpy(&status, buf, sizeof(status));
-
-            flush_client_data(local_stdin_fd, stdin_buf);
-            close_vchan_and_exit(status, vchan);
-            break;
-        default:
-            fprintf(stderr, "unknown msg %d\n", hdr.type);
-            close_vchan_and_exit(1, vchan);
-    }
-
-    free(buf);
-    /* intentionally do not distinguish between _ERROR and _OK, because in case
-     * of write error, we simply eat the data - no way to report it to the
-     * other side */
-    return WRITE_STDIN_OK;
-}
-
 static void check_child_status(libvchan_t *vchan)
 {
     int status = 0;
@@ -539,6 +443,7 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
     int max_fd;
     int ret;
     int vchan_fd;
+    int status;
     sigset_t selectmask;
     struct timespec zero_timeout = { 0, 0 };
     struct timespec select_timeout = { 10, 0 };
@@ -605,10 +510,28 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
                 close_stdin_fd();
             }
         }
-        while (libvchan_data_ready(vchan))
-            if (handle_vchan_data(vchan, stdin_buf, data_protocol_version)
-                    != WRITE_STDIN_OK)
+
+        switch (handle_remote_data(
+                    vchan,
+                    local_stdin_fd,
+                    &status,
+                    stdin_buf,
+                    data_protocol_version,
+                    /* try_shutdown - TODO should it always be true? */
+                    true,
+                    replace_chars_stdout,
+                    replace_chars_stderr)) {
+            case REMOTE_ERROR:
+                close_vchan_and_exit(1, vchan);
                 break;
+            case REMOTE_EOF:
+                local_stdin_fd = -1;
+                break;
+            case REMOTE_EXITED:
+                flush_client_data(local_stdin_fd, stdin_buf);
+                close_vchan_and_exit(status, vchan);
+                break;
+        }
 
         if (local_stdout_fd != -1
                 && FD_ISSET(local_stdout_fd, &select_set))

@@ -130,6 +130,10 @@ int handle_remote_data(
                     memcpy(status, buf, sizeof(*status));
                 rc = REMOTE_EXITED;
                 goto out;
+            default:
+                fprintf(stderr, "unknown msg %d\n", hdr.type);
+                rc = REMOTE_ERROR;
+                goto out;
         }
     }
     rc = REMOTE_OK;
