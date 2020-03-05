@@ -149,4 +149,6 @@ int handle_input(
     int data_protocol_version,
     bool set_block_on_close);
 
+int send_exit_code(libvchan_t *vchan, int status);
+
 #endif /* _LIBQREXEC_UTILS_H */

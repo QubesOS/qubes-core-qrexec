@@ -328,22 +328,6 @@ static void send_service_connect(int s, char *conn_ident,
     }
 }
 
-static void send_exit_code(libvchan_t *vchan, int status)
-{
-    struct msg_header hdr;
-
-    hdr.type = MSG_DATA_EXIT_CODE;
-    hdr.len = sizeof(int);
-    if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to write exit code to the agent\n");
-        close_vchan_and_exit(1, vchan);
-    }
-    if (libvchan_send(vchan, &status, sizeof(status)) != sizeof(status)) {
-        fprintf(stderr, "Failed to write exit code(2) to the agent\n");
-        close_vchan_and_exit(1, vchan);
-    }
-}
-
 static void check_child_status(libvchan_t *vchan)
 {
     int status = 0;
@@ -358,8 +342,9 @@ static void check_child_status(libvchan_t *vchan)
             return;
         status = WEXITSTATUS(status);
     }
-    if (is_service)
-        send_exit_code(vchan, status);
+    if (is_service && send_exit_code(vchan, status) < 0) {
+        close_vchan_and_exit(1, vchan);
+    }
     close_vchan_and_exit(status, vchan);
 }
 
@@ -484,7 +469,8 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
                         if (local_pid <= 0) {
                             /* if this is "remote" service end and no real local process
                              * exists (using own stdin/out) send also fake exit code */
-                            send_exit_code(vchan, 0);
+                            if (send_exit_code(vchan, 0) < 0)
+                                close_vchan_and_exit(1, vchan);
                             close_vchan_and_exit(0, vchan);
                         }
                     } else if (local_pid < 0) {

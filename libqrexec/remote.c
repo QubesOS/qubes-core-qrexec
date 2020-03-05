@@ -198,3 +198,20 @@ out:
     free(buf);
     return rc;
 }
+
+int send_exit_code(libvchan_t *vchan, int status)
+{
+    struct msg_header hdr;
+
+    hdr.type = MSG_DATA_EXIT_CODE;
+    hdr.len = sizeof(int);
+    if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
+        perror("send_exit_code hdr");
+        return -1;
+    }
+    if (libvchan_send(vchan, &status, sizeof(status)) != sizeof(status)) {
+        perror("send_exit_code status");
+        return -1;
+    }
+    return 0;
+}

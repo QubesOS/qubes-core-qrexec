@@ -157,18 +157,6 @@ static int handle_just_exec(char *cmdline)
     return 0;
 }
 
-static void send_exit_code(libvchan_t *data_vchan, int status)
-{
-    struct msg_header hdr;
-    hdr.type = MSG_DATA_EXIT_CODE;
-    hdr.len = sizeof(status);
-    if (libvchan_send(data_vchan, &hdr, sizeof(hdr)) < 0)
-        handle_vchan_error("write hdr");
-    if (libvchan_send(data_vchan, &status, sizeof(status)) < 0)
-        handle_vchan_error("write status");
-    fprintf(stderr, "send exit code %d\n", status);
-}
-
 static int process_child_io(libvchan_t *data_vchan,
         int stdin_fd, int stdout_fd, int stderr_fd,
         int data_protocol_version, struct buffer *stdin_buf)
@@ -223,7 +211,8 @@ static int process_child_io(libvchan_t *data_vchan,
                 (child_process_pid || remote_process_status > -1) &&
                 stdin_fd == -1 && stdout_fd == -1 && stderr_fd == -1) {
             if (child_process_status > -1) {
-                send_exit_code(data_vchan, child_process_status);
+                if (send_exit_code(data_vchan, child_process_status) < 0)
+                    handle_vchan_error("exit code");
             }
             break;
         }
@@ -452,7 +441,8 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
 
     switch (type) {
         case MSG_JUST_EXEC:
-            send_exit_code(data_vchan, handle_just_exec(cmdline));
+            if (send_exit_code(data_vchan, handle_just_exec(cmdline)) < 0)
+                handle_vchan_error("just_exec");
             break;
         case MSG_EXEC_CMDLINE: {
             struct buffer stdin_buf;
