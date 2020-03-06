@@ -518,6 +518,30 @@ echo "received: $x" >&0
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
         ])
 
+    def test_exit_before_closing_streams(self):
+        fifo = os.path.join(self.tempdir, 'fifo')
+        os.mkfifo(fifo)
+        target = self.execute('''\
+( read; echo stdin closed; read <{}; echo child exiting )&
+echo process exiting
+exit 42
+'''.format(fifo))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'process exiting\n'))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'stdin closed\n'))
+        with open(fifo, 'a') as f:
+            f.write('end\n')
+            f.flush()
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'child exiting\n'))
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 42))
+        ])
+
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
                  'socket tests not set up')
