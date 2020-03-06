@@ -295,7 +295,6 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
         ])
 
-    @pytest.mark.xfail
     def test_exec_service_fail(self):
         target = self.execute_qubesrpc('qubes.Service+arg', 'domX')
         target.send_message(qrexec.MSG_DATA_STDIN, b'')

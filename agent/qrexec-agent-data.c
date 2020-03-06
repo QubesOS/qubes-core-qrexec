@@ -221,7 +221,23 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
         case MSG_EXEC_CMDLINE:
             buffer_init(&stdin_buf);
             if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd, !qrexec_is_fork_server, &stdin_buf) < 0) {
+                struct msg_header hdr = {
+                    .type = MSG_DATA_STDOUT,
+                    .len = 0,
+                };
                 fputs("failed to spawn process\n", stderr);
+                /* Send stdout+stderr EOF first, since the service is expected to send
+                 * one before exit code in case of MSG_EXEC_CMDLINE. Ignore
+                 * libvchan_send error if any, as we're going to terminate soon
+                 * anyway.
+                 */
+                libvchan_send(data_vchan, &hdr, sizeof(hdr));
+                hdr.type = MSG_DATA_STDERR;
+                libvchan_send(data_vchan, &hdr, sizeof(hdr));
+                exit_code = 127;
+                send_exit_code(data_vchan, exit_code);
+                libvchan_close(data_vchan);
+                return exit_code;
             }
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
             is_service = true;
