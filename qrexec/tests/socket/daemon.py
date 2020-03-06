@@ -546,7 +546,6 @@ class TestClient(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
-    @pytest.mark.xfail
     def test_run_dom0_service_socket_no_read(self):
         """Socket based service that don't read its input stream"""
         socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')

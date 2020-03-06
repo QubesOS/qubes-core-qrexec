@@ -168,6 +168,11 @@ int handle_input(
         if ((size_t)len > max_len)
             len = max_len;
         len = read(fd, buf, len);
+        /* If the other side of the socket is a process that is already dead,
+         * read from such socket could fail with ECONNRESET instead of
+         * just 0. */
+        if (len < 0 && errno == ECONNRESET)
+            len = 0;
         if (len < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 rc = REMOTE_OK;
