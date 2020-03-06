@@ -126,7 +126,7 @@ int process_io(const struct process_io_request *req) {
         }
 
         /* child signaled desire to use single socket for both stdin and stdout */
-        if (*sigusr1) {
+        if (sigusr1 && *sigusr1) {
             if (stdout_fd != -1) {
                 do
                     errno = 0;

@@ -186,6 +186,7 @@ struct process_io_request {
     int data_protocol_version;
 
     volatile sig_atomic_t *sigchld;
+    // can be NULL
     volatile sig_atomic_t *sigusr1;
 };
 
