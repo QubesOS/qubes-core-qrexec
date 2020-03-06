@@ -34,7 +34,6 @@
 int handle_remote_data(
     libvchan_t *data_vchan, int stdin_fd, int *status,
     struct buffer *stdin_buf, int data_protocol_version,
-    bool try_shutdown,
     bool replace_chars_stdout, bool replace_chars_stderr)
 {
     struct msg_header hdr;
@@ -79,14 +78,6 @@ int handle_remote_data(
                     /* discard the data */
                     continue;
                 if (hdr.len == 0) {
-                    /* restore flags */
-                    set_block(stdin_fd);
-                    if (!try_shutdown ||
-                            (shutdown(stdin_fd, SHUT_WR) == -1 &&
-                             errno == ENOTSOCK)) {
-                        close(stdin_fd);
-                    }
-                    stdin_fd = -1;
                     rc = REMOTE_EOF;
                     goto out;
                 } else {
@@ -99,14 +90,7 @@ int handle_remote_data(
                             rc = REMOTE_OK;
                             goto out;
                         case WRITE_STDIN_ERROR:
-                            if (errno == EPIPE || errno == ECONNRESET) {
-                                if (!try_shutdown ||
-                                        (shutdown(stdin_fd, SHUT_WR) == -1 &&
-                                         errno == ENOTSOCK)) {
-                                    close(stdin_fd);
-                                }
-                                stdin_fd = -1;
-                            } else {
+                            if (!(errno == EPIPE || errno == ECONNRESET)) {
                                 perror("write");
                             }
                             rc = REMOTE_EOF;
@@ -146,8 +130,7 @@ out:
 
 int handle_input(
     libvchan_t *vchan, int fd, int msg_type,
-    int data_protocol_version,
-    bool set_block_on_close)
+    int data_protocol_version)
 {
     const size_t max_len = max_data_chunk_size(data_protocol_version);
     char *buf;
@@ -187,13 +170,6 @@ int handle_input(
             goto out;
 
         if (len == 0) {
-            /* restore flags */
-            if (set_block_on_close)
-                set_block(fd);
-            if (shutdown(fd, SHUT_RD) < 0) {
-                if (errno == ENOTSOCK)
-                    close(fd);
-            }
             rc = REMOTE_EOF;
             goto out;
         }

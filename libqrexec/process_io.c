@@ -36,6 +36,58 @@ static _Noreturn void handle_vchan_error(const char *op)
     exit(1);
 }
 
+/*
+ * Closing the file descriptors:
+ *
+ * - Use shutdown(), except if this is a FD inherited from parent (detected by
+ *   FD number)
+ * - Restore blocking status, unless this is a duplicated stdio socket for
+ *   stdout/stderr (in which case we can't restore it just for one FD, but we
+ *   don't care, because we created it)
+ */
+
+static void close_stdin(int fd, bool restore_block) {
+    if (fd == -1)
+        return;
+
+    if (restore_block)
+        set_block(fd);
+
+    if (fd == 1) {
+        close(fd);
+    } else if (shutdown(fd, SHUT_WR) == -1) {
+        if (errno == ENOTSOCK)
+            close(fd);
+        else
+            perror("shutdown close_stdin");
+    }
+}
+
+static void close_stdout(int fd, bool restore_block) {
+    if (fd == -1)
+        return;
+
+    if (restore_block)
+        set_block(fd);
+
+    if (fd == 0) {
+        close(fd);
+    } else if (shutdown(fd, SHUT_RD) == -1) {
+        if (errno == ENOTSOCK)
+            close(fd);
+        else
+            perror("shutdown close_stdout");
+    }
+}
+
+static void close_stderr(int fd) {
+    if (fd == -1)
+        return;
+
+    set_block(fd);
+    close(fd);
+}
+
 int process_io(const struct process_io_request *req) {
     libvchan_t *vchan = req->vchan;
     int stdin_fd = req->stdin_fd;
@@ -87,13 +139,7 @@ int process_io(const struct process_io_request *req) {
                 else
                     local_status = WEXITSTATUS(status);
                 if (stdin_fd >= 0) {
-                    /* restore flags */
-                    set_block(stdin_fd);
-                    if (!local_pid || stdin_fd == 1 ||
-                            (shutdown(stdin_fd, SHUT_WR) == -1 &&
-                             errno == ENOTSOCK)) {
-                        close(stdin_fd);
-                    }
+                    close_stdin(stdin_fd, !use_stdio_socket);
                     stdin_fd = -1;
                 }
             }
@@ -201,40 +247,35 @@ int process_io(const struct process_io_request *req) {
                     &remote_status,
                     stdin_buf,
                     data_protocol_version,
-                    local_pid && stdin_fd != 1,
                     replace_chars_stdout > 0,
                     replace_chars_stderr > 0)) {
             case REMOTE_ERROR:
                 handle_vchan_error("read");
                 break;
             case REMOTE_EOF:
+                close_stdin(stdin_fd, !use_stdio_socket);
                 stdin_fd = -1;
                 break;
             case REMOTE_EXITED:
-                /* remote process exited, no sense in sending more data to it;
-                 * be careful to not shutdown socket inherited from parent */
-                if (!local_pid || stdout_fd == 0 ||
-                        (shutdown(stdout_fd, SHUT_RD) == -1 &&
-                         errno == ENOTSOCK)) {
-                    close(stdout_fd);
-                }
+                /* Remote process exited, we don't need any more data from
+                 * local FDs. However, don't exit yet, because there might
+                 * still be some data in stdin_buf waiting to be flushed.
+                 */
+                close_stdout(stdout_fd, !use_stdio_socket);
                 stdout_fd = -1;
-                close(stderr_fd);
+                close_stderr(stderr_fd);
                 stderr_fd = -1;
-                /* if we do not care for any local process, return remote process code */
-                if (!is_service && local_pid == 0)
-                    return remote_status;
                 break;
         }
         if (stdout_fd >= 0 && FD_ISSET(stdout_fd, &rdset)) {
             switch (handle_input(
                         vchan, stdout_fd, stdout_msg_type,
-                        data_protocol_version,
-                        !use_stdio_socket)) {
+                        data_protocol_version)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send");
                     break;
                 case REMOTE_EOF:
+                    close_stdout(stdout_fd, !use_stdio_socket);
                     stdout_fd = -1;
                     break;
             }
@@ -242,12 +283,12 @@ int process_io(const struct process_io_request *req) {
         if (stderr_fd >= 0 && FD_ISSET(stderr_fd, &rdset)) {
             switch (handle_input(
                         vchan, stderr_fd, MSG_DATA_STDERR,
-                        data_protocol_version,
-                        !use_stdio_socket)) {
+                        data_protocol_version)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send");
                     break;
                 case REMOTE_EOF:
+                    close_stderr(stderr_fd);
                     stderr_fd = -1;
                     break;
             }
@@ -255,32 +296,9 @@ int process_io(const struct process_io_request *req) {
     }
     /* make sure that all the pipes/sockets are closed, so the child process
      * (if any) will know that the connection is terminated */
-    if (stdout_fd != -1) {
-        /* restore flags */
-        set_block(stdout_fd);
-        /* be careful to not shutdown socket inherited from parent */
-        if (!local_pid || stdout_fd == 0 ||
-                (shutdown(stdout_fd, SHUT_RD) == -1 && errno == ENOTSOCK)) {
-            close(stdout_fd);
-        }
-        stdout_fd = -1;
-    }
-    if (stdin_fd != -1) {
-        /* restore flags */
-        set_block(stdin_fd);
-        /* be careful to not shutdown socket inherited from parent */
-        if (!local_pid || stdin_fd == 1 ||
-                (shutdown(stdin_fd, SHUT_WR) == -1 && errno == ENOTSOCK)) {
-            close(stdin_fd);
-        }
-        stdin_fd = -1;
-    }
-    if (stderr_fd != -1) {
-        /* restore flags */
-        set_block(stderr_fd);
-        close(stderr_fd);
-        stderr_fd = -1;
-    }
+    close_stdin(stdin_fd, true);
+    close_stdout(stdout_fd, true);
+    close_stderr(stderr_fd);
     if (!is_service && remote_status >= 0)
         return remote_status;
     return local_pid ? local_status : 0;

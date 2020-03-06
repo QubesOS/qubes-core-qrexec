@@ -124,14 +124,12 @@ void do_replace_chars(char *buf, int len);
  *     more data available
  *
  * Options:
- *   try_shutdown - attempt to use shutdown() instead of close()
  *   replace_chars_stdout, replace_chars_stderr - remove non-printable
  *     characters from stdout/stderr
  */
 int handle_remote_data(
     libvchan_t *data_vchan, int stdin_fd, int *status,
     struct buffer *stdin_buf, int data_protocol_version,
-    bool try_shutdown,
     bool replace_chars_stdout, bool replace_chars_stderr);
 
 /*
@@ -143,14 +141,10 @@ int handle_remote_data(
  *   REMOTE_EOF - EOF received, do not access this FD again
  *   REMOTE_OK - some data processed, call it again when buffer space and
  *     more data availabla
- *
- * Options:
- *   set_block_on_close - call set_block() on the FD before close()
  */
 int handle_input(
     libvchan_t *vchan, int fd, int msg_type,
-    int data_protocol_version,
-    bool set_block_on_close);
+    int data_protocol_version);
 
 int send_exit_code(libvchan_t *vchan, int status);
 
