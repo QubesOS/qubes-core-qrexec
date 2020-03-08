@@ -155,8 +155,6 @@ static int handle_just_exec(char *cmdline)
 }
 
 /* Behaviour depends on type parameter:
- *  MSG_SERVICE_CONNECT - create vchan server, pass the data to/from given FDs
- *    (stdin_fd, stdout_fd, stderr_fd), then return remote process exit code
  *  MSG_JUST_EXEC - connect to vchan server, fork+exec process given by cmdline
  *    parameter, send artificial exit code "0" (local process can still be
  *    running), then return 0
@@ -169,60 +167,43 @@ static int handle_just_exec(char *cmdline)
  */
 static int handle_new_process_common(
     int type, int connect_domain, int connect_port,
-    char *cmdline, size_t cmdline_len, /* MSG_JUST_EXEC and MSG_EXEC_CMDLINE */
-    int stdin_fd, int stdout_fd, int stderr_fd, /* MSG_SERVICE_CONNECT */
-    int buffer_size,
-    pid_t pid) /* MSG_SERVICE_CONNECT */
+    char *cmdline, size_t cmdline_len,
+    int buffer_size)
 {
     libvchan_t *data_vchan;
     int exit_code;
     int data_protocol_version;
-    int is_service;
     struct buffer stdin_buf;
     struct process_io_request req;
+    int stdin_fd, stdout_fd, stderr_fd;
+    pid_t pid;
 
-    if (type == MSG_SERVICE_CONNECT) {
-        assert(!cmdline);
-        assert(cmdline_len == 0);
-        assert(stdin_fd >= 0);
-        assert(stdout_fd >= 0);
-    } else {
-        assert(cmdline);
-        assert(cmdline_len > 0);
-        assert(stdin_fd == -1);
-        assert(stdout_fd == -1);
-        assert(stderr_fd == -1);
-        assert(pid == 0);
-    }
+    assert(type != MSG_SERVICE_CONNECT);
 
     if (buffer_size == 0)
         buffer_size = VCHAN_BUFFER_SIZE;
 
-    if (type == MSG_SERVICE_CONNECT) {
-        data_vchan = libvchan_server_init(connect_domain, connect_port,
-                buffer_size, buffer_size);
-        if (data_vchan)
-            libvchan_wait(data_vchan);
-    } else {
-        if (cmdline == NULL) {
-            fputs("internal qrexec error: NULL cmdline passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
-            abort();
-        } else if (cmdline_len == 0) {
-            fputs("internal qrexec error: zero-length command line passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
-            abort();
-        } else if (cmdline_len > MAX_QREXEC_CMD_LEN) {
-            /* This is arbitrary, but it helps reduce the risk of overflows in other code */
-            fprintf(stderr, "Bad command from dom0: command line too long: length %zu\n", cmdline_len);
-            abort();
-        }
-        cmdline[cmdline_len-1] = 0;
-        data_vchan = libvchan_client_init(connect_domain, connect_port);
+    if (cmdline == NULL) {
+        fputs("internal qrexec error: NULL cmdline passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+        abort();
+    } else if (cmdline_len == 0) {
+        fputs("internal qrexec error: zero-length command line passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+        abort();
+    } else if (cmdline_len > MAX_QREXEC_CMD_LEN) {
+        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
+        fprintf(stderr, "Bad command from dom0: command line too long: length %zu\n", cmdline_len);
+        abort();
     }
+    cmdline[cmdline_len-1] = 0;
+    data_vchan = libvchan_client_init(connect_domain, connect_port);
     if (!data_vchan) {
         fprintf(stderr, "Data vchan connection failed\n");
         exit(1);
     }
     data_protocol_version = handle_handshake(data_vchan);
+    if (data_protocol_version < 0) {
+        exit(1);
+    }
 
     prepare_child_env();
     /* TODO: use setresuid to allow child process to actually send the signal? */
@@ -255,11 +236,6 @@ static int handle_new_process_common(
                 return exit_code;
             }
             fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
-            is_service = true;
-            break;
-        case MSG_SERVICE_CONNECT:
-            buffer_init(&stdin_buf);
-            is_service = false;
             break;
         default:
             fprintf(stderr, "unknown request type: %d\n", type);
@@ -275,7 +251,7 @@ static int handle_new_process_common(
     req.stderr_fd = stderr_fd;
     req.local_pid = pid;
 
-    req.is_service = is_service;
+    req.is_service = true;
 
     req.replace_chars_stdout = replace_chars_stdout > 0;
     req.replace_chars_stderr = replace_chars_stderr > 0;
@@ -313,8 +289,7 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
 
     /* child process */
     exit_code = handle_new_process_common(type, connect_domain, connect_port,
-            cmdline, cmdline_len,
-            -1, -1, -1, 0, 0);
+                                          cmdline, cmdline_len, 0);
 
     exit(exit_code);
 }
@@ -325,11 +300,48 @@ int handle_data_client(
     int stdin_fd, int stdout_fd, int stderr_fd, int buffer_size, pid_t pid)
 {
     int exit_code;
+    int data_protocol_version;
+    libvchan_t *data_vchan;
+    struct process_io_request req;
+    struct buffer stdin_buf;
 
     assert(type == MSG_SERVICE_CONNECT);
+    if (buffer_size == 0)
+        buffer_size = VCHAN_BUFFER_SIZE;
 
-    exit_code = handle_new_process_common(type, connect_domain, connect_port,
-            NULL, 0, stdin_fd, stdout_fd, stderr_fd, buffer_size, pid);
+    data_vchan = libvchan_server_init(connect_domain, connect_port,
+                                      buffer_size, buffer_size);
+    if (!data_vchan) {
+        fprintf(stderr, "Data vchan connection failed\n");
+        exit(1);
+    }
+    libvchan_wait(data_vchan);
+    data_protocol_version = handle_handshake(data_vchan);
+    if (data_protocol_version < 0) {
+        exit(1);
+    }
+
+    buffer_init(&stdin_buf);
+
+    req.vchan = data_vchan;
+    req.stdin_buf = &stdin_buf;
+
+    req.stdin_fd = stdin_fd;
+    req.stdout_fd = stdout_fd;
+    req.stderr_fd = stderr_fd;
+    req.local_pid = pid;
+
+    req.is_service = false;
+
+    req.replace_chars_stdout = replace_chars_stdout > 0;
+    req.replace_chars_stderr = replace_chars_stderr > 0;
+    req.data_protocol_version = data_protocol_version;
+
+    req.sigchld = &sigchld;
+    req.sigusr1 = &sigusr1;
+
+    exit_code = process_io(&req);
+    libvchan_close(data_vchan);
     return exit_code;
 }
 
