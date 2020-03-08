@@ -167,18 +167,33 @@ static int handle_just_exec(char *cmdline)
  *  buffer_size is about vchan buffer allocated (only for vchan server cases),
  *  use 0 to use built-in default (64k); needs to be power of 2
  */
-static int handle_new_process_common(int type, int connect_domain, int connect_port,
-                char *cmdline, size_t cmdline_len, /* MSG_JUST_EXEC and MSG_EXEC_CMDLINE */
-                int stdin_fd, int stdout_fd, int stderr_fd /* MSG_SERVICE_CONNECT */,
-                int buffer_size)
+static int handle_new_process_common(
+    int type, int connect_domain, int connect_port,
+    char *cmdline, size_t cmdline_len, /* MSG_JUST_EXEC and MSG_EXEC_CMDLINE */
+    int stdin_fd, int stdout_fd, int stderr_fd, /* MSG_SERVICE_CONNECT */
+    int buffer_size,
+    pid_t pid) /* MSG_SERVICE_CONNECT */
 {
     libvchan_t *data_vchan;
     int exit_code;
-    pid_t pid;
     int data_protocol_version;
     int is_service;
     struct buffer stdin_buf;
     struct process_io_request req;
+
+    if (type == MSG_SERVICE_CONNECT) {
+        assert(!cmdline);
+        assert(cmdline_len == 0);
+        assert(stdin_fd >= 0);
+        assert(stdout_fd >= 0);
+    } else {
+        assert(cmdline);
+        assert(cmdline_len > 0);
+        assert(stdin_fd == -1);
+        assert(stdout_fd == -1);
+        assert(stderr_fd == -1);
+        assert(pid == 0);
+    }
 
     if (buffer_size == 0)
         buffer_size = VCHAN_BUFFER_SIZE;
@@ -244,7 +259,6 @@ static int handle_new_process_common(int type, int connect_domain, int connect_p
             break;
         case MSG_SERVICE_CONNECT:
             buffer_init(&stdin_buf);
-            pid = 0;
             is_service = false;
             break;
         default:
@@ -300,21 +314,22 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
     /* child process */
     exit_code = handle_new_process_common(type, connect_domain, connect_port,
             cmdline, cmdline_len,
-            -1, -1, -1, 0);
+            -1, -1, -1, 0, 0);
 
     exit(exit_code);
 }
 
 /* Returns exit code of remote process */
-int handle_data_client(int type, int connect_domain, int connect_port,
-                int stdin_fd, int stdout_fd, int stderr_fd, int buffer_size)
+int handle_data_client(
+    int type, int connect_domain, int connect_port,
+    int stdin_fd, int stdout_fd, int stderr_fd, int buffer_size, pid_t pid)
 {
     int exit_code;
 
     assert(type == MSG_SERVICE_CONNECT);
 
     exit_code = handle_new_process_common(type, connect_domain, connect_port,
-            NULL, 0, stdin_fd, stdout_fd, stderr_fd, buffer_size);
+            NULL, 0, stdin_fd, stdout_fd, stderr_fd, buffer_size, pid);
     return exit_code;
 }
 

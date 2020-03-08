@@ -261,11 +261,11 @@ int main(int argc, char **argv)
 
         ret = handle_data_client(MSG_SERVICE_CONNECT,
                 exec_params.connect_domain, exec_params.connect_port,
-                inpipe[1], outpipe[0], -1, buffer_size);
+                inpipe[1], outpipe[0], -1, buffer_size, child_pid);
     } else {
         ret = handle_data_client(MSG_SERVICE_CONNECT,
                 exec_params.connect_domain, exec_params.connect_port,
-                1, 0, -1, buffer_size);
+                1, 0, -1, buffer_size, 0);
     }
 
     close(trigger_fd);
