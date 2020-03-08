@@ -297,7 +297,6 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
     req.sigchld = &sigchld;
     req.sigusr1 = NULL;
 
-    fprintf(stderr, "calling process_io\n");
     exit_code = process_io(&req);
     libvchan_close(vchan);
     exit(exit_code);
