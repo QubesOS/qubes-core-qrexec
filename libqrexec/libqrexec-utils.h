@@ -168,10 +168,8 @@ struct process_io_request {
       is_service false (this is a client):
         - send local data as MSG_DATA_STDIN
         - don't send exit code
-          (TODO: should it be this way?)
-        - if there's no process, wait for remote end
-        - return local or remote exit code, whichever finished first
-          (TODO: should it be this way?)
+        - wait for local and remote end
+        - return remote exit code
      */
     bool is_service;
 
@@ -185,11 +183,10 @@ struct process_io_request {
 };
 
 /*
- * Pass IO between vchan and local FDs.
+ * Pass IO between vchan and local FDs. See the comments for
+ * process_io_request.
  *
- * Returns local exit code, or remote exit code if there is no local process.
- *
- * This function uses global state and should not be called more than once.
+ * Returns intended exit code (local or remote), but calls exit() on errors.
  */
 int process_io(const struct process_io_request *req);
 

@@ -133,7 +133,7 @@ int process_io(const struct process_io_request *req) {
         /* React to SIGCHLD */
         if (*sigchld) {
             int status;
-            if (local_pid > 0 && waitpid(local_pid, &status, WNOHANG > 0)) {
+            if (local_pid > 0 && waitpid(local_pid, &status, WNOHANG) > 0) {
                 if (WIFSIGNALED(status))
                     local_status = 128 + WTERMSIG(status);
                 else
@@ -149,16 +149,15 @@ int process_io(const struct process_io_request *req) {
         /* if all done, exit the loop */
         if (stdin_fd == -1 && stdout_fd == -1 && stderr_fd == -1) {
             if (is_service) {
+                /* wait for local process, send exit code */
                 if (!local_pid || local_status >= 0) {
-                    /* send exit code and break */
                     if (send_exit_code(vchan, local_pid ? local_status : 0) < 0)
                         handle_vchan_error("exit code");
                     break;
                 }
             } else {
-                /* if there's no local process, wait for remote end */
-                if ((local_pid && local_status >= 0) ||
-                    (!local_pid && remote_status >= 0))
+                /* wait for both local and remote process */
+                if ((!local_pid || local_status >= 0) && remote_status >= 0)
                     break;
             }
         }
@@ -299,7 +298,20 @@ int process_io(const struct process_io_request *req) {
     close_stdin(stdin_fd, true);
     close_stdout(stdout_fd, true);
     close_stderr(stderr_fd);
-    if (!is_service && remote_status >= 0)
+
+    /* wait for local process, in case we exited early */
+    if (local_pid && local_status < 0) {
+        int status;
+        if (waitpid(local_pid, &status, 0) > 0) {
+            if (WIFSIGNALED(status))
+                local_status = 128 + WTERMSIG(status);
+            else
+                local_status = WEXITSTATUS(status);
+        } else
+            perror("waitpid");
+    }
+
+    if (!is_service)
         return remote_status;
     return local_pid ? local_status : 0;
 }

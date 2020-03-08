@@ -404,10 +404,12 @@ class TestClient(unittest.TestCase):
         self.assertEqual(target.recv_message(), (
             qrexec.MSG_DATA_STDIN, b''))
 
+        target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 42))
+
         self.client.wait()
 
-        # If local_cmd finishes first, return code is its exit code.
-        self.assertEqual(self.client.returncode, 44)
+        # Should always return remote exit code.
+        self.assertEqual(self.client.returncode, 42)
 
     def test_run_vm_command_and_connect_vm(self):
         cmd = 'user:command'
@@ -483,13 +485,8 @@ class TestClient(unittest.TestCase):
         return source
 
     def test_run_dom0_command_and_connect_vm(self):
-        # TODO: This test fails occasionally without the initial 'read', there
-        # is possibly a race condition where the client disconnects too soon
-        # without sending all the data. (It might matter only for the
-        # socket-based vchan implementation).
-        cmd = 'read; echo Hello world'
+        cmd = 'echo Hello world'
         source = self.connect_service_request(cmd)
-        source.send_message(qrexec.MSG_DATA_STDIN, b'')
         self.assertEqual(source.recv_all_messages(), [
             (qrexec.MSG_DATA_STDOUT, b'Hello world\n'),
             (qrexec.MSG_DATA_STDOUT, b''),

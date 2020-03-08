@@ -581,7 +581,7 @@ class TestClientVm(unittest.TestCase):
         self.addCleanup(self.stop_client)
 
     def stop_client(self):
-        if self.client:
+        if self.client and self.client.returncode is None:
             self.client.terminate()
             self.client.communicate()
             self.client = None
@@ -597,9 +597,12 @@ class TestClientVm(unittest.TestCase):
         self.addCleanup(target_client.close)
         return target_client
 
-    def test_run_client(self):
+    def run_service(self, local_command=None):
         server = self.connect_server()
-        self.start_client([self.target_domain_name, 'qubes.ServiceName'])
+        args = [self.target_domain_name, 'qubes.ServiceName']
+        if local_command:
+            args.append(local_command)
+        self.start_client(args)
         server.accept()
 
         message_type, data = server.recv_message()
@@ -615,6 +618,11 @@ class TestClientVm(unittest.TestCase):
 
         target_client = self.connect_target_client()
         target_client.handshake()
+
+        return target_client
+
+    def test_run_client(self):
+        target_client = self.run_service()
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
         self.assertEqual(self.client.stdout.read(), b'stdout data\n')
@@ -638,23 +646,7 @@ class TestClientVm(unittest.TestCase):
         self.assertEqual(self.client.returncode, 126)
 
     def test_run_client_failed(self):
-        server = self.connect_server()
-        self.start_client([self.target_domain_name, 'qubes.ServiceName'])
-        server.accept()
-
-        message_type, data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
-        self.assertEqual(
-            data,
-            struct.pack('<64s32s',
-                        self.target_domain_name.encode(), b'SOCKET') +
-            b'qubes.ServiceName\0')
-
-        server.sendall(struct.pack('<LL',
-                                   self.target_domain, self.target_port))
-
-        target_client = self.connect_target_client()
-        target_client.handshake()
+        target_client = self.run_service()
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
         target_client.send_message(qrexec.MSG_DATA_EXIT_CODE,
                                    struct.pack('<L', 127))
@@ -666,24 +658,7 @@ class TestClientVm(unittest.TestCase):
         self.assertEqual(self.client.returncode, 127)
 
     def test_run_client_with_local_proc(self):
-        server = self.connect_server()
-        self.start_client([
-            self.target_domain_name, 'qubes.ServiceName', '/bin/cat'])
-        server.accept()
-
-        message_type, data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
-        self.assertEqual(
-            data,
-            struct.pack('<64s32s',
-                        self.target_domain_name.encode(), b'SOCKET') +
-            b'qubes.ServiceName\0')
-
-        server.sendall(struct.pack('<LL',
-                                   self.target_domain, self.target_port))
-
-        target_client = self.connect_target_client()
-        target_client.handshake()
+        target_client = self.run_service('/bin/cat')
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
         self.assertEqual(target_client.recv_message(),
@@ -697,30 +672,10 @@ class TestClientVm(unittest.TestCase):
         self.assertEqual(self.client.stdout.read(), b'')
         self.assertEqual(self.client.stderr.read(), b'')
         self.client.wait()
-        # FIXME: right now it qrexec-client-vm returns local process exit code,
-        #  and fallbacks to the remote only if no local process is present,
-        #  consider unifying it
-        self.assertEqual(self.client.returncode, 0)
+        self.assertEqual(self.client.returncode, 42)
 
     def test_run_client_with_local_proc_failed(self):
-        server = self.connect_server()
-        self.start_client([
-            self.target_domain_name, 'qubes.ServiceName', '/bin/cat'])
-        server.accept()
-
-        message_type, data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
-        self.assertEqual(
-            data,
-            struct.pack('<64s32s',
-                        self.target_domain_name.encode(), b'SOCKET') +
-            b'qubes.ServiceName\0')
-
-        server.sendall(struct.pack('<LL',
-                                   self.target_domain, self.target_port))
-
-        target_client = self.connect_target_client()
-        target_client.handshake()
+        target_client = self.run_service('/bin/cat')
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
         target_client.send_message(qrexec.MSG_DATA_EXIT_CODE,
                                    struct.pack('<L', 127))
@@ -729,10 +684,7 @@ class TestClientVm(unittest.TestCase):
         target_client.close()
         self.assertEqual(self.client.stdout.read(), b'')
         self.client.wait()
-        # FIXME: right now it qrexec-client-vm returns local process exit code,
-        #  and fallbacks to the remote only if no local process is present,
-        #  consider unifying it
-        self.assertEqual(self.client.returncode, 0)
+        self.assertEqual(self.client.returncode, 127)
 
     def test_run_client_with_local_proc_refused(self):
         server = self.connect_server()
@@ -756,3 +708,26 @@ class TestClientVm(unittest.TestCase):
         self.assertEqual(self.client.stderr.read(), b'Request refused\n')
         self.assertEqual(self.client.returncode, 126)
         self.assertFalse(os.path.exists(flag_file))
+
+    def test_run_client_vchan_disconnect(self):
+        target_client = self.run_service()
+        self.client.stdin.write(b'stdin data\n')
+        self.client.stdin.flush()
+        self.assertEqual(target_client.recv_message(),
+                         (qrexec.MSG_DATA_STDIN, b'stdin data\n'))
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
+        self.assertEqual(self.client.stdout.read(), b'stdout data\n')
+
+        target_client.close()
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 255)
+
+    def test_run_client_with_local_proc_disconnect(self):
+        target_client = self.run_service('/bin/cat')
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
+        self.assertEqual(target_client.recv_message(),
+                         (qrexec.MSG_DATA_STDIN, b'stdout data\n'))
+        target_client.close()
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 255)
