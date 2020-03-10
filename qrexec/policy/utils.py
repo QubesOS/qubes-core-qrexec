@@ -71,8 +71,11 @@ class PolicyCache:
     def cleanup(self):
         for wdd in self.watches:
             self.watch_manager.rm_watch(wdd.values())
+        self.watches = []
 
         self.notifier.stop()
+        self.notifier = None
+        self.watch_manager = None
 
     def get_policy(self):
         if self.outdated:
