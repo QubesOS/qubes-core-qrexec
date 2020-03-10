@@ -18,6 +18,7 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 import asyncio
+import os.path
 import pyinotify
 from qrexec import POLICYPATH, POLICYPATH_OLD
 from . import parser
@@ -54,12 +55,15 @@ class PolicyCache:
         self.notifier = pyinotify.AsyncioNotifier(
             self.watch_manager, loop, default_proc_fun=PolicyWatcher(self))
 
-        if str(self.path) not in self.default_policy_paths:
+        if str(self.path) not in self.default_policy_paths \
+                and os.path.exists(self.path):
             self.watches.append(
                 self.watch_manager.add_watch(
                     str(self.path), mask, rec=True, auto_add=True))
 
         for path in self.default_policy_paths:
+            if not os.path.exists(path):
+                continue
             self.watches.append(
                 self.watch_manager.add_watch(str(path), mask,
                                              rec=True, auto_add=True))
