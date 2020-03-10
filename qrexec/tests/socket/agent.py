@@ -522,10 +522,21 @@ echo "received: $x" >&0
         fifo = os.path.join(self.tempdir, 'fifo')
         os.mkfifo(fifo)
         target = self.execute('''\
-( read; echo stdin closed; read <{}; echo child exiting )&
+# duplicate original stdin to fd 3, because bash will
+# close original stdin in child process
+exec 3<&0
+
+( read <&3; echo stdin closed; read <{fifo}; echo child exiting )&
+echo process waiting
+read <{fifo}
 echo process exiting
 exit 42
-'''.format(fifo))
+'''.format(fifo=fifo))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'process waiting\n'))
+        with open(fifo, 'a') as f:
+            f.write('1\n')
+            f.flush()
         self.assertEqual(target.recv_message(),
                          (qrexec.MSG_DATA_STDOUT, b'process exiting\n'))
         self.assertEqual(target.recv_message(),
