@@ -499,7 +499,7 @@ exit $code
 
     def test_stdio_socket(self):
         target = self.execute('''\
-kill -USR1 $PPID
+kill -USR1 $QREXEC_AGENT_PID
 echo hello world >&0
 read x
 echo "received: $x" >&0
@@ -615,7 +615,7 @@ class TestClientVm(unittest.TestCase):
         args.append(self.target_domain_name)
         args.append('qubes.ServiceName')
         if local_program:
-            args.append(local_program)
+            args += local_program
 
         self.start_client(args)
         server.accept()
@@ -683,7 +683,7 @@ class TestClientVm(unittest.TestCase):
         self.assertEqual(self.client.returncode, 127)
 
     def test_run_client_with_local_proc(self):
-        target_client = self.run_service(local_program='/bin/cat')
+        target_client = self.run_service(local_program=['/bin/cat'])
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
         self.assertEqual(target_client.recv_message(),
@@ -699,8 +699,31 @@ class TestClientVm(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
 
+    def test_stdio_socket(self):
+        target = self.run_service(local_program=['/bin/sh', '-c', '''\
+kill -USR1 $QREXEC_AGENT_PID
+echo hello world >&0
+read x
+echo "received: $x" >&0
+'''])
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDIN, b'hello world\n'))
+
+        target.send_message(qrexec.MSG_DATA_STDOUT, b'stdin\n')
+        target.send_message(qrexec.MSG_DATA_STDOUT, b'')
+
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDIN, b'received: stdin\n'))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDIN, b''))
+
+        target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 42))
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 42)
+
+
     def test_run_client_with_local_proc_failed(self):
-        target_client = self.run_service(local_program='/bin/cat')
+        target_client = self.run_service(local_program=['/bin/cat'])
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'')
         target_client.send_message(qrexec.MSG_DATA_EXIT_CODE,
                                    struct.pack('<L', 127))
@@ -749,7 +772,7 @@ class TestClientVm(unittest.TestCase):
         self.assertEqual(self.client.returncode, 255)
 
     def test_run_client_with_local_proc_disconnect(self):
-        target_client = self.run_service(local_program='/bin/cat')
+        target_client = self.run_service(local_program=['/bin/cat'])
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
         self.assertEqual(target_client.recv_message(),
                          (qrexec.MSG_DATA_STDIN, b'stdout data\n'))
