@@ -41,7 +41,7 @@ BuildRequires:  qubes-core-qrexec-devel
 
 Requires:   python3
 Requires:   python3-inotify
-Requires:   qubes-core-dom0
+Requires:   qubes-core-dom0 >= 4.1.9
 Requires:   qubes-core-qrexec = %{version}-%{release}
 
 Conflicts:  qubes-core-dom0 < 4.0.9999
