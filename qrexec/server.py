@@ -30,17 +30,13 @@ import os
 import os.path
 import asyncio
 import json
-import socket
-
-from systemd.daemon import listen_fds
 
 from . import RPC_PATH
 from .client import call_async
 
 class SocketService:
-    def __init__(self, socket_path, socket_activated=False):
+    def __init__(self, socket_path):
         self._socket_path = socket_path
-        self._socket_activated = socket_activated
 
     async def run(self):
         server = await self.start()
@@ -48,15 +44,6 @@ class SocketService:
             await server.serve_forever()
 
     async def start(self):
-        if self._socket_activated:
-            fds = listen_fds()
-            if fds:
-                assert len(fds) == 1, 'too many listen_fds: {}'.format(
-                    listen_fds)
-                sock = socket.socket(fileno=fds[0])
-                return await asyncio.start_unix_server(self._client_connected,
-                                                       sock=sock)
-
         if os.path.exists(self._socket_path):
             os.unlink(self._socket_path)
         return await asyncio.start_unix_server(self._client_connected,

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Qubes Qrexec Policy agent
+Comment=Agent for handling policy confirmation prompts
+Icon=qubes
+Exec=/usr/lib/qubes/qrexec-policy-agent-autostart
+Terminal=false
+Type=Application

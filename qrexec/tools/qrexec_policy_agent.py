@@ -573,7 +573,7 @@ parser.add_argument(
 def main():
     args = parser.parse_args()
 
-    agent = PolicyAgent(args.socket_path, socket_activated=True)
+    agent = PolicyAgent(args.socket_path)
 
     loop = asyncio.get_event_loop()
     tasks = [

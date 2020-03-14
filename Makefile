@@ -31,11 +31,9 @@ install-base: all-base
 	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 	ln -s /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Ask
 	ln -s /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Notify
-	install -d $(DESTDIR)/lib/systemd/user -m 755
-	install -t $(DESTDIR)/lib/systemd/user -m 644 systemd/qubes-qrexec-policy-agent.service
-	install -t $(DESTDIR)/lib/systemd/user -m 644 systemd/qubes-qrexec-policy-agent.socket
-	install -d $(DESTDIR)/lib/systemd/user/sockets.target.wants -m 755
-	ln -s /lib/systemd/user/qubes-qrexec-policy-agent.socket $(DESTDIR)/lib/systemd/user/sockets.target.wants/
+	install -d $(DESTDIR)/etc/xdg/autostart -m 755
+	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
+		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
 .PHONY: install-base
 
 

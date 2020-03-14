@@ -50,21 +50,12 @@ def temp_dir():
         shutil.rmtree(temp_dir)
 
 
-@pytest.fixture(params=['normal', 'socket_activated'])
-async def server(temp_dir, request):
+@pytest.fixture
+async def server(temp_dir):
     socket_path = os.path.join(temp_dir, 'Service')
 
-    if request.param == 'socket_activated':
-        service = TestService(socket_path, socket_activated=True)
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.bind(socket_path)
-        fd = sock.detach()
-        with mock.patch('qrexec.server.listen_fds') as mock_listen_fds:
-            mock_listen_fds.return_value = [fd]
-            server = await service.start()
-    else:
-        service = TestService(socket_path)
-        server = await service.start()
+    service = TestService(socket_path)
+    server = await service.start()
 
     try:
         await server.start_serving()

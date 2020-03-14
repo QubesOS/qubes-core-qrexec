@@ -9,4 +9,3 @@ asynctest
 pyinotify
 psutil
 gbulb
-systemd-python

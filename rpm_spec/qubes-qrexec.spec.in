@@ -42,7 +42,6 @@ BuildRequires:  python3-rpm-macros
 
 Requires:   python%{python3_pkgversion}
 Requires:   python3-gbulb
-Requires:   python3-systemd
 Conflicts:  qubes-utils-libs < 4.1.0
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 Conflicts:  qubes-core-dom0 < 4.1.10
@@ -110,13 +109,12 @@ rm -f %{name}-%{version}
 %{_bindir}/qrexec-policy
 
 /usr/lib/qubes/qubes-rpc-multiplexer
+/usr/lib/qubes/qrexec-policy-agent-autostart
 
 %{_sysconfdir}/qubes-rpc/policy.Ask
 %{_sysconfdir}/qubes-rpc/policy.Notify
 
-/lib/systemd/user/qubes-qrexec-policy-agent.service
-/lib/systemd/user/qubes-qrexec-policy-agent.socket
-/lib/systemd/user/sockets.target.wants/qubes-qrexec-policy-agent.socket
+%{_sysconfdir}/xdg/autostart/qrexec-policy-agent.desktop
 
 %dir %{python3_sitelib}/qrexec-*.egg-info
 %{python3_sitelib}/qrexec-*.egg-info/*
