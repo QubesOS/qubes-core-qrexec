@@ -27,9 +27,9 @@ import struct
 from typing import Tuple
 import time
 import itertools
+import socket
 
 import psutil
-import pytest
 
 from . import qrexec
 from . import util
@@ -545,6 +545,7 @@ class TestClient(unittest.TestCase):
 
     def test_run_dom0_service_socket_no_read(self):
         """Socket based service that don't read its input stream"""
+
         socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
@@ -562,6 +563,92 @@ class TestClient(unittest.TestCase):
             (qrexec.MSG_DATA_STDOUT, b'stdout data'),
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_service_socket_close(self):
+        """Socket service closes connection"""
+
+        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        server.accept()
+        server.sendall(b'stdout data')
+        server.close()
+
+        self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b'stdout data'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_service_socket_shutdown_rd(self):
+        """Service does shutdown(SHUT_RD)"""
+
+        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        server.accept()
+        header = cmd[len('QUBESRPC '):].encode() + b'\0'
+        self.assertEqual(server.recvall(len(header)), header)
+
+        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
+        self.assertEqual(server.recvall(len(b'stdin data\n')),
+                         b'stdin data\n')
+        server.conn.shutdown(socket.SHUT_RD)
+
+        server.sendall(b'stdout data\n')
+        self.assertEqual(source.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'stdout data\n'))
+
+        server.conn.shutdown(socket.SHUT_WR)
+
+        messages = source.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_service_socket_shutdown_wr(self):
+        """Service does shutdown(SHUT_WR)"""
+
+        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        server.accept()
+        header = cmd[len('QUBESRPC '):].encode() + b'\0'
+        self.assertEqual(server.recvall(len(header)), header)
+
+        server.sendall(b'stdout data\n')
+        self.assertEqual(source.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'stdout data\n'))
+
+        server.conn.shutdown(socket.SHUT_WR)
+        self.assertEqual(source.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b''))
+
+        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
+        self.assertEqual(server.recvall(len(b'stdin data\n')),
+                         b'stdin data\n')
+
+        server.conn.shutdown(socket.SHUT_RD)
+        messages = source.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
         ])
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)

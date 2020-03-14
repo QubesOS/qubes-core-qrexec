@@ -22,6 +22,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -88,6 +89,14 @@ static void close_stderr(int fd) {
     close(fd);
 }
 
+enum {
+    FD_STDIN = 0,
+    FD_STDOUT,
+    FD_STDERR,
+    FD_VCHAN,
+    FD_NUM
+};
+
 int process_io(const struct process_io_request *req) {
     libvchan_t *vchan = req->vchan;
     int stdin_fd = req->stdin_fd;
@@ -104,22 +113,21 @@ int process_io(const struct process_io_request *req) {
     volatile sig_atomic_t *sigchld = req->sigchld;
     volatile sig_atomic_t *sigusr1 = req->sigusr1;
 
-    sigset_t selectmask;
     pid_t local_status = -1;
     pid_t remote_status = -1;
     int stdout_msg_type = is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN;
     bool use_stdio_socket = false;
 
-    fd_set rdset, wrset;
-    int vchan_fd;
-    int ret, max_fd;
+    int ret;
+    struct pollfd fds[FD_NUM];
+    sigset_t pollmask;
     struct timespec zero_timeout = { 0, 0 };
     struct timespec normal_timeout = { 10, 0 };
 
-    sigemptyset(&selectmask);
-    sigaddset(&selectmask, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &selectmask, NULL);
-    sigemptyset(&selectmask);
+    sigemptyset(&pollmask);
+    sigaddset(&pollmask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &pollmask, NULL);
+    sigemptyset(&pollmask);
 
     set_nonblock(stdin_fd);
     if (stdout_fd != stdin_fd)
@@ -193,51 +201,57 @@ int process_io(const struct process_io_request *req) {
         }
 
         /* otherwise handle the events */
-        FD_ZERO(&rdset);
-        FD_ZERO(&wrset);
-        max_fd = -1;
-        vchan_fd = libvchan_fd_for_select(vchan);
+        fds[FD_STDIN].fd = -1;
+        if (stdin_fd >= 0) {
+            fds[FD_STDIN].fd = stdin_fd;
+            if (buffer_len(stdin_buf) > 0)
+                fds[FD_STDIN].events = POLLOUT;
+            else
+                /* if no data to be written, still monitor for stdin close
+                 * (POLLHUP) */
+                fds[FD_STDIN].events = 0;
+        }
+
+        fds[FD_STDOUT].fd = -1;
+        fds[FD_STDERR].fd = -1;
         if (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
             if (stdout_fd >= 0) {
-                FD_SET(stdout_fd, &rdset);
-                if (stdout_fd > max_fd)
-                    max_fd = stdout_fd;
+                fds[FD_STDOUT].fd = stdout_fd;
+                fds[FD_STDOUT].events = POLLIN;
             }
             if (stderr_fd >= 0) {
-                FD_SET(stderr_fd, &rdset);
-                if (stderr_fd > max_fd)
-                    max_fd = stderr_fd;
+                fds[FD_STDERR].fd = stderr_fd;
+                fds[FD_STDERR].events = POLLIN;
             }
         }
-        FD_SET(vchan_fd, &rdset);
-        if (vchan_fd > max_fd)
-            max_fd = vchan_fd;
-        /* if we have something buffered for the child process, wake also on
-         * writable stdin */
-        if (stdin_fd > -1 && buffer_len(stdin_buf)) {
-            FD_SET(stdin_fd, &wrset);
-            if (stdin_fd > max_fd)
-                max_fd = stdin_fd;
-        }
-        if (!buffer_len(stdin_buf) && libvchan_data_ready(vchan) > 0) {
+
+        fds[FD_VCHAN].fd = libvchan_fd_for_select(vchan);
+        fds[FD_VCHAN].events = POLLIN;
+
+        if (!buffer_len(stdin_buf) && libvchan_data_ready(vchan) > 0)
             /* check for other FDs, but exit immediately */
-            ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &zero_timeout, &selectmask);
-        } else
-            ret = pselect(max_fd + 1, &rdset, &wrset, NULL, &normal_timeout, &selectmask);
+            ret = ppoll(fds, FD_NUM, &zero_timeout, &pollmask);
+        else
+            ret = ppoll(fds, FD_NUM, &normal_timeout, &pollmask);
+
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
             else {
-                PERROR("pselect");
+                PERROR("poll");
                 /* TODO */
                 break;
             }
         }
 
         /* clear event pending flag */
-        if (FD_ISSET(vchan_fd, &rdset)) {
+        if (fds[FD_VCHAN].revents)
             if (libvchan_wait(vchan) < 0)
                 handle_vchan_error("wait");
+
+        if (stdin_fd >= 0 && fds[FD_STDIN].revents & POLLHUP) {
+            close_stdin(stdin_fd, !use_stdio_socket);
+            stdin_fd = -1;
         }
 
         /* handle_remote_data will check if any data is available */
@@ -266,7 +280,7 @@ int process_io(const struct process_io_request *req) {
                 stderr_fd = -1;
                 break;
         }
-        if (stdout_fd >= 0 && FD_ISSET(stdout_fd, &rdset)) {
+        if (stdout_fd >= 0 && fds[FD_STDOUT].revents) {
             switch (handle_input(
                         vchan, stdout_fd, stdout_msg_type,
                         data_protocol_version)) {
@@ -279,7 +293,7 @@ int process_io(const struct process_io_request *req) {
                     break;
             }
         }
-        if (stderr_fd >= 0 && FD_ISSET(stderr_fd, &rdset)) {
+        if (stderr_fd >= 0 && fds[FD_STDERR].revents) {
             switch (handle_input(
                         vchan, stderr_fd, MSG_DATA_STDERR,
                         data_protocol_version)) {
