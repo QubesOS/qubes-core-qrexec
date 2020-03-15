@@ -350,6 +350,39 @@ echo "general service"
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
         ])
 
+    def test_service_close_stdout_stderr_early(self):
+        self.make_executable_service('rpc', 'qubes.Service', '''\
+#!/bin/sh
+read
+echo closing stdout
+exec >&-
+read
+echo closing stderr >&2
+exec 2>&-
+read code
+exit $code
+''')
+        target = self.execute_qubesrpc('qubes.Service', 'domX')
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'\n')
+
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b'closing stdout\n'))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDOUT, b''))
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'\n')
+
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDERR, b'closing stderr\n'))
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_STDERR, b''))
+
+        target.send_message(qrexec.MSG_DATA_STDIN, b'42\n')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        self.assertEqual(target.recv_message(),
+                         (qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 42)))
+
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
                  'socket tests not set up')
