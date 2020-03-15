@@ -852,9 +852,9 @@ static void release_connection(int id) {
     params.connect_domain = connection_info[id].connect_domain;
     params.connect_port = connection_info[id].connect_port;
     if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) < 0)
-        handle_vchan_error("send");
+        handle_vchan_error("send (MSG_CONNECTION_TERMINATED hdr)");
     if (libvchan_send(ctrl_vchan, &params, sizeof(params)) < 0)
-        handle_vchan_error("send");
+        handle_vchan_error("send (MSG_CONNECTION_TERMINATED data)");
     connection_info[id].pid = 0;
 }
 

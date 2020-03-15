@@ -30,8 +30,17 @@
 int wait_for_vchan_or_argfd_once(libvchan_t *ctrl, int max, fd_set * rdset, fd_set * wrset)
 {
     int vfd, ret;
-    struct timespec tv = { 1, 100000000 };
+    struct timespec tv;
     sigset_t empty_set;
+
+    if (libvchan_data_ready(ctrl) > 0) {
+        /* check for other FDs, but exit immediately */
+        tv.tv_sec = 0;
+        tv.tv_nsec = 0;
+    } else {
+        tv.tv_sec = 1;
+        tv.tv_nsec = 0;
+    }
 
     sigemptyset(&empty_set);
 

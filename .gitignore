@@ -1,5 +1,6 @@
 qrexec/**/__pycache__
 pkgs/
+build/
 .mypy_cache/
 .coverage
 *.o

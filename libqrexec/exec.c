@@ -187,10 +187,12 @@ static int qubes_connect(int s, const char *connect_path, const size_t total_pat
        result = connect(s, (struct sockaddr *) &remote, socket_len);
     while (result < 0 && (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN));
     dummy_errno = errno;
-    unlink(buf);
 out:
-    buf[path_separator_offset] = '\0';
-    rmdir(buf);
+    if (buf[path_separator_offset] == '/') {
+        unlink(buf);
+        buf[path_separator_offset] = '\0';
+        rmdir(buf);
+    }
     errno = dummy_errno;
     return result;
 }
@@ -366,7 +368,7 @@ static int execute_parsed_qubes_rpc_command(
         *stdout_fd = *stdin_fd = s;
         if (stderr_fd)
             *stderr_fd = -1;
-        *pid = -1;
+        *pid = 0;
         set_nonblock(s);
         buffer_append(stdin_buffer, command->service_descriptor, strlen(command->service_descriptor) + 1);
         return 0;
