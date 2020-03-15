@@ -24,7 +24,13 @@ Depends:
  ${shlibs:Depends}, 
  ${misc:Depends}
 Replaces: qubes-core-agent-qrexec (<< 4.1.0-1)
-Breaks: qubes-core-agent-qrexec (<< 4.1.0-1)
+Breaks:
+ qubes-core-agent-qrexec (<< 4.1.0-1),
+ qubes-gui-agent (<< 4.1.6-1),
+ qubes-gpg-split (<< 2.0.45-1),
+ qubes-gui-daemon (<< 4.1.4-1),
+ qubes-input-proxy (<< 1.0.17),
+ qubes-pdf-converter (<< 2.1.7-1)
 Description: Qubes qrexec agent
  Agent part of Qubes RPC system. A daemon responsible for starting processes as
  requested by dom0 or other VMs, according to dom0-enforced policy.
