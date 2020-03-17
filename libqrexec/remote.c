@@ -48,13 +48,13 @@ int handle_remote_data(
         case WRITE_STDIN_BUFFERED:
             return REMOTE_OK;
         case WRITE_STDIN_ERROR:
-            perror("write");
+            PERROR("write");
             return REMOTE_EOF;
     }
 
     buf = malloc(max_len);
     if (!buf) {
-        fprintf(stderr, "Out of memory\n");
+        PERROR("malloc");
         return REMOTE_ERROR;
     }
 
@@ -62,8 +62,8 @@ int handle_remote_data(
         if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) < 0)
             goto out;
         if (hdr.len > max_len) {
-            fprintf(stderr, "Too big data chunk received: %" PRIu32 " > %zu\n",
-                    hdr.len, max_len);
+            LOG(ERROR, "Too big data chunk received: %" PRIu32 " > %zu",
+                hdr.len, max_len);
             goto out;
         }
         if (!read_vchan_all(data_vchan, buf, hdr.len))
@@ -91,7 +91,7 @@ int handle_remote_data(
                             goto out;
                         case WRITE_STDIN_ERROR:
                             if (!(errno == EPIPE || errno == ECONNRESET)) {
-                                perror("write");
+                                PERROR("write");
                             }
                             rc = REMOTE_EOF;
                             goto out;
@@ -103,7 +103,7 @@ int handle_remote_data(
                     do_replace_chars(buf, hdr.len);
                 /* stderr of remote service, log locally */
                 if (!write_all(2, buf, hdr.len)) {
-                    perror("write");
+                    PERROR("write");
                     /* only log the error */
                 }
                 break;
@@ -117,7 +117,7 @@ int handle_remote_data(
                 rc = REMOTE_EXITED;
                 goto out;
             default:
-                fprintf(stderr, "unknown msg %d\n", hdr.type);
+                LOG(ERROR, "unknown msg %d", hdr.type);
                 rc = REMOTE_ERROR;
                 goto out;
         }
@@ -140,7 +140,7 @@ int handle_input(
 
     buf = malloc(max_len);
     if (!buf) {
-        fprintf(stderr, "Out of memory\n");
+        PERROR("malloc");
         return REMOTE_ERROR;
     }
 
@@ -188,11 +188,11 @@ int send_exit_code(libvchan_t *vchan, int status)
     hdr.type = MSG_DATA_EXIT_CODE;
     hdr.len = sizeof(int);
     if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        perror("send_exit_code hdr");
+        PERROR("send_exit_code hdr");
         return -1;
     }
     if (libvchan_send(vchan, &status, sizeof(status)) != sizeof(status)) {
-        perror("send_exit_code status");
+        PERROR("send_exit_code status");
         return -1;
     }
     return 0;

@@ -25,12 +25,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-void perror_wrapper(const char * msg)
-{
-    int prev=errno;
-    perror(msg);
-    errno=prev;
-}
+#include "libqrexec-utils.h"
 
 void set_nonblock(int fd)
 {
@@ -77,12 +72,12 @@ int read_all(int fd, void *buf, int size)
             continue;
         if (ret == 0) {
             errno = 0;
-            fprintf(stderr, "EOF\n");
+            LOG(INFO, "EOF");
             return 0;
         }
         if (ret < 0) {
             if (errno != EAGAIN)
-                perror_wrapper("read");
+                PERROR("read");
             return 0;
         }
         if (got_read == 0) {
@@ -106,11 +101,11 @@ int copy_fd_all(int fdout, int fdin)
         if (!ret)
             break;
         if (ret < 0) {
-            perror_wrapper("read");
+            PERROR("read");
             return 0;
         }
         if (!write_all(fdout, buf, ret)) {
-            perror_wrapper("write");
+            PERROR("write");
             return 0;
         }
     }

@@ -116,7 +116,7 @@ int protocol_version;
 void sigusr1_handler(int UNUSED(x))
 {
     if (!opt_quiet)
-        fprintf(stderr, "connected\n");
+        LOG(INFO, "Connected to VM");
     exit(0);
 }
 
@@ -125,10 +125,7 @@ void sigchld_parent_handler(int UNUSED(x))
     children_count--;
     /* starting value is 0 so we see dead real qrexec-daemon as -1 */
     if (children_count < 0) {
-        if (!opt_quiet)
-            fprintf(stderr, "failed\n");
-        else
-            fprintf(stderr, "Connection to the VM failed\n");
+        LOG(ERROR, "Connection to the VM failed");
         exit(1);
     }
 }
@@ -154,7 +151,7 @@ void unlink_qrexec_socket()
 
 void handle_vchan_error(const char *op)
 {
-    fprintf(stderr, "Error while vchan %s, exiting\n", op);
+    LOG(ERROR, "Error while vchan %s, exiting", op);
     exit(1);
 }
 
@@ -173,8 +170,7 @@ int create_qrexec_socket(int domid, const char *domname)
     /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
     umask(0);
     if (symlink(socket_address, link_to_socket_name)) {
-        fprintf(stderr, "symlink(%s,%s) failed: %s\n", socket_address,
-                link_to_socket_name, strerror (errno));
+        PERROR("symlink(%s,%s)", socket_address, link_to_socket_name);
     }
     int fd = get_server_socket(socket_address);
     umask(0077);
@@ -213,24 +209,24 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
     int actual_version;
 
     if (libvchan_recv(ctrl, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to read agent HELLO hdr\n");
+        LOG(ERROR, "Failed to read agent HELLO hdr");
         return -1;
     }
 
     if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-        fprintf(stderr, "Invalid HELLO packet received: type %d, len %d\n", hdr.type, hdr.len);
+        LOG(ERROR, "Invalid HELLO packet received: type %d, len %d", hdr.type, hdr.len);
         return -1;
     }
 
     if (libvchan_recv(ctrl, &info, sizeof(info)) != sizeof(info)) {
-        fprintf(stderr, "Failed to read agent HELLO body\n");
+        LOG(ERROR, "Failed to read agent HELLO body");
         return -1;
     }
 
     actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
 
     if (actual_version < QREXEC_MIN_VERSION) {
-        fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
+        LOG(ERROR, "Incompatible agent protocol version (remote %d, local %d)", info.version, QREXEC_PROTOCOL_VERSION);
         incompatible_protocol_error_message(domain_name, info.version);
         return -1;
     }
@@ -243,12 +239,12 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
     info.version = QREXEC_PROTOCOL_VERSION;
 
     if (libvchan_send(ctrl, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to send HELLO hdr to agent\n");
+        LOG(ERROR, "Failed to send HELLO hdr to agent");
         return -1;
     }
 
     if (libvchan_send(ctrl, &info, sizeof(info)) != sizeof(info)) {
-        fprintf(stderr, "Failed to send HELLO hdr to agent\n");
+        LOG(ERROR, "Failed to send HELLO hdr to agent");
         return -1;
     }
 
@@ -266,7 +262,7 @@ void init(int xid)
     const char *startup_timeout_str = NULL;
 
     if (xid <= 0) {
-        fprintf(stderr, "domain id=0?\n");
+        LOG(ERROR, "domain id=0?");
         exit(1);
     }
     startup_timeout_str = getenv("QREXEC_STARTUP_TIMEOUT");
@@ -282,7 +278,7 @@ void init(int xid)
         signal(SIGCHLD, sigchld_parent_handler);
         switch (pid=fork()) {
             case -1:
-                perror("fork");
+                PERROR("fork");
                 exit(1);
             case 0:
                 break;
@@ -290,7 +286,7 @@ void init(int xid)
                 if (getenv("QREXEC_STARTUP_NOWAIT"))
                     exit(0);
                 if (!opt_quiet)
-                    fprintf(stderr, "Waiting for VM's qrexec agent.");
+                    LOG(ERROR, "Waiting for VM's qrexec agent.");
                 for (i=0;i<startup_timeout;i++) {
                     sleep(1);
                     if (!opt_quiet)
@@ -299,7 +295,7 @@ void init(int xid)
                         break;
                     }
                 }
-                fprintf(stderr, "Cannot connect to '%s' qrexec agent for %d seconds, giving up\n", remote_domain_name, startup_timeout);
+                LOG(ERROR, "Cannot connect to '%s' qrexec agent for %d seconds, giving up", remote_domain_name, startup_timeout);
                 exit(3);
         }
     }
@@ -315,7 +311,7 @@ void init(int xid)
                  0660);
 
         if (logfd < 0) {
-            perror("open");
+            PERROR("open");
             exit(1);
         }
 
@@ -323,18 +319,18 @@ void init(int xid)
         dup2(logfd, 2);
 
         if (chdir("/var/run/qubes") < 0) {
-            perror("chdir /var/run/qubes failed");
+            PERROR("chdir /var/run/qubes failed");
             exit(1);
         }
         if (setsid() < 0) {
-            perror("setsid()");
+            PERROR("setsid()");
             exit(1);
         }
     }
 
     vchan = libvchan_client_init(xid, VCHAN_BASE_PORT);
     if (!vchan) {
-        perror("cannot connect to qrexec agent");
+        PERROR("cannot connect to qrexec agent");
         exit(1);
     }
 
@@ -344,11 +340,11 @@ void init(int xid)
     }
 
     if (setgid(getgid()) < 0) {
-        perror("setgid()");
+        PERROR("setgid()");
         exit(1);
     }
     if (setuid(getuid()) < 0) {
-        perror("setuid()");
+        PERROR("setuid()");
         exit(1);
     }
 
@@ -383,11 +379,11 @@ static int send_client_hello(int fd)
     info.version = QREXEC_PROTOCOL_VERSION;
 
     if (!write_all(fd, &hdr, sizeof(hdr))) {
-        fprintf(stderr, "Failed to send MSG_HELLO hdr to client %d\n", fd);
+        LOG(ERROR, "Failed to send MSG_HELLO hdr to client %d", fd);
         return -1;
     }
     if (!write_all(fd, &info, sizeof(info))) {
-        fprintf(stderr, "Failed to send MSG_HELLO to client %d\n", fd);
+        LOG(ERROR, "Failed to send MSG_HELLO to client %d", fd);
         return -1;
     }
     return 0;
@@ -436,7 +432,7 @@ static void handle_new_client()
 {
     int fd = do_accept(qrexec_daemon_unix_socket_fd);
     if (fd >= MAX_CLIENTS) {
-        fprintf(stderr, "too many clients ?\n");
+        LOG(ERROR, "too many clients ?");
         exit(1);
     }
 
@@ -512,7 +508,7 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         /* allocate port and send it to the client */
         params.connect_port = allocate_vchan_port(params.connect_domain);
         if (params.connect_port <= 0) {
-            fprintf(stderr, "Failed to allocate new vchan port, too many clients?\n");
+            LOG(ERROR, "Failed to allocate new vchan port, too many clients?");
             terminate_client(fd);
             return 0;
         }
@@ -593,8 +589,8 @@ static void handle_client_hello(int fd)
         return;
     }
     if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-        fprintf(stderr, "Invalid HELLO packet received from client %d: "
-                "type %d, len %d\n", fd, hdr.type, hdr.len);
+        LOG(ERROR, "Invalid HELLO packet received from client %d: "
+                "type %d, len %d", fd, hdr.type, hdr.len);
         terminate_client(fd);
         return;
     }
@@ -603,7 +599,7 @@ static void handle_client_hello(int fd)
         return;
     }
     if (info.version != QREXEC_PROTOCOL_VERSION) {
-        fprintf(stderr, "Incompatible client protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
+        LOG(ERROR, "Incompatible client protocol version (remote %d, local %d)", info.version, QREXEC_PROTOCOL_VERSION);
         terminate_client(fd);
         return;
     }
@@ -625,12 +621,12 @@ static void handle_message_from_client(int fd)
         case CLIENT_RUNNING:
             // expected EOF
             if (read(fd, buf, sizeof(buf)) != 0) {
-                fprintf(stderr, "Unexpected data received from client %d\n", fd);
+                LOG(ERROR, "Unexpected data received from client %d", fd);
             }
             terminate_client(fd);
             return;
         default:
-            fprintf(stderr, "Invalid client state %d\n", clients[fd].state);
+            LOG(ERROR, "Invalid client state %d", clients[fd].state);
             exit(1);
     }
 }
@@ -660,12 +656,12 @@ static void send_service_refused(libvchan_t *vchan, const struct service_params 
     hdr.len = sizeof(*params);
 
     if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to send MSG_SERVICE_REFUSED hdr to agent\n");
+        LOG(ERROR, "Failed to send MSG_SERVICE_REFUSED hdr to agent");
         exit(1);
     }
 
     if (libvchan_send(vchan, params, sizeof(*params)) != sizeof(*params)) {
-        fprintf(stderr, "Failed to send MSG_SERVICE_REFUSED to agent\n");
+        LOG(ERROR, "Failed to send MSG_SERVICE_REFUSED to agent");
         exit(1);
     }
 }
@@ -755,14 +751,14 @@ static int connect_daemon_socket(
 
     daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (daemon_socket < 0) {
-         perror("socket creation failed");
+         PERROR("socket creation failed");
          return -1;
     }
 
     result = connect(daemon_socket, (struct sockaddr *) &daemon_socket_address,
             sizeof(daemon_socket_address));
     if (result < 0) {
-         perror("connection to socket failed");
+         PERROR("connection to socket failed");
          return -1;
     }
 
@@ -774,20 +770,20 @@ static int connect_daemon_socket(
         remote_domain_id, remote_domain_name, target_domain,
         service_name, request_id->ident);
     if (command_size < 0) {
-         perror("failed to construct request");
+         PERROR("failed to construct request");
          return -1;
     }
 
     result = send(daemon_socket, command, command_size, 0);
     free(command);
     if (result < 0) {
-         perror("send to socket failed");
+         PERROR("send to socket failed");
          return -1;
     }
 
     result = recv(daemon_socket, response, sizeof(response), 0);
     if (result < 0) {
-         perror("error reading from socket");
+         PERROR("error reading from socket");
          return -1;
     }
     else {
@@ -818,14 +814,14 @@ static void handle_execute_service(
 
     policy_pending_slot = find_policy_pending_slot();
     if (policy_pending_slot < 0) {
-        fprintf(stderr, "Service request denied, too many pending requests\n");
+        LOG(ERROR, "Service request denied, too many pending requests");
         send_service_refused(vchan, request_id);
         return;
     }
 
     switch (pid=fork()) {
         case -1:
-            perror("fork");
+            PERROR("fork");
             exit(1);
         case 0:
             break;
@@ -856,7 +852,7 @@ static void handle_execute_service(
             service_name,
             request_id->ident,
             NULL);
-    perror("execl");
+    PERROR("execl");
     _exit(1);
 }
 
@@ -870,7 +866,7 @@ static void handle_connection_terminated()
     /* sanitize start */
     if (untrusted_params.connect_port < VCHAN_BASE_DATA_PORT ||
             untrusted_params.connect_port >= VCHAN_BASE_DATA_PORT+MAX_CLIENTS) {
-        fprintf(stderr, "Invalid port in MSG_CONNECTION_TERMINATED (%d)\n",
+        LOG(ERROR, "Invalid port in MSG_CONNECTION_TERMINATED (%d)",
                 untrusted_params.connect_port);
         exit(1);
     }
@@ -886,39 +882,39 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
     switch (untrusted_header->type) {
         case MSG_TRIGGER_SERVICE:
             if (protocol_version >= QREXEC_PROTOCOL_V3) {
-                fprintf(stderr, "agent sent (old) MSG_TRIGGER_SERVICE "
-                        "although it uses protocol %d\n", protocol_version);
+                LOG(ERROR, "agent sent (old) MSG_TRIGGER_SERVICE "
+                    "although it uses protocol %d", protocol_version);
                 exit(1);
             }
             if (untrusted_header->len != sizeof(struct trigger_service_params)) {
-                fprintf(stderr, "agent sent invalid MSG_TRIGGER_SERVICE packet\n");
+                LOG(ERROR, "agent sent invalid MSG_TRIGGER_SERVICE packet");
                 exit(1);
             }
             break;
         case MSG_TRIGGER_SERVICE3:
             if (protocol_version < QREXEC_PROTOCOL_V3) {
-                fprintf(stderr, "agent sent (new) MSG_TRIGGER_SERVICE3 "
-                        "although it uses protocol %d\n", protocol_version);
+                LOG(ERROR, "agent sent (new) MSG_TRIGGER_SERVICE3 "
+                    "although it uses protocol %d", protocol_version);
                 exit(1);
             }
             if (untrusted_header->len < sizeof(struct trigger_service_params3)) {
-                fprintf(stderr, "agent sent invalid MSG_TRIGGER_SERVICE3 packet\n");
+                LOG(ERROR, "agent sent invalid MSG_TRIGGER_SERVICE3 packet");
                 exit(1);
             }
             if (untrusted_header->len - sizeof(struct trigger_service_params3)
                     > MAX_SERVICE_NAME_LEN) {
-                fprintf(stderr, "agent sent too large MSG_TRIGGER_SERVICE3 packet\n");
+                LOG(ERROR, "agent sent too large MSG_TRIGGER_SERVICE3 packet");
                 exit(1);
             }
             break;
         case MSG_CONNECTION_TERMINATED:
             if (untrusted_header->len != sizeof(struct exec_params)) {
-                fprintf(stderr, "agent sent invalid MSG_CONNECTION_TERMINATED packet\n");
+                LOG(ERROR, "agent sent invalid MSG_CONNECTION_TERMINATED packet");
                 exit(1);
             }
             break;
         default:
-            fprintf(stderr, "unknown mesage type 0x%x from agent\n",
+            LOG(ERROR, "unknown mesage type 0x%x from agent",
                     untrusted_header->type);
             exit(1);
     }
@@ -1078,7 +1074,7 @@ static int handle_agent_restart(int xid) {
 
     vchan = libvchan_client_init(remote_domain_id, VCHAN_BASE_PORT);
     if (!vchan) {
-        perror("cannot connect to qrexec agent");
+        PERROR("cannot connect to qrexec agent");
         return -1;
     }
     if (handle_agent_hello(vchan, remote_domain_name) < 0) {
@@ -1086,7 +1082,7 @@ static int handle_agent_restart(int xid) {
         vchan = NULL;
         return -1;
     }
-    fprintf(stderr, "qrexec-agent has reconnected\n");
+    LOG(INFO, "qrexec-agent has reconnected");
 
     signal(SIGTERM, sigterm_handler);
 
@@ -1176,7 +1172,7 @@ int main(int argc, char **argv)
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
-            perror("select");
+            PERROR("select");
             return 1;
         }
         sigprocmask(SIG_UNBLOCK, &chld_set, NULL);
@@ -1187,9 +1183,9 @@ int main(int argc, char **argv)
             libvchan_wait(vchan);
 
         if (!libvchan_is_open(vchan)) {
-            fprintf(stderr, "qrexec-agent has disconnected\n");
+            LOG(WARNING, "qrexec-agent has disconnected");
             if (handle_agent_restart(remote_domain_id) < 0) {
-                fprintf(stderr, "Failed to reconnect to qrexec-agent, terminating\n");
+                LOG(ERROR, "Failed to reconnect to qrexec-agent, terminating");
                 return 1;
             }
             /* read_fdset may be outdated at this point, calculate it again. */

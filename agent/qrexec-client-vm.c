@@ -35,12 +35,12 @@ const bool qrexec_is_fork_server = false;
 
 _Noreturn void handle_vchan_error(const char *op)
 {
-    fprintf(stderr, "Error while vchan %s, exiting\n", op);
+    LOG(ERROR, "Error while vchan %s, exiting", op);
     exit(1);
 }
 
 _Noreturn void do_exec(char *cmd __attribute__((unused)), char const* user __attribute__((__unused__))) {
-    fprintf(stderr, "BUG: do_exec function shouldn't be called!\n");
+    LOG(ERROR, "BUG: do_exec function shouldn't be called!");
     abort();
 }
 
@@ -51,7 +51,7 @@ static int connect_unix_socket(const char *path)
     struct sockaddr_un remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        perror("socket");
+        PERROR("socket");
         return -1;
     }
 
@@ -60,7 +60,7 @@ static int connect_unix_socket(const char *path)
             sizeof(remote.sun_path) - 1);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
     if (connect(s, (struct sockaddr *) &remote, (socklen_t)len) == -1) {
-        perror("connect");
+        PERROR("connect");
         exit(1);
     }
     return s;
@@ -200,15 +200,15 @@ int main(int argc, char **argv)
             sizeof(params.request_id.ident), "SOCKET");
 
     if (!write_all(trigger_fd, &hdr, sizeof(hdr))) {
-        perror("write(hdr) to agent");
+        PERROR("write(hdr) to agent");
         exit(1);
     }
     if (!write_all(trigger_fd, &params, sizeof(params))) {
-        perror("write(params) to agent");
+        PERROR("write(params) to agent");
         exit(1);
     }
     if (!write_all(trigger_fd, service_name, service_name_len)) {
-        perror("write(command) to agent");
+        PERROR("write(command) to agent");
         exit(1);
     }
     ret = read(trigger_fd, &exec_params, sizeof(exec_params));
@@ -217,21 +217,21 @@ int main(int argc, char **argv)
         exit(126);
     }
     if (ret < 0 || ret != sizeof(exec_params)) {
-        perror("read");
+        PERROR("read");
         exit(1);
     }
 
     if (start_local_process) {
         if (socketpair(AF_UNIX, SOCK_STREAM, 0, inpipe) ||
                 socketpair(AF_UNIX, SOCK_STREAM, 0, outpipe)) {
-            perror("socketpair");
+            PERROR("socketpair");
             exit(1);
         }
         prepare_child_env();
 
         switch (child_pid = fork()) {
             case -1:
-                perror("fork");
+                PERROR("fork");
                 exit(-1);
             case 0:
                 close(inpipe[1]);
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
                     if (i != 2 || getenv("PASS_LOCAL_STDERR")) {
                         char *env;
                         if (asprintf(&env, "SAVED_FD_%d=%d", i, dup(i)) < 0) {
-                            perror("prepare SAVED_FD_");
+                            PERROR("prepare SAVED_FD_");
                             exit(1);
                         }
                         putenv(env);
@@ -256,7 +256,7 @@ int main(int argc, char **argv)
                 abs_exec_path = strdup(argv[optind + 2]);
                 argv[optind + 2] = get_program_name(argv[optind + 2]);
                 execv(abs_exec_path, argv + optind + 2);
-                perror("execv");
+                PERROR("execv");
                 exit(-1);
         }
         close(inpipe[0]);

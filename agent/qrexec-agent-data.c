@@ -94,35 +94,35 @@ int handle_handshake(libvchan_t *ctrl)
     info.version = QREXEC_PROTOCOL_VERSION;
 
     if (libvchan_send(ctrl, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to send HELLO hdr to agent\n");
+        LOG(ERROR, "Failed to send HELLO hdr to agent");
         return -1;
     }
 
     if (libvchan_send(ctrl, &info, sizeof(info)) != sizeof(info)) {
-        fprintf(stderr, "Failed to send HELLO hdr to agent\n");
+        LOG(ERROR, "Failed to send HELLO hdr to agent");
         return -1;
     }
 
     /* receive MSG_HELLO from remote */
     if (libvchan_recv(ctrl, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to read agent HELLO hdr\n");
+        LOG(ERROR, "Failed to read agent HELLO hdr");
         return -1;
     }
 
     if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-        fprintf(stderr, "Invalid HELLO packet received: type %d, len %d\n", hdr.type, hdr.len);
+        LOG(ERROR, "Invalid HELLO packet received: type %d, len %d", hdr.type, hdr.len);
         return -1;
     }
 
     if (libvchan_recv(ctrl, &info, sizeof(info)) != sizeof(info)) {
-        fprintf(stderr, "Failed to read agent HELLO body\n");
+        LOG(ERROR, "Failed to read agent HELLO body");
         return -1;
     }
 
     actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
 
     if (actual_version < QREXEC_DATA_MIN_VERSION) {
-        fprintf(stderr, "Incompatible agent protocol version (remote %d, local %d)\n", info.version, QREXEC_PROTOCOL_VERSION);
+        LOG(ERROR, "Incompatible agent protocol version (remote %d, local %d)", info.version, QREXEC_PROTOCOL_VERSION);
         return -1;
     }
 
@@ -136,13 +136,13 @@ static int handle_just_exec(char *cmdline)
 
     char *end_username = strchr(cmdline, ':');
     if (!end_username) {
-        fprintf(stderr, "No colon in command from dom0\n");
+        LOG(ERROR, "No colon in command from dom0");
         return -1;
     }
     *end_username++ = '\0';
     switch (pid = fork()) {
         case -1:
-            perror("fork");
+            PERROR("fork");
             return -1;
         case 0:
             fdn = open("/dev/null", O_RDWR);
@@ -150,7 +150,7 @@ static int handle_just_exec(char *cmdline)
             do_exec(end_username, cmdline);
         default:;
     }
-    fprintf(stderr, "executed (nowait) %s pid %d\n", cmdline, pid);
+    LOG(INFO, "executed (nowait) %s pid %d", cmdline, pid);
     return 0;
 }
 
@@ -184,20 +184,20 @@ static int handle_new_process_common(
         buffer_size = VCHAN_BUFFER_SIZE;
 
     if (cmdline == NULL) {
-        fputs("internal qrexec error: NULL cmdline passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+        LOG(ERROR, "internal qrexec error: NULL cmdline passed to a non-MSG_SERVICE_CONNECT call");
         abort();
     } else if (cmdline_len == 0) {
-        fputs("internal qrexec error: zero-length command line passed to a non-MSG_SERVICE_CONNECT call\n", stderr);
+        LOG(ERROR, "internal qrexec error: zero-length command line passed to a non-MSG_SERVICE_CONNECT call");
         abort();
     } else if (cmdline_len > MAX_QREXEC_CMD_LEN) {
         /* This is arbitrary, but it helps reduce the risk of overflows in other code */
-        fprintf(stderr, "Bad command from dom0: command line too long: length %zu\n", cmdline_len);
+        LOG(ERROR, "Bad command from dom0: command line too long: length %zu", cmdline_len);
         abort();
     }
     cmdline[cmdline_len-1] = 0;
     data_vchan = libvchan_client_init(connect_domain, connect_port);
     if (!data_vchan) {
-        fprintf(stderr, "Data vchan connection failed\n");
+        LOG(ERROR, "Data vchan connection failed");
         exit(1);
     }
     data_protocol_version = handle_handshake(data_vchan);
@@ -221,7 +221,7 @@ static int handle_new_process_common(
                     .type = MSG_DATA_STDOUT,
                     .len = 0,
                 };
-                fputs("failed to spawn process\n", stderr);
+                LOG(ERROR, "failed to spawn process");
                 /* Send stdout+stderr EOF first, since the service is expected to send
                  * one before exit code in case of MSG_EXEC_CMDLINE. Ignore
                  * libvchan_send error if any, as we're going to terminate soon
@@ -235,10 +235,10 @@ static int handle_new_process_common(
                 libvchan_close(data_vchan);
                 return exit_code;
             }
-            fprintf(stderr, "executed %s pid %d\n", cmdline, pid);
+            LOG(INFO, "executed %s pid %d", cmdline, pid);
             break;
         default:
-            fprintf(stderr, "unknown request type: %d\n", type);
+            LOG(ERROR, "unknown request type: %d", type);
             libvchan_close(data_vchan);
             return 0;
     }
@@ -263,7 +263,7 @@ static int handle_new_process_common(
     exit_code = process_io(&req);
 
     if (type == MSG_EXEC_CMDLINE)
-        fprintf(stderr, "pid %d exited with %d\n", pid, exit_code);
+        LOG(INFO, "pid %d exited with %d", pid, exit_code);
 
     libvchan_close(data_vchan);
     return exit_code;
@@ -279,7 +279,7 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
 
     switch (pid=fork()){
         case -1:
-            perror("fork");
+            PERROR("fork");
             return -1;
         case 0:
             break;
@@ -312,7 +312,7 @@ int handle_data_client(
     data_vchan = libvchan_server_init(connect_domain, connect_port,
                                       buffer_size, buffer_size);
     if (!data_vchan) {
-        fprintf(stderr, "Data vchan connection failed\n");
+        LOG(ERROR, "Data vchan connection failed");
         exit(1);
     }
     libvchan_wait(data_vchan);

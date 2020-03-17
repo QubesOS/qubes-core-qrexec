@@ -74,7 +74,7 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer)
     while (written < len) {
         ret = write(fd, data + written, len - written);
         if (ret == 0) {
-            perror("write_stdin: write returns 0 ???");
+            PERROR("write_stdin: write returns 0 ???");
             exit(1);
         }
         if (ret == -1) {
@@ -103,7 +103,7 @@ int fork_and_flush_stdin(int fd, struct buffer *buffer)
         return 0;
     switch (fork()) {
         case -1:
-            perror("fork");
+            PERROR("fork");
             exit(1);
         case 0:
             break;

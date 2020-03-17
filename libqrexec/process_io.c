@@ -32,7 +32,7 @@
 
 static _Noreturn void handle_vchan_error(const char *op)
 {
-    fprintf(stderr, "Error while vchan %s, exiting\n", op);
+    LOG(ERROR, "Error while vchan %s, exiting", op);
     exit(1);
 }
 
@@ -59,7 +59,7 @@ static void close_stdin(int fd, bool restore_block) {
         if (errno == ENOTSOCK)
             close(fd);
         else
-            perror("shutdown close_stdin");
+            PERROR("shutdown close_stdin");
     }
 }
 
@@ -76,7 +76,7 @@ static void close_stdout(int fd, bool restore_block) {
         if (errno == ENOTSOCK)
             close(fd);
         else
-            perror("shutdown close_stdout");
+            PERROR("shutdown close_stdout");
     }
 }
 
@@ -179,7 +179,7 @@ int process_io(const struct process_io_request *req) {
                        (errno == EINTR || errno == EBUSY));
                 // other errors are fatal
                 if (errno) {
-                    fputs("Fatal error from dup3()\n", stderr);
+                    PERROR("dup3");
                     abort();
                 }
             } else {
@@ -228,7 +228,7 @@ int process_io(const struct process_io_request *req) {
             if (errno == EINTR)
                 continue;
             else {
-                perror("pselect");
+                PERROR("pselect");
                 /* TODO */
                 break;
             }
@@ -308,7 +308,7 @@ int process_io(const struct process_io_request *req) {
             else
                 local_status = WEXITSTATUS(status);
         } else
-            perror("waitpid");
+            PERROR("waitpid");
     }
 
     if (!is_service)

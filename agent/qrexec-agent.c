@@ -164,12 +164,12 @@ _Noreturn void do_exec(char *cmd, const char *user)
 
         pw = getpwuid(geteuid());
         if (!pw) {
-            perror("getpwuid");
+            PERROR("getpwuid");
             exit(1);
         }
         if (strcmp(pw->pw_name, user)) {
-            fprintf(stderr, "requested user %s, but qrexec-agent is running as user %s\n",
-                    user, pw->pw_name);
+            LOG(ERROR, "requested user %s, but qrexec-agent is running as user %s",
+                user, pw->pw_name);
             exit(1);
         }
         /* call QUBESRPC if requested */
@@ -177,7 +177,7 @@ _Noreturn void do_exec(char *cmd, const char *user)
 
         /* otherwise exec shell */
         execl("/bin/sh", "sh", "-c", cmd, NULL);
-        perror("execl");
+        PERROR("execl");
         exit(1);
     }
 
@@ -185,7 +185,7 @@ _Noreturn void do_exec(char *cmd, const char *user)
     pw = getpwnam(user);
     if (! (pw && pw->pw_name && pw->pw_name[0] && pw->pw_dir && pw->pw_dir[0]
                 && pw->pw_passwd)) {
-        fprintf(stderr, "user %s does not exist", user);
+        LOG(ERROR, "user %s does not exist", user);
         exit(1);
     }
 
@@ -219,7 +219,7 @@ _Noreturn void do_exec(char *cmd, const char *user)
 
     retval = initgroups(pw->pw_name, pw->pw_gid);
     if (retval == -1) {
-        perror("initgroups");
+        PERROR("initgroups");
         goto error;
     }
 
@@ -318,7 +318,7 @@ error:
 
     /* otherwise exec shell */
     execl("/bin/su", "su", "-", user, "-c", cmd, NULL);
-    perror("execl");
+    PERROR("execl");
     exit(1);
 #endif
 
@@ -326,7 +326,7 @@ error:
 
 _Noreturn void handle_vchan_error(const char *op)
 {
-    fprintf(stderr, "Error while vchan %s, exiting\n", op);
+    LOG(ERROR, "Error while vchan %s, exiting", op);
     exit(1);
 }
 
@@ -346,17 +346,17 @@ int my_sd_notify(int unset_environment, const char *state) {
 
     fd = socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd == -1) {
-        perror("sd_notify socket");
+        PERROR("sd_notify socket");
         return -1;
     }
 
     if (connect(fd, &addr, sizeof(addr)) == -1) {
-        perror("sd_notify connect");
+        PERROR("sd_notify connect");
         goto out;
     }
 
     if (send(fd, state, strlen(state), 0) == -1) {
-        perror("sd_notify send");
+        PERROR("sd_notify send");
         goto out;
     }
 
@@ -435,7 +435,7 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
         return -1;
     char *username = malloc(cmdline_len);
     if (!username) {
-        fprintf(stderr, "Memory allocation failed\n");
+        PERROR("Memory allocation failed");
         return -1;
     }
     memcpy(username, cmdline, cmdline_len);
@@ -445,7 +445,7 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
     *colon = '\0';
 
     if (asprintf(&fork_server_socket_path, fork_server_path, username) < 0) {
-        fprintf(stderr, "Memory allocation failed\n");
+        LOG(ERROR, "Memory allocation failed");
         goto fail;
     }
 
@@ -456,13 +456,13 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
     free(fork_server_socket_path);
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        perror("socket");
+        PERROR("socket");
         goto fail;
     }
     size_t len = strlen(remote.sun_path) + sizeof(remote.sun_family);
     if (connect(s, (struct sockaddr *) &remote, (socklen_t)len) == -1) {
         if (errno != ECONNREFUSED && errno != ENOENT)
-            perror("connect");
+            PERROR("connect");
         goto fail;
     }
 
@@ -475,11 +475,11 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
     assert(cmdline_len > username_len);
     info.cmdline_len = (int)(cmdline_len - (username_len + 1));
     if (!write_all(s, &info, sizeof(info))) {
-        perror("write");
+        PERROR("write");
         goto fail;
     }
     if (!write_all(s, colon+1, info.cmdline_len)) {
-        perror("write");
+        PERROR("write");
         goto fail;
     }
 
@@ -507,7 +507,7 @@ static void register_vchan_connection(pid_t pid, int fd, int domain, int port)
         }
     }
 
-    fprintf(stderr, "No free slot for child %d (connection to %d:%d)\n", pid, domain, port);
+    LOG(ERROR, "No free slot for child %d (connection to %d:%d)", pid, domain, port);
 }
 
 /* Load service configuration from /etc/qubes/rpc-config/
@@ -537,7 +537,7 @@ static int load_service_config(const char *service_name, int *wait_for_session) 
         if (errno == ENOENT)
             return 0;
         else {
-            fprintf(stderr, "Failed to load %s\n", filename);
+            PERROR("Failed to load %s", filename);
             return -1;
         }
     }
@@ -654,7 +654,7 @@ static int wait_for_session_maybe(char *cmdline) {
     }
 
     if (pipe(stdin_pipe) == -1) {
-        perror("pipe for wait-for-session");
+        PERROR("pipe for wait-for-session");
         free(user);
         return 0;
     }
@@ -668,15 +668,15 @@ static int wait_for_session_maybe(char *cmdline) {
                     source_domain, (char*)NULL);
             exit(1);
         case -1:
-            perror("fork wait-for-session");
+            PERROR("fork wait-for-session");
             free(user);
             return 0;
         default:
             close(stdin_pipe[0]);
             if (write(stdin_pipe[1], user, strlen(user)) == -1)
-                perror("write error");
+                PERROR("write error");
             if (write(stdin_pipe[1], "\n", 1) == -1)
-                perror("write error");
+                PERROR("write error");
             close(stdin_pipe[1]);
     }
     free(user);
@@ -710,7 +710,7 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
                 break;
         if (slot_index == MAX_FDS) {
             /* no free slots */
-            fprintf(stderr, "No free slots for waiting for GUI session, continuing!\n");
+            LOG(WARNING, "No free slots for waiting for GUI session, continuing!");
         } else {
             requests_waiting_for_session[slot_index].type = hdr->type;
             requests_waiting_for_session[slot_index].connect_domain = params.connect_domain;
@@ -781,7 +781,7 @@ static void handle_service_refused(struct msg_header *hdr)
     int socket_fd;
 
     if (hdr->len != sizeof(params)) {
-        fprintf(stderr, "Invalid msg 0x%x length (%d)\n", MSG_SERVICE_REFUSED, hdr->len);
+        LOG(ERROR, "Invalid msg 0x%x length (%d)", MSG_SERVICE_REFUSED, hdr->len);
         exit(1);
     }
 
@@ -791,7 +791,7 @@ static void handle_service_refused(struct msg_header *hdr)
     if (sscanf(params.ident, "SOCKET%d", &socket_fd))
         close(socket_fd);
     else
-        fprintf(stderr, "Received REFUSED for unknown service request '%s'\n", params.ident);
+        LOG(WARNING, "Received REFUSED for unknown service request '%s'", params.ident);
 }
 
 static void handle_server_cmd(void)
@@ -815,8 +815,8 @@ static void handle_server_cmd(void)
             handle_service_refused(&s_hdr);
             break;
         default:
-            fprintf(stderr, "msg type from daemon is %d ?\n",
-                    s_hdr.type);
+            LOG(ERROR, "msg type from daemon is %d ?",
+                s_hdr.type);
             exit(1);
     }
 }
@@ -924,7 +924,7 @@ static void handle_trigger_io()
     if (hdr.type != MSG_TRIGGER_SERVICE3 ||
             hdr.len < sizeof(params) ||
             hdr.len > sizeof(params) + MAX_SERVICE_NAME_LEN) {
-        fprintf(stderr, "Invalid request received from qrexec-client-vm, is it outdated?\n");
+        LOG(ERROR, "Invalid request received from qrexec-client-vm, is it outdated?");
         goto error;
     }
     if (!read_all(client_fd, &params, sizeof(params)))
@@ -951,7 +951,7 @@ static void handle_trigger_io()
      * later (when dom0 accepts the request) */
     return;
 error:
-    fprintf(stderr, "Failed to retrieve/execute request from qrexec-client-vm\n");
+    LOG(ERROR, "Failed to retrieve/execute request from qrexec-client-vm");
     if (command)
         free(command);
     close(client_fd);
@@ -970,7 +970,7 @@ static void handle_terminated_fork_client(fd_set *rdset) {
                 close(connection_info[i].fd);
                 release_connection(i);
             } else {
-                fprintf(stderr, "Unexpected read on fork-server connection: %zd(%s)\n", ret, strerror(errno));
+                PERROR("Unexpected read on fork-server connection: %zd", ret);
                 close(connection_info[i].fd);
                 release_connection(i);
             }

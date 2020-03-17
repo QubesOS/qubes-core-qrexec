@@ -31,12 +31,12 @@ static char *limited_malloc(int len)
     char *ret;
     total_mem += len;
     if (total_mem > BUFFER_LIMIT) {
-        fprintf(stderr, "attempt to allocate >BUFFER_LIMIT\n");
+        LOG(ERROR, "attempt to allocate >BUFFER_LIMIT");
         exit(1);
     }
     ret = malloc(len);
     if (!ret) {
-        perror("malloc");
+        PERROR("malloc");
         exit(1);
     }
     return ret;
@@ -72,7 +72,7 @@ void buffer_append(struct buffer *b, const char *data, int len)
     int newsize;
     char *qdata;
     if (len < 0 || len > BUFFER_LIMIT) {
-        fprintf(stderr, "buffer_append %d\n", len);
+        LOG(ERROR, "buffer_append %d", len);
         exit(1);
     }
     if (len == 0)
@@ -91,7 +91,7 @@ void buffer_remove(struct buffer *b, int len)
     int newsize;
     char *qdata = NULL;
     if (len < 0 || len > b->buflen) {
-        fprintf(stderr, "buffer_remove %d/%d\n", len, b->buflen);
+        LOG(ERROR, "buffer_remove %d/%d", len, b->buflen);
         exit(1);
     }
     newsize = b->buflen - len;

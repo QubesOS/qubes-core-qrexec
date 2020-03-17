@@ -60,7 +60,7 @@ extern char **environ;
 static char *xstrdup(const char *arg) {
     char *retval = strdup(arg);
     if (!retval) {
-        fputs("Out of memory in xstrdup()\n", stderr);
+        LOG(ERROR, "Out of memory in xstrdup()");
         abort();
     }
     return retval;
@@ -68,7 +68,7 @@ static char *xstrdup(const char *arg) {
 
 static void set_remote_domain(const char *src_domain_name) {
     if (setenv("QREXEC_REMOTE_DOMAIN", src_domain_name, 1)) {
-        fputs("Cannot set QREXEC_REMOTE_DOMAIN\n", stderr);
+        LOG(ERROR, "Cannot set QREXEC_REMOTE_DOMAIN");
         abort();
     }
 }
@@ -84,23 +84,23 @@ static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
     while (who < 2) {
         if ((who+remote_send_first) & 1) {
             if (!read_vchan_all(vchan, &hdr, sizeof(hdr))) {
-                perror("daemon handshake");
+                PERROR("daemon handshake");
                 return -1;
             }
             if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-                fprintf(stderr, "Invalid daemon MSG_HELLO\n");
+                LOG(ERROR, "Invalid daemon MSG_HELLO");
                 return -1;
             }
             if (!read_vchan_all(vchan, &info, sizeof(info))) {
-                perror("daemon handshake");
+                PERROR("daemon handshake");
                 return -1;
             }
 
             data_protocol_version = info.version < QREXEC_PROTOCOL_VERSION ?
                                     info.version : QREXEC_PROTOCOL_VERSION;
             if (data_protocol_version < QREXEC_DATA_MIN_VERSION) {
-                fprintf(stderr, "Incompatible daemon protocol version "
-                        "(daemon %d, client %d)\n",
+                LOG(ERROR, "Incompatible daemon protocol version "
+                        "(daemon %d, client %d)",
                         info.version, QREXEC_PROTOCOL_VERSION);
                 return -1;
             }
@@ -110,11 +110,11 @@ static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
             info.version = QREXEC_PROTOCOL_VERSION;
 
             if (!write_vchan_all(vchan, &hdr, sizeof(hdr))) {
-                fprintf(stderr, "Failed to send MSG_HELLO hdr to daemon\n");
+                LOG(ERROR, "Failed to send MSG_HELLO hdr to daemon");
                 return -1;
             }
             if (!write_vchan_all(vchan, &info, sizeof(info))) {
-                fprintf(stderr, "Failed to send MSG_HELLO to daemon\n");
+                LOG(ERROR, "Failed to send MSG_HELLO to daemon");
                 return -1;
             }
         }
@@ -130,22 +130,22 @@ static int handle_daemon_handshake(int fd)
 
     /* daemon send MSG_HELLO first */
     if (!read_all(fd, &hdr, sizeof(hdr))) {
-        perror("daemon handshake");
+        PERROR("daemon handshake");
         return -1;
     }
     if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-        fprintf(stderr, "Invalid daemon MSG_HELLO\n");
+        LOG(ERROR, "Invalid daemon MSG_HELLO");
         return -1;
     }
     if (!read_all(fd, &info, sizeof(info))) {
-        perror("daemon handshake");
+        PERROR("daemon handshake");
         return -1;
     }
 
     if (info.version != QREXEC_PROTOCOL_VERSION) {
-        fprintf(stderr, "Incompatible daemon protocol version "
-                "(daemon %d, client %d)\n",
-                info.version, QREXEC_PROTOCOL_VERSION);
+        LOG(ERROR, "Incompatible daemon protocol version "
+            "(daemon %d, client %d)",
+            info.version, QREXEC_PROTOCOL_VERSION);
         return -1;
     }
 
@@ -154,11 +154,11 @@ static int handle_daemon_handshake(int fd)
     info.version = QREXEC_PROTOCOL_VERSION;
 
     if (!write_all(fd, &hdr, sizeof(hdr))) {
-        fprintf(stderr, "Failed to send MSG_HELLO hdr to daemon\n");
+        LOG(ERROR, "Failed to send MSG_HELLO hdr to daemon");
         return -1;
     }
     if (!write_all(fd, &info, sizeof(info))) {
-        fprintf(stderr, "Failed to send MSG_HELLO to daemon\n");
+        LOG(ERROR, "Failed to send MSG_HELLO to daemon");
         return -1;
     }
     return 0;
@@ -170,7 +170,7 @@ static int connect_unix_socket(const char *domname)
     struct sockaddr_un remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        perror("socket");
+        PERROR("socket");
         return -1;
     }
 
@@ -179,7 +179,7 @@ static int connect_unix_socket(const char *domname)
              "%s/qrexec.%s", socket_dir, domname);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
     if (connect(s, (struct sockaddr *) &remote, len) == -1) {
-        perror("connect");
+        PERROR("connect");
         exit(1);
     }
     if (handle_daemon_handshake(s) < 0)
@@ -201,7 +201,7 @@ static _Noreturn void do_exec(char *prog, const char *username __attribute__((un
 
     /* if above haven't executed qubes-rpc-multiplexer, pass it to shell */
     execl("/bin/bash", "bash", "-c", prog, NULL);
-    perror("exec bash");
+    PERROR("exec bash");
     exit(1);
 }
 
@@ -234,22 +234,22 @@ static void negotiate_connection_params(int s, int other_domid, unsigned type,
     if (!write_all(s, &hdr, sizeof(hdr))
             || !write_all(s, &params, sizeof(params))
             || !write_all(s, cmdline_param, cmdline_size)) {
-        perror("write daemon");
+        PERROR("write daemon");
         exit(1);
     }
     /* the daemon will respond with the same message with connect_port filled
      * and empty cmdline */
     if (!read_all(s, &hdr, sizeof(hdr))) {
-        perror("read daemon");
+        PERROR("read daemon");
         exit(1);
     }
     assert(hdr.type == type);
     if (hdr.len != sizeof(params)) {
-        fprintf(stderr, "Invalid response for 0x%x\n", type);
+        LOG(ERROR, "Invalid response for 0x%x", type);
         exit(1);
     }
     if (!read_all(s, &params, sizeof(params))) {
-        perror("read daemon");
+        PERROR("read daemon");
         exit(1);
     }
     *data_port = params.connect_port;
@@ -274,7 +274,7 @@ static void send_service_connect(int s, char *conn_ident,
     if (!write_all(s, &hdr, sizeof(hdr))
             || !write_all(s, &exec_params, sizeof(exec_params))
             || !write_all(s, &srv_params, sizeof(srv_params))) {
-        perror("write daemon");
+        PERROR("write daemon");
         exit(1);
     }
 }
@@ -368,7 +368,7 @@ bad_c_param:
 
 static void sigalrm_handler(int x __attribute__((__unused__)))
 {
-    fprintf(stderr, "vchan connection timeout\n");
+    LOG(ERROR, "vchan connection timeout");
     exit(1);
 }
 
@@ -376,7 +376,7 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
     struct timeval start_tv, now_tv, timeout_tv;
 
     if (timeout && gettimeofday(&start_tv, NULL) == -1) {
-        perror("gettimeofday");
+        PERROR("gettimeofday");
         exit(1);
     }
     while (conn && libvchan_is_open(conn) == VCHAN_WAITING) {
@@ -386,13 +386,13 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
 
             /* calculate how much time left until connection timeout expire */
             if (gettimeofday(&now_tv, NULL) == -1) {
-                perror("gettimeofday");
+                PERROR("gettimeofday");
                 exit(1);
             }
             timersub(&start_tv, &now_tv, &timeout_tv);
             timeout_tv.tv_sec += timeout;
             if (timeout_tv.tv_sec < 0) {
-                fprintf(stderr, "vchan connection timeout\n");
+                LOG(ERROR, "vchan connection timeout");
                 exit(1);
             }
             FD_ZERO(&rdset);
@@ -402,10 +402,10 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
                     if (errno == EINTR) {
                         break;
                     }
-                    fprintf(stderr, "vchan connection error\n");
+                    LOG(ERROR, "vchan connection error");
                     exit(1);
                 case 0:
-                    fprintf(stderr, "vchan connection timeout\n");
+                    LOG(ERROR, "vchan connection timeout");
                     exit(1);
             }
         }
@@ -503,7 +503,7 @@ int main(int argc, char **argv)
             usage(argv[0]);
         }
         if (src_domain_name == NULL) {
-            fputs("internal error: src_domain_name should not be NULL here\n", stderr);
+            LOG(ERROR, "internal error: src_domain_name should not be NULL here");
             abort();
         }
         set_remote_domain(src_domain_name);
@@ -535,7 +535,7 @@ int main(int argc, char **argv)
             wait_for_vchan_client_with_timeout(data_vchan, connection_timeout);
         }
         if (!data_vchan || !libvchan_is_open(data_vchan)) {
-            fprintf(stderr, "Failed to open data vchan connection\n");
+            LOG(ERROR, "Failed to open data vchan connection");
             exit(1);
         }
         data_protocol_version = handle_agent_handshake(data_vchan, connect_existing);
@@ -577,12 +577,12 @@ int main(int argc, char **argv)
             data_vchan = libvchan_server_init(data_domain, data_port,
                     VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
             if (!data_vchan) {
-                fprintf(stderr, "Failed to start data vchan server\n");
+                LOG(ERROR, "Failed to start data vchan server");
                 exit(1);
             }
             wait_for_vchan_client_with_timeout(data_vchan, connection_timeout);
             if (!libvchan_is_open(data_vchan)) {
-                fprintf(stderr, "Failed to open data vchan connection\n");
+                LOG(ERROR, "Failed to open data vchan connection");
                 exit(1);
             }
             data_protocol_version = handle_agent_handshake(data_vchan, 0);

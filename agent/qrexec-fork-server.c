@@ -52,13 +52,13 @@ void do_exec(char *cmd, const char *user __attribute__((unused)))
         shell = "/bin/sh";
 
     execl(shell, basename(shell), "-c", cmd, NULL);
-    perror("execl");
+    PERROR("execl");
     exit(1);
 }
 
 _Noreturn void handle_vchan_error(const char *op)
 {
-    fprintf(stderr, "Error while vchan %s, exiting\n", op);
+    PERROR("Error while vchan %s, exiting", op);
     exit(1);
 }
 
@@ -81,13 +81,12 @@ int main(int argc, char **argv) {
     struct sockaddr_un peer;
     unsigned int addrlen;
 
-
     if (argc == 2) {
         socket_path = argv[1];
     } else if (argc == 1) {
         /* this will be leaked, but we don't care as the process will then terminate */
         if (asprintf(&socket_path, QREXEC_FORK_SERVER_SOCKET, getenv("USER")) < 0) {
-            fprintf(stderr, "Memory allocation failed\n");
+            PERROR("Memory allocation failed");
             exit(1);
         }
     } else {
@@ -97,13 +96,13 @@ int main(int argc, char **argv) {
 
     s = get_server_socket(socket_path);
     if (fcntl(s, F_SETFD, O_CLOEXEC) < 0) {
-        perror("fcntl");
+        PERROR("fcntl");
         exit(1);
     }
     /* fork into background */
     switch (fork()) {
         case -1:
-            perror("fork");
+            PERROR("fork");
             exit(1);
         case 0:
             break;

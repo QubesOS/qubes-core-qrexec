@@ -27,6 +27,8 @@
 #include <sys/select.h>
 #include <libvchan.h>
 
+#include "libqrexec-utils.h"
+
 int wait_for_vchan_or_argfd_once(libvchan_t *ctrl, int max, fd_set * rdset, fd_set * wrset)
 {
     int vfd, ret;
@@ -52,18 +54,18 @@ int wait_for_vchan_or_argfd_once(libvchan_t *ctrl, int max, fd_set * rdset, fd_s
     ret = pselect(max, rdset, wrset, NULL, &tv, &empty_set);
     if (ret < 0) {
         if (errno != EINTR) {
-            perror("select");
+            PERROR("select");
             exit(1);
         } else {
             FD_ZERO(rdset);
             FD_ZERO(wrset);
-            fprintf(stderr, "eintr\n");
+            LOGE(INFO, "pselect");
             return 1;
         }
 
     }
     if (!libvchan_is_open(ctrl)) {
-        fprintf(stderr, "libvchan_is_eof\n");
+        LOG(ERROR, "libvchan closed");
         exit(0);
     }
     if (FD_ISSET(vfd, rdset))

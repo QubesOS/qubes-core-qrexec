@@ -26,7 +26,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-//#include "qrexec.h"
+
+#include "libqrexec-utils.h"
 
 int get_server_socket(const char *socket_address)
 {
@@ -37,7 +38,7 @@ int get_server_socket(const char *socket_address)
 
     s = socket(AF_UNIX, SOCK_STREAM, 0);
     if (s < 0) {
-        printf("socket() failed\n");
+        PERROR("socket");
         exit(1);
     }
     memset(&sockname, 0, sizeof(sockname));
@@ -46,13 +47,13 @@ int get_server_socket(const char *socket_address)
     sockname.sun_path[sizeof sockname.sun_path - 1] = 0;
 
     if (bind(s, (struct sockaddr *) &sockname, sizeof(sockname)) == -1) {
-        printf("bind() failed\n");
+        PERROR("bind");
         close(s);
         exit(1);
     }
     //      chmod(sockname.sun_path, 0666);
     if (listen(s, 5) == -1) {
-        perror("listen() failed\n");
+        PERROR("listen");
         close(s);
         exit(1);
     }
@@ -67,7 +68,7 @@ int do_accept(int s)
     addrlen = sizeof(peer);
     fd = accept(s, (struct sockaddr *) &peer, &addrlen);
     if (fd == -1) {
-        perror("unix accept");
+        PERROR("unix accept");
         exit(1);
     }
     return fd;
