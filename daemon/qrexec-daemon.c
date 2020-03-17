@@ -1121,6 +1121,8 @@ int main(int argc, char **argv)
     int max, vchan_fd;
     sigset_t chld_set;
 
+    setup_logging("qrexec-daemon");
+
     while ((opt=getopt_long(argc, argv, "hqp:D", longopts, NULL)) != -1) {
         switch (opt) {
             case 'q':

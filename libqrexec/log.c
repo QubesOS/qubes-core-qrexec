@@ -29,7 +29,7 @@
 
 #include "libqrexec-utils.h"
 
-static const char *program_name = "qrexec";
+static const char *qrexec_program_name = "qrexec";
 
 static void log_time() {
     const size_t buf_len = 32;
@@ -57,7 +57,7 @@ static void qrexec_logv(__attribute__((unused)) int level, int errnoval,
     int _errno = errno;
 
     log_time();
-    fprintf(stderr, "%s[%d]: ", program_name, getpid());
+    fprintf(stderr, "%s[%d]: ", qrexec_program_name, getpid());
     fprintf(stderr, "%s:%d:%s: ", file, line, func);
     vfprintf(stderr, fmt, ap);
     if (errnoval >= 0 && (err = strerror_r(errnoval, buf, buf_len)))
@@ -73,4 +73,8 @@ void qrexec_log(int level, int errnoval, const char *file, int line,
     va_start(ap, fmt);
     qrexec_logv(level, errnoval, file, line, func, fmt, ap);
     va_end(ap);
+}
+
+void setup_logging(const char *program_name) {
+    qrexec_program_name = program_name;
 }

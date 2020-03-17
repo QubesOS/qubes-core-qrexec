@@ -444,6 +444,8 @@ int main(int argc, char **argv)
     struct service_params svc_params;
     int data_protocol_version;
 
+    setup_logging("qrexec-client");
+
     while ((opt = getopt_long(argc, argv, "hd:l:ec:tTw:W", longopts, NULL)) != -1) {
         switch (opt) {
             case 'd':

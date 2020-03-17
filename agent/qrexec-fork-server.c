@@ -81,6 +81,8 @@ int main(int argc, char **argv) {
     struct sockaddr_un peer;
     unsigned int addrlen;
 
+    setup_logging("qrexec-fork-server");
+
     if (argc == 2) {
         socket_path = argv[1];
     } else if (argc == 1) {

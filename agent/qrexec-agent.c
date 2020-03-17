@@ -1006,6 +1006,8 @@ int main(int argc, char **argv)
     int max;
     sigset_t chld_set;
 
+    setup_logging("qrexec-agent");
+
     int opt;
     while (1) {
         opt = getopt_long(argc, argv, "ha:s:S", longopts, NULL);

@@ -136,6 +136,8 @@ int main(int argc, char **argv)
     int opt;
     const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
 
+    setup_logging("qrexec-client-vm");
+
     // TODO: this should be in process_io
     signal(SIGPIPE, SIG_IGN);
 

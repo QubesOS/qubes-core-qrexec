@@ -209,4 +209,6 @@ int process_io(const struct process_io_request *req);
 void qrexec_log(int level, int errnoval, const char *file, int line,
                 const char *func, const char *fmt, ...);
 
+void setup_logging(const char *program_name);
+
 #endif /* _LIBQREXEC_UTILS_H */
