@@ -369,16 +369,17 @@ out:
 static void init(void)
 {
     mode_t old_umask;
+    old_umask = umask(0);
+    trigger_fd = get_server_socket(agent_trigger_path);
+    umask(old_umask);
+    register_exec_func(do_exec);
+
     /* FIXME: This 0 is remote domain ID */
     ctrl_vchan = libvchan_server_init(0, VCHAN_BASE_PORT, 4096, 4096);
     if (!ctrl_vchan)
         handle_vchan_error("server_init");
     if (handle_handshake(ctrl_vchan) < 0)
         exit(1);
-    old_umask = umask(0);
-    trigger_fd = get_server_socket(agent_trigger_path);
-    umask(old_umask);
-    register_exec_func(do_exec);
 
     /* wait for qrexec daemon */
     while (!libvchan_is_open(ctrl_vchan))
