@@ -34,7 +34,7 @@
 
 int handle_handshake(libvchan_t *ctrl);
 void handle_vchan_error(const char *op);
-_Noreturn void do_exec(char *cmd, const char *user);
+_Noreturn void do_exec(const char *cmd, const char *user);
 /* call before fork() for service handling process (either end) */
 void prepare_child_env(void);
 

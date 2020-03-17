@@ -150,7 +150,7 @@ static int handle_just_exec(char *cmdline)
             do_exec(end_username, cmdline);
         default:;
     }
-    LOG(INFO, "executed (nowait) %s pid %d", cmdline, pid);
+    LOG(INFO, "executed (nowait): %s (pid %d)", cmdline, pid);
     return 0;
 }
 
@@ -235,7 +235,7 @@ static int handle_new_process_common(
                 libvchan_close(data_vchan);
                 return exit_code;
             }
-            LOG(INFO, "executed %s pid %d", cmdline, pid);
+            LOG(INFO, "executed: %s (pid %d)", cmdline, pid);
             break;
         default:
             LOG(ERROR, "unknown request type: %d", type);

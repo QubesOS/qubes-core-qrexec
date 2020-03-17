@@ -138,7 +138,7 @@ static struct pam_conv conv = {
  * If dom0 sends overly long cmd, it will probably crash qrexec-agent (unless
  * process can allocate up to 4GB on both stack and heap), sorry.
  */
-_Noreturn void do_exec(char *cmd, const char *user)
+_Noreturn void do_exec(const char *cmd, const char *user)
 {
 #ifdef HAVE_PAM
     int retval, status;

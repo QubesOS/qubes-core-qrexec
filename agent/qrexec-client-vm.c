@@ -39,7 +39,7 @@ _Noreturn void handle_vchan_error(const char *op)
     exit(1);
 }
 
-_Noreturn void do_exec(char *cmd __attribute__((unused)), char const* user __attribute__((__unused__))) {
+_Noreturn void do_exec(const char *cmd __attribute__((unused)), char const* user __attribute__((__unused__))) {
     LOG(ERROR, "BUG: do_exec function shouldn't be called!");
     abort();
 }

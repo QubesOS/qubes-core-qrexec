@@ -194,7 +194,7 @@ static void sigchld_handler(int x __attribute__((__unused__)))
 }
 
 /* called from do_fork_exec */
-static _Noreturn void do_exec(char *prog, const char *username __attribute__((unused)))
+static _Noreturn void do_exec(const char *prog, const char *username __attribute__((unused)))
 {
     /* avoid calling qubes-rpc-multiplexer through shell */
     exec_qubes_rpc_if_requested(prog, environ);

@@ -36,7 +36,7 @@
 extern char **environ;
 const bool qrexec_is_fork_server = true;
 
-void do_exec(char *cmd, const char *user __attribute__((unused)))
+void do_exec(const char *cmd, const char *user __attribute__((unused)))
 {
     char *shell;
 
