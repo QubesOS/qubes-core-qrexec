@@ -28,6 +28,8 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <libvchan.h>
+#include <errno.h>
+
 #include <qrexec.h>
 
 struct buffer {
@@ -189,5 +191,22 @@ struct process_io_request {
  * Returns intended exit code (local or remote), but calls exit() on errors.
  */
 int process_io(const struct process_io_request *req);
+
+// Logging
+
+#define DEBUG    1
+#define INFO     2
+#define WARNING  3
+#define ERROR    4
+
+#define LOG(level, fmt, args...) \
+    qrexec_log(level, -1, __FILE__, __LINE__, __func__, fmt, ##args)
+#define LOGE(level, fmt, args...) \
+    qrexec_log(level, errno, __FILE__, __LINE__, __func__, fmt, ##args)
+#define PERROR(fmt, args...) \
+    qrexec_log(ERROR, errno, __FILE__, __LINE__, __func__, fmt, ##args)
+
+void qrexec_log(int level, int errnoval, const char *file, int line,
+                const char *func, const char *fmt, ...);
 
 #endif /* _LIBQREXEC_UTILS_H */
