@@ -792,7 +792,7 @@ static int connect_daemon_socket(
         } else if (!strncmp(response, "result=deny\n", sizeof("result=deny\n")-1)) {
             return 1;
         } else {
-            warnx("invalid response");
+            LOG(ERROR, "invalid response: %s", response);
             return -1;
         }
     }
@@ -835,9 +835,9 @@ static void handle_execute_service(
                                    target_domain, service_name, request_id);
     if (result >= 0) {
         _exit(result);
-    } else {
-        warnx("invalid response");
     }
+
+    LOG(ERROR, "couldn't invoke qrexec-policy-daemon, using qrexec-policy-exec");
 
     for (i = 3; i < MAX_FDS; i++)
         close(i);

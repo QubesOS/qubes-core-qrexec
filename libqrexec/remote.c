@@ -110,9 +110,11 @@ int handle_remote_data(
             case MSG_DATA_EXIT_CODE:
                 /* remote process exited, so there is no sense to send any data
                  * to it */
-                if (hdr.len < sizeof(*status))
+                if (hdr.len < sizeof(*status)) {
+                    LOG(ERROR, "MSG_DATA_EXIT_CODE too short: " PRIu32 " < %zu",
+                        hdr.len, sizeof(*status));
                     *status = 255;
-                else
+                } else
                     memcpy(status, buf, sizeof(*status));
                 rc = REMOTE_EXITED;
                 goto out;

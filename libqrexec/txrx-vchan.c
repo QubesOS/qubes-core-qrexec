@@ -59,7 +59,6 @@ int wait_for_vchan_or_argfd_once(libvchan_t *ctrl, int max, fd_set * rdset, fd_s
         } else {
             FD_ZERO(rdset);
             FD_ZERO(wrset);
-            LOGE(INFO, "pselect");
             return 1;
         }
 
