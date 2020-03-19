@@ -208,7 +208,7 @@ int process_io(const struct process_io_request *req) {
                 fds[FD_STDIN].events = POLLOUT;
             else
                 /* if no data to be written, still monitor for stdin close
-                 * (POLLHUP) */
+                 * (POLLHUP or POLLERR) */
                 fds[FD_STDIN].events = 0;
         }
 
@@ -249,7 +249,7 @@ int process_io(const struct process_io_request *req) {
             if (libvchan_wait(vchan) < 0)
                 handle_vchan_error("wait");
 
-        if (stdin_fd >= 0 && fds[FD_STDIN].revents & POLLHUP) {
+        if (stdin_fd >= 0 && fds[FD_STDIN].revents & (POLLHUP | POLLERR)) {
             close_stdin(stdin_fd, !use_stdio_socket);
             stdin_fd = -1;
         }
