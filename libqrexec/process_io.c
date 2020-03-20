@@ -175,6 +175,9 @@ int process_io(const struct process_io_request *req) {
         if (!libvchan_data_ready(vchan) &&
                 !libvchan_is_open(vchan) &&
                 !buffer_len(stdin_buf)) {
+            LOG(ERROR,
+                "vchan connection closed early (fds: %d %d %d, status: %d %d)",
+                stdin_fd, stdout_fd, stderr_fd, local_status, remote_status);
             break;
         }
 
