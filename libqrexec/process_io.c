@@ -170,10 +170,13 @@ int process_io(const struct process_io_request *req) {
             }
         }
 
-        /* also if vchan is disconnected (and we processed all the data), there
-         * is no sense of processing further data */
-        if (!libvchan_data_ready(vchan) &&
-                !libvchan_is_open(vchan) &&
+        /* Exit the loop if vchan is disconnected (and we processed all
+         * incoming data).
+         * Check libvchan_is_open() before libvchan_data_ready() to avoid a
+         * race condition.
+         */
+        if (!libvchan_is_open(vchan) &&
+                !libvchan_data_ready(vchan) &&
                 !buffer_len(stdin_buf)) {
             LOG(ERROR,
                 "vchan connection closed early (fds: %d %d %d, status: %d %d)",
