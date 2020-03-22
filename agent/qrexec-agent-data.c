@@ -134,12 +134,18 @@ static int handle_just_exec(char *cmdline)
 {
     int fdn, pid;
 
-    char *end_username = strchr(cmdline, ':');
-    if (!end_username) {
-        LOG(ERROR, "No colon in command from dom0");
-        return -1;
+    char *username = NULL;
+    char *realcmd = cmdline;
+
+    if (!qrexec_is_fork_server) {
+        username = cmdline;
+        realcmd = strchr(cmdline, ':');
+        if (!realcmd) {
+            LOG(ERROR, "No colon in command from dom0");
+            return -1;
+        }
+        *realcmd++ = '\0';
     }
-    *end_username++ = '\0';
     switch (pid = fork()) {
         case -1:
             PERROR("fork");
@@ -147,7 +153,7 @@ static int handle_just_exec(char *cmdline)
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
-            do_exec(end_username, cmdline);
+            do_exec(realcmd, username);
         default:;
     }
     LOG(INFO, "executed (nowait): %s (pid %d)", cmdline, pid);
