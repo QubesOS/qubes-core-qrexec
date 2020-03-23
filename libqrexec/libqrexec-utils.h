@@ -42,6 +42,39 @@ struct buffer {
 #define WRITE_STDIN_BUFFERED  1 /* something still in the buffer */
 #define WRITE_STDIN_ERROR     2 /* write error, errno set */
 
+/* Parsed Qubes RPC or legacy command. */
+struct qrexec_parsed_command {
+    const char *cmdline;
+
+    /* Username ("user", NULL when strip_username is false) */
+    char *username;
+
+    /* Command (the part after "user:") */
+    const char *command;
+
+    /* Service descriptor ("qubes.Service+arg", NULL if this is a legacy
+     * command, not QUBESRPC).
+     * Not null-terminated, see below *_length parameters.
+     */
+    const char *service_descriptor;
+
+    /* Length of full descriptor ("qubes.Service+arg").
+     * At most MAX_SERVICE_NAME_LEN.
+     */
+    int service_descriptor_length;
+
+    /* Length of service name ("qubes.Service").
+     * At most NAME_MAX.
+     */
+    int service_name_length;
+};
+
+/* Parse a command, return NULL on failure. Uses cmd->cmdline
+   (do not free until destroy is called) */
+struct qrexec_parsed_command *parse_qubes_rpc_command(
+    const char *cmdline, bool strip_username);
+void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
+
 typedef void (do_exec_t)(const char *cmdline, const char *user);
 void register_exec_func(do_exec_t *func);
 /*
