@@ -1,0 +1,11 @@
+#!/bin/sh -x
+
+DIR=qubesrpc_parse_fuzzer_seed_corpus
+
+mkdir -p $DIR
+rm -f $DIR/*
+
+echo -ne 'user:ls -la' >$DIR/cmd
+echo -ne 'user:nogui:ls -la' >$DIR/cmd_nogui
+echo -ne 'user:QUBESRPC qubes.Service domX' >$DIR/rpc
+echo -ne 'user:QUBESRPC qubes.Service+arg domX' >$DIR/rpc_arg

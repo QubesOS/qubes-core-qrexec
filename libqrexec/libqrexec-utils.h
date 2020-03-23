@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <libvchan.h>
 #include <errno.h>
+#include <sys/select.h>
 
 #include <qrexec.h>
 
@@ -232,12 +233,21 @@ int process_io(const struct process_io_request *req);
 #define WARNING  3
 #define ERROR    4
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define LOG(...)
+#define LOGE(...)
+#define PERROR(...)
+#else
+
 #define LOG(level, fmt, args...) \
     qrexec_log(level, -1, __FILE__, __LINE__, __func__, fmt, ##args)
 #define LOGE(level, fmt, args...) \
     qrexec_log(level, errno, __FILE__, __LINE__, __func__, fmt, ##args)
 #define PERROR(fmt, args...) \
     qrexec_log(ERROR, errno, __FILE__, __LINE__, __func__, fmt, ##args)
+
+#endif
+
 
 void qrexec_log(int level, int errnoval, const char *file, int line,
                 const char *func, const char *fmt, ...);
