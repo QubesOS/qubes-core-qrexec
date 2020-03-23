@@ -35,8 +35,8 @@ typedef int EVTCHN;
 /* vchan server initialized, waiting for client to connect */
 #define VCHAN_WAITING 2
 
-struct libvchan;
-typedef struct libvchan libvchan_t;
+struct fuzz_file;
+typedef struct fuzz_file libvchan_t;
 
 libvchan_t *libvchan_server_init(int domain, int port, size_t read_min, size_t write_min);
 

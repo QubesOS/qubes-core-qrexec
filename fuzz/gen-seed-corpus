@@ -2,10 +2,20 @@
 
 DIR=qubesrpc_parse_fuzzer_seed_corpus
 
+rm -rf $DIR
 mkdir -p $DIR
-rm -f $DIR/*
 
 echo -ne 'user:ls -la' >$DIR/cmd
 echo -ne 'user:nogui:ls -la' >$DIR/cmd_nogui
 echo -ne 'user:QUBESRPC qubes.Service domX' >$DIR/rpc
 echo -ne 'user:QUBESRPC qubes.Service+arg domX' >$DIR/rpc_arg
+
+DIR=qrexec_remote_fuzzer_seed_corpus
+
+rm -rf $DIR
+mkdir -p $DIR
+
+echo -ne '\x90\x01\0\0\x0A\0\0\0stdin data' >$DIR/stdin_data
+echo -ne '\x91\x01\0\0\x0B\0\0\0stdout data' >$DIR/stdout_data
+echo -ne '\x92\x01\0\0\x0B\0\0\0stderr data' >$DIR/stderr_data
+echo -ne '\x93\x01\0\0\x04\0\0\0\xAA\0\0\0' >$DIR/exit_code
