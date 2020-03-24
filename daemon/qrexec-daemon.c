@@ -999,7 +999,7 @@ static void handle_message_from_agent(void)
  * to (because its pipe is full) to write_fdset. Return the highest used file
  * descriptor number, needed for the first select() parameter.
  */
-static int fill_fdsets_for_select(int vchan_fd, fd_set * read_fdset, fd_set * write_fdset)
+static int fill_fdsets_for_select(fd_set * read_fdset, fd_set * write_fdset)
 {
     int i;
     int max = -1;
@@ -1012,10 +1012,6 @@ static int fill_fdsets_for_select(int vchan_fd, fd_set * read_fdset, fd_set * wr
             max = i;
         }
     }
-
-    FD_SET(vchan_fd, read_fdset);
-    if (vchan_fd > max)
-        max = vchan_fd;
 
     FD_SET(qrexec_daemon_unix_socket_fd, read_fdset);
     if (qrexec_daemon_unix_socket_fd > max)
@@ -1116,10 +1112,8 @@ _Noreturn void usage(const char *argv0)
 
 int main(int argc, char **argv)
 {
-    fd_set read_fdset, write_fdset;
-    int i, opt, ret;
-    int max, vchan_fd;
-    sigset_t chld_set;
+    int i, opt;
+    sigset_t selectmask;
 
     setup_logging("qrexec-daemon");
 
@@ -1150,8 +1144,12 @@ int main(int argc, char **argv)
     if (argc - optind >= 3)
         default_user = argv[optind+2];
     init(remote_domain_id);
-    sigemptyset(&chld_set);
-    sigaddset(&chld_set, SIGCHLD);
+
+    sigemptyset(&selectmask);
+    sigaddset(&selectmask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &selectmask, NULL);
+    sigemptyset(&selectmask);
+
     /*
      * The main event loop. Waits for one of the following events:
      * - message from client
@@ -1160,29 +1158,24 @@ int main(int argc, char **argv)
      * - child exited
      */
     while (!terminate_requested) {
-        struct timeval tv = { 0, 1000000 };
+        struct timespec timeout = { 1, 0 };
+        fd_set rdset, wrset;
+        int ret, max;
 
-        vchan_fd = libvchan_fd_for_select(vchan);
-        max = fill_fdsets_for_select(vchan_fd, &read_fdset, &write_fdset);
-        if (libvchan_buffer_space(vchan) <= (int)sizeof(struct msg_header))
-            FD_ZERO(&read_fdset);	// vchan full - don't read from clients
-
-        sigprocmask(SIG_BLOCK, &chld_set, NULL);
         if (child_exited)
             reap_children();
-        ret = select(max+1, &read_fdset, &write_fdset, NULL, &tv);
+
+        max = fill_fdsets_for_select(&rdset, &wrset);
+        if (libvchan_buffer_space(vchan) <= (int)sizeof(struct msg_header))
+            FD_ZERO(&rdset);	// vchan full - don't read from clients
+
+        ret = pselect_vchan(vchan, max+1, &rdset, &wrset, &timeout, &selectmask);
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
-            PERROR("select");
+            PERROR("pselect");
             return 1;
         }
-        sigprocmask(SIG_UNBLOCK, &chld_set, NULL);
-
-        if (FD_ISSET(vchan_fd, &read_fdset))
-            // the following will never block; we need to do this to
-            // clear libvchan_fd pending state
-            libvchan_wait(vchan);
 
         if (!libvchan_is_open(vchan)) {
             LOG(WARNING, "qrexec-agent has disconnected");
@@ -1190,11 +1183,11 @@ int main(int argc, char **argv)
                 LOG(ERROR, "Failed to reconnect to qrexec-agent, terminating");
                 return 1;
             }
-            /* read_fdset may be outdated at this point, calculate it again. */
+            /* rdset may be outdated at this point, calculate it again. */
             continue;
         }
 
-        if (FD_ISSET(qrexec_daemon_unix_socket_fd, &read_fdset))
+        if (FD_ISSET(qrexec_daemon_unix_socket_fd, &rdset))
             handle_new_client();
 
         while (libvchan_data_ready(vchan))
@@ -1202,7 +1195,7 @@ int main(int argc, char **argv)
 
         for (i = 0; i <= max_client_fd; i++)
             if (clients[i].state != CLIENT_INVALID
-                && FD_ISSET(i, &read_fdset))
+                && FD_ISSET(i, &rdset))
                 handle_message_from_client(i);
     }
 
