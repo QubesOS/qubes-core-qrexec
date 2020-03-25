@@ -1,3 +1,155 @@
+qubes-core-qrexec (4.1.4-1) unstable; urgency=medium
+
+  [ Pawel Marczewski ]
+  * qrexec-client: ignore SIGPIPE
+  * Separate GTK test classes from object under test
+  * Skip GTK tests when DISPLAY is not set or empty
+  * agent: add options for alternative socket paths
+  * agent: don't try to change user if not necessary
+  * Add tests for agent using vchan-socket
+  * Move socket tests to qrexec/tests/socket
+  * Add tests for MSG_SERVICE_REFUSED
+  * daemon: add options to enable testing
+  * Add tests for qrexec-daemon
+  * Don't run tests as root in Docker
+  * qrexec-daemon: don't open log file when run with --direct
+  * daemon: don't listen to clients while reconnecting to agent
+
+  [ Paweł Marczewski ]
+  * agent: don't skip PAM setup outside of tests
+  * Add tests for agent communication
+  * Test that agent is sending MSG_CONNECTION_TERMINATED
+  * daemon: add tests for port allocation and connecting a service
+  * Add --socket-dir option to qrexec-client
+  * qrexec-client: close vchan before exiting
+  * Add tests for qrexec-client
+  * Add a test for client with both remote and local cmdline
+
+  [ Demi M. Obenour ]
+  * Add more generated files to .gitignore
+  * Makefile improvements
+  * Add assertions and fix compiler warnings
+  * Ensure that stdout and stdin use distinct file descriptors
+  * Working socket-based qrexec
+  * Pass service parameters to sockets
+  * Prevent socket-based services in dom0 from hanging
+  * flush_client_data(-1, buffer) should be a no-op
+  * Socket-based services do not have a local process
+  * Do not try to close the same file descriptor twice
+  * Avoid closing local_stdout_fd if writing to local_stdin_fd fails
+  * Socket-based services have no child processes
+
+  [ Marek Marczykowski-Górecki ]
+  * Add coveragerc
+
+  [ Demi M. Obenour ]
+  * Close the vchan when exiting
+  * make some variables static
+  * Fix exit status of qrexec-client
+
+  [ Paweł Marczewski ]
+  * daemon: prevent collisions between port numbers
+
+  [ Marek Marczykowski-Górecki ]
+  * tests: adjust after recent changes
+  * travis: workaround for coverage 5.0 incompatibility
+  * Collect test coverage data about C programs too
+  * daemon: minor cleanup of SIGCHLD setup
+  * daemon: add SIGTERM handler for graceful exit
+  * daemon: fix handling EINTR in the main loop
+  * tests: terminate daemon before client
+  * agent: add SIGTERM handler for graceful exit
+  * policy: move source=target check later
+
+  [ Paweł Marczewski ]
+  * Refactor execute_parsed_qubes_rpc_command
+  * Add a test for QUBESRPC and socket-based services
+  * Add a wait to port allocation test
+  * Add a TODO about test_run_dom0_command_and_connect_vm
+  * client tests: always wait for client to end
+  * tests: run strace detached (-D)
+  * Add test for terminating agent before restarting
+
+  [ Marta Marczykowska-Górecka ]
+  * Qrexec policy daemon and tests
+  * Working qrexec-policy-daemon
+  * Fixed assorted errors and better handling for logging
+  * Fixed tests and assorted bugs discovered with them
+  * Added policy caching
+  * Added tests to PolicyCache
+  * Typos cleanup
+
+  [ Paweł Marczewski ]
+  * Remove _GNU_SOURCE (definition moved to Makefile)
+  * Update qrexec-client error handling
+  * Make trailing whitespace in tests visible
+  * Add a TODO about test_run_dom0_command_and_connect_vm
+
+  [ Marek Marczykowski-Górecki ]
+  * PolicyCache: add option to lazy load policy
+
+  [ Paweł Marczewski ]
+  * daemon, agent: ensure proper shutdown
+  * Remove ConfirmCreate (unused)
+  * Compile C programs with -std=gnu11
+  * Add more tests for qrexec
+  * Add tests that cover writing into closed stdin
+  * Add tests that trigger WRITE_STDIN_BUFFERED
+
+  [ Marek Marczykowski-Górecki ]
+  * policy: don't fail if policy directory doesn't exist
+  * policy: improve PolicyCache.cleanup()
+
+  [ Paweł Marczewski ]
+  * Extract do_replace_chars()
+  * Factor out handle_remote_data to libqrexec
+  * qrexec-client: use handle_remote_data instead of handle_vchan_data
+  * Factor out handle_input from qrexec-agent-data.c
+  * qrexec-client: use the common handle_input
+  * Factor out send_exit_code()
+  * Fix replace_chars usage
+  * Factor out process_child_io
+  * qrexec-client: use common code for process_io
+  * agent: fix error path on failed service exec
+  * Fix reading from a dead process (ECONNRESET on read)
+  * Add a test in which we wait for a granchild to close streams
+  * Move all closing code to process_io.c; don't exit early
+  * Fix timeout in wait_for_vchan_or_argfd
+  * Always return remote exit status
+  * qrexec-client-vm: pass local process PID to process_io
+  * Split handle_new_process_common
+  * Add a test for replace_chars
+  * Remove debug print
+  * Fix test_exit_before_closing_streams
+  * Handle SIGPIPE in qrexec-client-vm
+  * Test stdio socket for client-vm as well
+
+  [ Marek Marczykowski-Górecki ]
+  * Use different error messages for different error paths
+  * qrexec-client{,-vm}: do not fail if cannot sent just final EOF
+  * libqrexec: fix cleanup on qubes_connect error
+  * Add '[Install]' section to qubes-qrexec-policy-daemon.service
+  * gitignore: ignore 'build' dir
+  * policy daemon: fix double ++ in logs
+  * Fix not closed file descriptors in qubes-rpc-multiplexer
+  * Test closing stdout early also through qrexec service
+  * Ensure matching libqrexec-utils package
+  * Adjust dependencies to avoid breaking non-executable services
+
+  [ Paweł Marczewski ]
+  * Add logging macros
+  * Convert error messages to logging macros
+  * Fix "executed user pid" message
+  * Include program name in logs
+  * Update log messages
+  * process_io: use poll, detect socket close
+  * Handle POLLERR for stdin as well as POLLHUP
+  * Add an error message in case of early break
+  * Fix race condition in process_io
+  * Fix qrexec-fork-server handling of MSG_JUST_EXEC
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 25 Mar 2020 16:08:16 +0100
+
 qubes-core-qrexec (4.1.3-1) unstable; urgency=medium
 
   [ Frédéric Pierret (fepitre) ]
