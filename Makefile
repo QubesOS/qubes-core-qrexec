@@ -13,12 +13,16 @@ clean:
 	+$(MAKE) -C agent clean
 .PHONY: clean
 
+
+all: all-base all-dom0 all-vm
+.PHONY: all
+
 all-base:
 	+$(MAKE) all -C libqrexec
 	$(PYTHON) setup.py build
 .PHONY: all-base
 
-install-base:
+install-base: all-base
 	+$(MAKE) install -C libqrexec
 	$(PYTHON) setup.py install -O1 $(PYTHON_PREFIX_ARG) --skip-build --root $(DESTDIR)
 	ln -s qrexec-policy-exec $(DESTDIR)/usr/bin/qrexec-policy
@@ -27,7 +31,7 @@ install-base:
 .PHONY: install-base
 
 
-all-dom0: all-base
+all-dom0:
 	+$(MAKE) all -C daemon
 .PHONY: all-dom0
 
@@ -51,7 +55,7 @@ install-dom0: all-dom0
 .PHONY: install-dom0
 
 
-all-vm: all-base
+all-vm:
 	+$(MAKE) all -C agent
 .PHONY: all-vm
 
