@@ -20,7 +20,7 @@ install: all
 	ln -s ../../bin/qrexec-client $(DESTDIR)/usr/lib/qubes/qrexec-client
 .PHONY: all clean install
 
-%: %.o
+qrexec-daemon qrexec-client: %: %.o
 	$(CC) $(LDFLAGS) -pie -g -o $@ $< $(LDLIBS)
 
 %.o: %.c
