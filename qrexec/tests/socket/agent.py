@@ -308,18 +308,22 @@ echo "wait for session: arg: $1, user: $user" >{}
         util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
 #!/bin/sh
 cat {}
-echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+read input
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 '''.format(log))
         with open(os.path.join(self.tempdir, 'rpc-config', 'qubes.Service+arg'),
                   'w') as f:
             f.write('wait-for-session=1')
+        user = getpass.getuser()
 
         target = self.execute_qubesrpc('qubes.Service+arg', 'domX')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
         target.send_message(qrexec.MSG_DATA_STDIN, b'')
         messages = target.recv_all_messages()
         self.assertListEqual(util.sort_messages(messages), [
-            (qrexec.MSG_DATA_STDOUT, b'wait for session: arg: domX, user: user\n'),
-            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: domX\n'),
+            (qrexec.MSG_DATA_STDOUT, (b'wait for session: arg: domX, user: ' +
+                                      user.encode() + b'\n')),
+            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: domX, input: stdin data\n'),
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_STDERR, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')

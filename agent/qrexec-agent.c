@@ -562,9 +562,10 @@ static int wait_for_session_maybe(char *cmdline) {
             close(stdin_pipe[1]);
             dup2(stdin_pipe[0], 0);
             exec_wait_for_session(cmd->source_domain);
+            PERROR("exec");
             exit(1);
         case -1:
-            PERROR("fork wait-for-session");
+            PERROR("fork");
             goto out;
         default:
             close(stdin_pipe[0]);
