@@ -27,11 +27,6 @@
 
 #define QREXEC_FORK_SERVER_SOCKET "/var/run/qubes/qrexec-server.%s.sock"
 
-// directory for services configuration (for example 'wait-for-session' flag)
-#define QUBES_RPC_CONFIG_DIR "/etc/qubes/rpc-config"
-// support only very small configuration files,
-#define MAX_CONFIG_SIZE 4096
-
 int handle_handshake(libvchan_t *ctrl);
 void handle_vchan_error(const char *op);
 _Noreturn void do_exec(const char *cmd, const char *user);

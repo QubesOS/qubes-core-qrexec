@@ -209,39 +209,39 @@ static int execute_parsed_qubes_rpc_command(
     int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd,
     struct buffer *stdin_buffer);
 
-static const char *skip_nogui(const char *cmdline) {
-    return strncmp(cmdline, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) ? cmdline : cmdline + NOGUI_CMD_PREFIX_LEN;
-}
-
 /*
-  Find a file in the ':'-delimited list of paths given in service_path.
+  Find a file in the ':'-delimited list of paths given in path_list.
   Returns 0 on success, -1 on failure.
-  On success, fills buffer and statbuf.
+  On success, fills buffer and statbuf (unless statbuf is NULL).
  */
-static int find_qrexec_service_file(
+static int find_file(
     const char *path_list,
-    const char *service_descriptor,
-    size_t service_descriptor_length,
+    const char *name,
     char *buffer,
     size_t buffer_size,
     struct stat *statbuf) {
 
+    struct stat dummy_buf;
     const char *path_start = path_list;
+    size_t name_length = strlen(name);
+
+    if (!statbuf)
+        statbuf = &dummy_buf;
 
     while (*path_start) {
         /* Find next path (up to ':') */
         const char *path_end = strchrnul(path_start, ':');
         size_t path_length = (size_t)(path_end - path_start);
 
-        if (path_length + service_descriptor_length + 1 >= buffer_size) {
+        if (path_length + name_length + 1 >= buffer_size) {
             LOG(ERROR, "find_qrexec_service_file: buffer too small for file path");
             return -1;
         }
 
         memcpy(buffer, path_start, path_length);
         buffer[path_length] = '/';
-        memcpy(buffer + path_length + 1, service_descriptor, service_descriptor_length);
-        buffer[path_length + service_descriptor_length + 1] = '\0';
+        strcpy(buffer + path_length + 1, name);
+        //LOG(INFO, "stat(%s)", buffer);
         if (stat(buffer, statbuf) == 0)
             return 0;
 
@@ -250,6 +250,58 @@ static int find_qrexec_service_file(
             path_start++;
     }
     return -1;
+}
+
+int load_service_config(const struct qrexec_parsed_command *cmd,
+                        int *wait_for_session) {
+    assert(cmd->service_descriptor);
+
+    const char *config_path = getenv("QUBES_RPC_CONFIG_PATH");
+    if (!config_path)
+        config_path = QUBES_RPC_CONFIG_PATH;
+
+    char config_full_path[256];
+
+    int ret = find_file(config_path, cmd->service_descriptor,
+                        config_full_path, sizeof(config_full_path), NULL);
+    if (ret < 0 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
+        ret = find_file(config_path, cmd->service_name,
+                        config_full_path, sizeof(config_full_path), NULL);
+    if (ret < 0)
+        return 0;
+
+    char config[MAX_CONFIG_SIZE];
+    char *config_iter = config;
+    FILE *config_file;
+    size_t read_count;
+    char *current_line;
+
+    config_file = fopen(config_full_path, "re");
+    if (!config_file) {
+        PERROR("Failed to load %s", config_full_path);
+        return -1;
+    }
+
+    read_count = fread(config, 1, sizeof(config)-1, config_file);
+
+    if (ferror(config_file)) {
+        fclose(config_file);
+        return -1;
+    }
+
+    // config is a text file, should not have \0 inside; but when it has, part
+    // after it will be ignored
+    config[read_count] = 0;
+
+    while ((current_line = strsep(&config_iter, "\n"))) {
+        // ignore comments
+        if (current_line[0] == '#')
+            continue;
+        sscanf(current_line, "wait-for-session=%d", wait_for_session);
+    }
+
+    fclose(config_file);
+    return 1;
 }
 
 struct qrexec_parsed_command *parse_qubes_rpc_command(
@@ -280,43 +332,71 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
     } else
         cmd->command = cmdline;
 
-    const char *start = skip_nogui(cmd->command);
+    if (strncmp(cmd->command, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) == 0) {
+        cmd->nogui = true;
+        cmd->command += NOGUI_CMD_PREFIX_LEN;
+    } else
+        cmd->nogui = false;
 
     /* If the command starts with "QUBESRPC ", parse service descriptor */
-    if (strncmp(start, RPC_REQUEST_COMMAND " ",
+    if (strncmp(cmd->command, RPC_REQUEST_COMMAND " ",
                 RPC_REQUEST_COMMAND_LEN + 1) == 0) {
-        cmd->service_descriptor = start + RPC_REQUEST_COMMAND_LEN + 1;
-        const char *end_service_descriptor =
-            strchrnul(cmd->service_descriptor, ' ');
-        if (!end_service_descriptor) {
+        const char *start, *end;
+
+        /* Parse service descriptor ("qubes.Service+arg") */
+
+        start = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
+        end = strchr(start, ' ');
+        if (!end) {
             LOG(ERROR, "No space found after service descriptor");
             goto err;
         }
 
-        cmd->service_descriptor_length =
-            end_service_descriptor - cmd->service_descriptor;
-
-        if (cmd->service_descriptor_length > MAX_SERVICE_NAME_LEN) {
+        if (end - start > MAX_SERVICE_NAME_LEN) {
             LOG(ERROR, "Command too long (length %zu)",
-                cmd->service_descriptor_length);
+                end - start);
             goto err;
         }
 
-        const char *end_service_name = memchr(
-            cmd->service_descriptor, '+', cmd->service_descriptor_length);
-        if (end_service_name)
-            cmd->service_name_length =
-                end_service_name - cmd->service_descriptor;
-        else
-            cmd->service_name_length = cmd->service_descriptor_length;
-
-        if (cmd->service_name_length == 0) {
-            LOG(ERROR, "Service name empty");
+        cmd->service_descriptor = strndup(start, end - start);
+        if (!cmd->service_descriptor) {
+            PERROR("strndup");
             goto err;
         }
-        if (cmd->service_name_length > NAME_MAX) {
-            LOG(ERROR, "Service name too long to execute (length %zu)",
-                cmd->service_name_length);
+
+        /* Parse service name ("qubes.Service") */
+
+        const char *plus = memchr(start, '+', end - start);
+        if (plus) {
+            if (plus - start == 0) {
+                LOG(ERROR, "Service name empty");
+                goto err;
+            }
+            if (plus - start > NAME_MAX) {
+                LOG(ERROR, "Service name too long to execute (length %zu)",
+                    plus - start);
+                goto err;
+            }
+            cmd->service_name = strndup(start, plus - start);
+            if (!cmd->service_name) {
+                PERROR("strndup");
+                goto err;
+            }
+        } else {
+            cmd->service_name = strndup(start, end - start);
+            if (!cmd->service_name) {
+                PERROR("strdup");
+                goto err;
+            }
+        }
+
+        /* Parse source domain */
+
+        start = end + 1; /* after the space */
+        end = strchrnul(start, ' ');
+        cmd->source_domain = strndup(start, end - start);
+        if (!cmd->source_domain) {
+            PERROR("strndup");
             goto err;
         }
     }
@@ -331,6 +411,12 @@ err:
 void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd) {
     if (cmd->username)
         free(cmd->username);
+    if (cmd->service_descriptor)
+        free(cmd->service_descriptor);
+    if (cmd->service_name)
+        free(cmd->service_name);
+    if (cmd->source_domain)
+        free(cmd->source_domain);
     free(cmd);
 }
 
@@ -373,29 +459,15 @@ static int execute_parsed_qubes_rpc_command(
     char service_full_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
     struct stat statbuf;
 
-    int ret = find_qrexec_service_file(
-        qrexec_service_path,
-        cmd->service_descriptor,
-        cmd->service_descriptor_length,
-        service_full_path,
-        QUBES_SOCKADDR_UN_MAX_PATH_LEN,
-        &statbuf);
-    if (ret < 0 && cmd->service_name_length < cmd->service_descriptor_length) {
-        /*
-          If this is a path with argument (service+arg),
-          try looking for bare path without argument.
-        */
-        ret = find_qrexec_service_file(
-            qrexec_service_path,
-            cmd->service_descriptor,
-            cmd->service_name_length,
-            service_full_path,
-            QUBES_SOCKADDR_UN_MAX_PATH_LEN,
-            &statbuf);
-    }
+    int ret = find_file(qrexec_service_path, cmd->service_descriptor,
+                        service_full_path, sizeof(service_full_path),
+                        &statbuf);
+    if (ret < 0 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
+        ret = find_file(qrexec_service_path, cmd->service_name,
+                        service_full_path, sizeof(service_full_path),
+                        &statbuf);
     if (ret < 0) {
-        LOG(ERROR, "Service not found: %.*s",
-            (int) cmd->service_descriptor_length,
+        LOG(ERROR, "Service not found: %s",
             cmd->service_descriptor);
         return -1;
     }
@@ -418,7 +490,10 @@ static int execute_parsed_qubes_rpc_command(
             *stderr_fd = -1;
         *pid = 0;
         set_nonblock(s);
-        buffer_append(stdin_buffer, cmd->service_descriptor, strlen(cmd->service_descriptor) + 1);
+
+        /* send part after "QUBESRPC ", including trailing NUL */
+        const char *desc = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
+        buffer_append(stdin_buffer, desc, strlen(desc) + 1);
         return 0;
     }
 
@@ -436,5 +511,24 @@ static int execute_parsed_qubes_rpc_command(
     LOG(ERROR, "Unknown service type (not executable, not a socket): %s",
         service_full_path);
     return -1;
+}
+
+int exec_wait_for_session(const char *source_domain) {
+    const char *qrexec_service_path = getenv("QREXEC_SERVICE_PATH");
+    if (!qrexec_service_path)
+        qrexec_service_path = QREXEC_SERVICE_PATH;
+
+    const char *service_name = "qubes.WaitForSession";
+
+    char service_full_path[256];
+
+    int ret = find_file(qrexec_service_path, service_name,
+                        service_full_path, sizeof(service_full_path), NULL);
+    if (ret < 0) {
+        LOG(ERROR, "Service not found: %s", service_name);
+        return -1;
+    }
+
+    return execl(service_full_path, service_name, source_domain, NULL);
 }
 // vim: set sw=4 ts=4 sts=4 et:
