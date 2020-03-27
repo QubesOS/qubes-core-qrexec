@@ -20,9 +20,11 @@ env:
 
 jobs:
   include:
-    - python: '3.7'
+    - name: pylint
+      python: '3.7'
       script: pylint qrexec
-    - install:
+    - name: run-tests
+      install:
        - pip install --quiet codecov
        - pip install --quiet 'coverage<5.0'
        - docker build -t qrexec-test ci
@@ -34,6 +36,11 @@ jobs:
        - find . -type f -name '*.gcno'  -exec rm  {} +
 #    - python: '3.7'
 #      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
+    - name: fuzz
+      install:
+       - sudo apt-get -y install clang
+      script:
+       - make -C fuzz test
     - stage: deploy
       python: '3.6'
       script: ~/qubes-builder/scripts/travis-deploy
