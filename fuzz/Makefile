@@ -5,31 +5,42 @@ CFLAGS += -g -Werror
 CFLAGS += -I. -I../libqrexec
 CFLAGS += -std=c11 -D_GNU_SOURCE -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 
-.PHONY: all
-all: qubesrpc_parse_fuzzer qubesrpc_parse_fuzzer_seed_corpus.zip
-
-.PHONY: test
-test: test-compile
-	rm -rf qubesrpc_parse_fuzzer_seed_corpus
-	unzip qubesrpc_parse_fuzzer_seed_corpus.zip
-	./qubesrpc_parse_fuzzer qubesrpc_parse_fuzzer_seed_corpus
-
-.PHONY: test-compile
-test-compile:
-	$(MAKE) CC=clang CFLAGS='-O1 -fno-omit-frame-pointer -gline-tables-only \
+ifndef LIB_FUZZING_ENGINE
+CC = clang
+CFLAGS += -O1 -fno-omit-frame-pointer -gline-tables-only \
 		-fsanitize=address \
-		-fsanitize-address-use-after-scope -fsanitize=fuzzer'
+		-fsanitize-address-use-after-scope -fsanitize=fuzzer
+endif
 
+_LIBQREXEC_OBJS = remote.o write-stdin.o ioall.o txrx-vchan.o buffer.o replace.o exec.o log.o
+LIBQREXEC_OBJS = $(patsubst %.o,libqrexec-%.o,$(_LIBQREXEC_OBJS))
 
-qubesrpc_parse_fuzzer_seed_corpus.zip: gen-seed-corpus
+FUZZERS = qubesrpc_parse_fuzzer qrexec_remote_fuzzer
+SEEDS = $(patsubst %,%_seed_corpus.zip,$(FUZZERS))
+
+.PHONY: all
+all: $(FUZZERS) $(SEEDS)
+
+$(SEEDS): gen-seed-corpus
 	./gen-seed-corpus
-	rm -f qubesrpc_parse_fuzzer_seed_corpus.zip
-	zip -q -r qubesrpc_parse_fuzzer_seed_corpus.zip qubesrpc_parse_fuzzer_seed_corpus
+	for fuzzer in $(FUZZERS); do \
+		zip -q -r $${fuzzer}_seed_corpus.zip $${fuzzer}_seed_corpus; \
+	done
 
-qubesrpc_parse_fuzzer: qubesrpc_parse_fuzzer.o libqrexec-exec.o libqrexec-log.o libqrexec-buffer.o libqrexec-ioall.o
+test: $(patsubst %,test-%,$(FUZZERS))
+
+test-%: % %_seed_corpus.zip
+	rm -rf $<_seed_corpus
+	unzip $<_seed_corpus.zip
+	./$< $<_seed_corpus -runs=100000
+
+%_fuzzer: %_fuzzer.o fuzz.o $(LIBQREXEC_OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIB_FUZZING_ENGINE)
 
-qubesrpc_parse_fuzzer.o: qubesrpc_parse_fuzzer.c
+%_fuzzer.o: %_fuzzer.c
+	$(CC) $(CFLAGS) -o $@ -c $^
+
+fuzz.o: fuzz.c
 	$(CC) $(CFLAGS) -o $@ -c $^
 
 libqrexec-%.o: ../libqrexec/%.c
@@ -37,4 +48,5 @@ libqrexec-%.o: ../libqrexec/%.c
 
 .PHONY: clean
 clean:
-	rm *.o *.zip *_fuzzer *_fuzzer_seed_corpus
+	rm -f *.o *.zip *_fuzzer
+	rm -rf *_fuzzer_seed_corpus

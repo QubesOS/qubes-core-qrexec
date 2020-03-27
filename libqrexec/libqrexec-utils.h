@@ -33,6 +33,10 @@
 
 #include <qrexec.h>
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#include "mock-fuzz.h"
+#endif
+
 struct buffer {
     char *data;
     int buflen;
