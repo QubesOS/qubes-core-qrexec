@@ -39,6 +39,7 @@ BuildRequires:	python3-sphinx
 BuildRequires:	python3-dbus
 BuildRequires:	qubes-libvchan-devel
 BuildRequires:  qubes-core-qrexec-devel
+BuildRequires:	systemd-devel
 
 Requires:   python3
 Requires:   qubes-core-dom0
