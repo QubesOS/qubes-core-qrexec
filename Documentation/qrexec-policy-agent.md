@@ -10,7 +10,8 @@ Display a prompt about whether to allow an action.
 
 The request is a JSON dictionary with the following keys:
 - `source` - source domain (`"work"`)
-- `service_name` - name of service without argument (`"qubes.Filecopy"`)
+- `service` - name of service without argument (`"qubes.Filecopy"`)
+- `argument` - argument, always starts with `+` (`"+arg"`, `"+"` if empty)
 - `targets` - list of possible targets (`["personal", "@dispvm:work"]`)
 - `default_target` - initially chosen target (`"personal"`) or empty string (`""`)
 - `icons` - a dictionary icon names (recognizable by GTK) for all domains mentioned in other keys (`{"personal": "red", "work": "green", ...}`)
@@ -29,6 +30,7 @@ The request is a JSON dictionary with the following keys:
   - "fail" - the service was allowed, but failed to start
 - `source` - source domain ("work")
 - `service` - name of service without argument (`"qubes.Filecopy"`)
+- `argument` - argument, always starts with `+` (`"+arg"`, `"+"` if empty)
 - `target` - target, either intended (in case of `"deny"`) or actual (otherwise)
 
 The response is empty.

@@ -88,6 +88,7 @@ class AgentAskResolution(parser.AskResolution):
         params = {
             'source': self.request.source,
             'service': self.request.service,
+            'argument': self.request.argument,
             'targets': self.targets_for_ask,
             'default_target': self.default_target or '',
             'icons': icons,
@@ -124,6 +125,7 @@ class NotifyAllowedResolution(parser.AllowResolution):
                 await notify(guivm, {
                     'resolution': 'allow',
                     'service': self.request.service,
+                    'argument': self.request.argument,
                     'source': self.request.source,
                     'target': self.target,
                 })
@@ -134,6 +136,7 @@ class NotifyAllowedResolution(parser.AllowResolution):
                 await notify(guivm, {
                     'resolution': 'fail',
                     'service': self.request.service,
+                    'argument': self.request.argument,
                     'source': self.request.source,
                     'target': self.target,
                 })
@@ -282,6 +285,7 @@ async def handle_request(
                 await notify(guivm, {
                     'resolution': 'deny',
                     'service': service,
+                    'argument': argument,
                     'source': source,
                     'target': intended_target,
                 })

@@ -658,7 +658,7 @@ class Request:
 
     Args:
         service (str or None): Service name.
-        argument (str or None): The argument. Must start with ``'+'``.
+        argument (str): The argument. Must start with ``'+'``.
         source (str): name of source qube
         target (str): target designation
         system_info (dict): as returned from

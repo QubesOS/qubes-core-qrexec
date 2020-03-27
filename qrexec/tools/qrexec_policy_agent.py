@@ -381,20 +381,6 @@ class RPCConfirmationWindow:
     def _can_perform_action(self):
         return self._focus_helper.can_perform_action()
 
-    @staticmethod
-    def _escape_and_format_rpc_text(rpc_operation):
-        escaped = GLib.markup_escape_text(rpc_operation)
-
-        partitioned = escaped.partition('.')
-        formatted = partitioned[0] + partitioned[1]
-
-        if partitioned[2]:
-            formatted += "<b>" + partitioned[2] + "</b>"
-        else:
-            formatted = "<b>" + formatted + "</b>"
-
-        return formatted
-
     def _connect_events(self):
         self._rpc_window.connect("key-press-event", self._key_pressed)
         self._rpc_ok_button.connect("clicked", self._clicked_ok)
@@ -402,7 +388,7 @@ class RPCConfirmationWindow:
 
         self._error_bar.connect("response", self._close_error)
 
-    def __init__(self, entries_info, source, rpc_operation, targets_list,
+    def __init__(self, entries_info, source, service, argument, targets_list,
             target=None):
         # pylint: disable=too-many-arguments
         sanitize_domain_name(source, assert_sanitized=True)
@@ -431,7 +417,7 @@ class RPCConfirmationWindow:
         self._focus_helper = self._new_focus_stealing_helper()
 
         self._rpc_label.set_markup(
-                    self._escape_and_format_rpc_text(rpc_operation))
+            escape_and_format_rpc_text(service, argument))
 
         self._entries_info = entries_info
         list_modeler = self._new_vm_list_modeler()
@@ -477,12 +463,29 @@ class RPCConfirmationWindow:
         return False
 
 
-async def confirm_rpc(entries_info, source, rpc_operation, targets_list,
+async def confirm_rpc(entries_info, source, service, argument, targets_list,
                       target=None):
-    window = RPCConfirmationWindow(entries_info, source, rpc_operation,
+    # pylint: disable=too-many-arguments
+    window = RPCConfirmationWindow(entries_info, source, service, argument,
                                    targets_list, target)
 
     return await window.confirm_rpc()
+
+
+def escape_and_format_rpc_text(service, argument=''):
+    service = GLib.markup_escape_text(service)
+    argument = GLib.markup_escape_text(argument)
+
+    domain, dot, name = service.partition('.')
+    if dot and name:
+        result = '{}.<b>{}</b>'.format(domain, name)
+    else:
+        result = '<b>{}</b>'.format(service)
+
+    if argument != '+':
+        result += argument
+
+    return result
 
 
 class PolicyAgent(SocketService):
@@ -501,7 +504,8 @@ class PolicyAgent(SocketService):
 
     async def handle_ask(self, params):
         source = params['source']
-        service_name = params['service']
+        service = params['service']
+        argument = params['argument']
         targets = params['targets']
         default_target = params['default_target']
 
@@ -510,7 +514,7 @@ class PolicyAgent(SocketService):
             entries_info[domain_name] = {'icon': icon}
 
         target = await confirm_rpc(
-            entries_info, source, service_name,
+            entries_info, source, service, argument,
             targets, default_target or None)
 
         if target:
@@ -519,38 +523,47 @@ class PolicyAgent(SocketService):
 
     async def handle_notify(self, params):
         resolution = params['resolution']
-        service_name = params['service']
+        service = params['service']
+        argument = params['argument']
         source = params['source']
         target = params['target']
 
         assert resolution in ['allow', 'deny', 'fail'], resolution
 
-        self.notify(resolution, service_name, source, target)
+        self.notify(resolution, service, argument, source, target)
         return ''
 
-    def notify(self, resolution, service_name, source, target):
+    def notify(self, resolution, service, argument, source, target):
+        # pylint: disable=too-many-arguments
+        if argument == '+':
+            rpc = service
+        else:
+            rpc = service + argument
+
         if resolution == 'allow':
             app_icon = None
-            summary = 'Allowed: {service_name}'
-            body = ('Allowed <b>{service_name}</b> '
+            summary = 'Allowed: {service}'
+            body = ('Allowed <b>{rpc}</b> '
                     'from <b>{source}</b> to <b>{target}</b>')
         elif resolution == 'deny':
             app_icon = 'dialog-error'
-            summary = 'Denied: {service_name}'
-            body = ('Denied <b>{service_name}</b> '
+            summary = 'Denied: {service}'
+            body = ('Denied <b>{rpc}</b> '
                     'from <b>{source}</b> to <b>{target}</b>')
         elif resolution == 'fail':
             app_icon = 'dialog-warning'
-            summary = 'Failed: {service_name}'
-            body = ('Failed to execute <b>{service_name}</b> '
+            summary = 'Failed: {service}'
+            body = ('Failed to execute <b>{rpc}</b> '
                     '(from <b>{source}</b> to <b>{target}</b>)')
         else:
             assert False, resolution
 
-        summary = summary.format(
-            service_name=service_name, source=source, target=target)
+        # summary is plain text, body is markup
+        summary = summary.format(service=service)
         body = body.format(
-            service_name=service_name, source=source, target=target)
+            rpc=GLib.markup_escape_text(rpc),
+            source=GLib.markup_escape_text(source),
+            target=GLib.markup_escape_text(target))
 
         notification = Gio.Notification.new(summary)
         notification.set_priority(Gio.NotificationPriority.NORMAL)
