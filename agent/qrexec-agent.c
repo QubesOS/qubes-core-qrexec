@@ -1002,9 +1002,7 @@ _Noreturn void usage(const char *argv0)
 
 int main(int argc, char **argv)
 {
-    fd_set rdset, wrset;
-    int max;
-    sigset_t chld_set;
+    sigset_t selectmask;
 
     setup_logging("qrexec-agent");
 
@@ -1033,21 +1031,31 @@ int main(int argc, char **argv)
     signal(SIGCHLD, sigchld_handler);
     signal(SIGTERM, sigterm_handler);
     signal(SIGPIPE, SIG_IGN);
-    sigemptyset(&chld_set);
-    sigaddset(&chld_set, SIGCHLD);
 
+    sigemptyset(&selectmask);
+    sigaddset(&selectmask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &selectmask, NULL);
+    sigemptyset(&selectmask);
 
     while (!terminate_requested) {
-        sigprocmask(SIG_BLOCK, &chld_set, NULL);
+        struct timespec timeout = { 1, 0 };
+        fd_set rdset, wrset;
+        int ret, max;
+
         if (child_exited)
             reap_children();
+
         max = fill_fds_for_select(&rdset, &wrset);
-        if (libvchan_buffer_space(ctrl_vchan) <=
-                (int)sizeof(struct msg_header))
+        if (libvchan_buffer_space(ctrl_vchan) <= (int)sizeof(struct msg_header))
             FD_ZERO(&rdset);
 
-        wait_for_vchan_or_argfd(ctrl_vchan, max, &rdset, &wrset);
-        sigprocmask(SIG_UNBLOCK, &chld_set, NULL);
+        ret = pselect_vchan(ctrl_vchan, max+1, &rdset, &wrset, &timeout, &selectmask);
+        if (ret < 0) {
+            if (errno == EINTR)
+                continue;
+            PERROR("pselect");
+            return 1;
+        }
 
         while (libvchan_data_ready(ctrl_vchan))
             handle_server_cmd();
