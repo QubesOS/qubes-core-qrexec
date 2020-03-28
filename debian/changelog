@@ -1,3 +1,43 @@
+qubes-core-qrexec (4.1.6-1) unstable; urgency=medium
+
+  [ Paweł Marczewski ]
+  * Factor out parse_qubes_rpc_command
+  * Add a fuzzer for parse_qubes_rpc_command
+  * Add a fuzzer for handle_remote_data
+  * daemon, agent: unify main loop
+
+  [ Marek Marczykowski-Górecki ]
+  * rpm: add BR: systemd-devel to packages using %systemd_* macros
+
+  [ Paweł Marczewski ]
+  * Rewrite CLI tests
+  * qrexec-policy-exec: don't use exit() directly in --just-ask
+  * qrexec-policy-agent: prepare for GuiVM
+  * qrexec-policy-agent: install in the common package, use socket
+    activation
+  * qrexec-policy-agent: enable systemd socket
+  * travis: run pylint from docker
+  * Add missing license header
+  * qrexec-policy-agent: add policy.Notify call
+  * Support notifications on allowed and denied calls
+  * Refactor socket server into a more reusable SocketService class
+  * qrexec-policy-exec: recover from failure when notifying
+  * qrexec-policy-exec: handle 'execution failed' corner case
+  * Change format for 'ask' response
+  * qrexec-policy-daemon: don't reply with result=allow before execution
+  * Add a test for no-GuiVM notifications
+  * Document qrexec-policy-agent API
+  * Refactor socket service handling
+  * Clean up call() and call_async()
+  * Add a requirement for qubes-core-dom0 version >= 4.1.9
+  * policy-agent: use autostart program, not systemd service
+  * qrexec-policy-agent: always show service argument
+  * Factor out parsing service configuration
+  * Support wait-for-session in dom0
+  * travis: add job names, add fuzzer
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 28 Mar 2020 04:08:39 +0100
+
 qubes-core-qrexec (4.1.5-1) unstable; urgency=medium
 
   * daemon: fix makefile
