@@ -54,24 +54,26 @@ struct qrexec_parsed_command {
     /* Username ("user", NULL when strip_username is false) */
     char *username;
 
+    /* Override to disable "wait for session" */
+    bool nogui;
+
     /* Command (the part after "user:") */
     const char *command;
 
-    /* Service descriptor ("qubes.Service+arg", NULL if this is a legacy
-     * command, not QUBESRPC).
-     * Not null-terminated, see below *_length parameters.
-     */
-    const char *service_descriptor;
+    /* The below parameters are NULL for legacy (non-"QUBESRPC") commands. */
 
-    /* Length of full descriptor ("qubes.Service+arg").
-     * At most MAX_SERVICE_NAME_LEN.
+    /* Service descriptor ("qubes.Service+arg").
+     * At most MAX_SERVICE_NAME_LEN long.
      */
-    int service_descriptor_length;
+    char *service_descriptor;
 
-    /* Length of service name ("qubes.Service").
-     * At most NAME_MAX.
+    /* Service name ("qubes.Service").
+     * At most NAME_MAX long.
      */
-    int service_name_length;
+    char *service_name;
+
+    /* Source domain (the part after service name). */
+    char *source_domain;
 };
 
 /* Parse a command, return NULL on failure. Uses cmd->cmdline
@@ -79,6 +81,17 @@ struct qrexec_parsed_command {
 struct qrexec_parsed_command *parse_qubes_rpc_command(
     const char *cmdline, bool strip_username);
 void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
+
+/* Load service configuration, currently only wait-for-session option
+ * supported.
+ *
+ * Return:
+ *  1  - config successfuly loaded
+ *  0  - config not found
+ *  -1 - other error
+ */
+int load_service_config(const struct qrexec_parsed_command *cmd_name,
+                        int *wait_for_session);
 
 typedef void (do_exec_t)(const char *cmdline, const char *user);
 void register_exec_func(do_exec_t *func);
@@ -88,6 +101,8 @@ void register_exec_func(do_exec_t *func);
  * otherwise, return false without any action
  */
 void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]);
+
+int exec_wait_for_session(const char *source_domain);
 
 void buffer_init(struct buffer *b);
 void buffer_free(struct buffer *b);

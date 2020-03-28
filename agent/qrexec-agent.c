@@ -510,60 +510,6 @@ static void register_vchan_connection(pid_t pid, int fd, int domain, int port)
     LOG(ERROR, "No free slot for child %d (connection to %d:%d)", pid, domain, port);
 }
 
-/* Load service configuration from /etc/qubes/rpc-config/
- * (QUBES_RPC_CONFIG_DIR), currently only wait-for-session option supported.
- *
- * Return:
- *  1  - config successfuly loaded
- *  0  - config not found
- *  -1 - other error
- */
-static int load_service_config(const char *service_name, int *wait_for_session) {
-    char filename[256];
-    char config[MAX_CONFIG_SIZE];
-    char *config_iter = config;
-    FILE *config_file;
-    size_t read_count;
-    char *current_line;
-
-    if (snprintf(filename, sizeof(filename), "%s/%s",
-                QUBES_RPC_CONFIG_DIR, service_name) >= (int)sizeof(filename)) {
-        /* buffer too small?! */
-        return -1;
-    }
-
-    config_file = fopen(filename, "re");
-    if (!config_file) {
-        if (errno == ENOENT)
-            return 0;
-        else {
-            PERROR("Failed to load %s", filename);
-            return -1;
-        }
-    }
-
-    read_count = fread(config, 1, sizeof(config)-1, config_file);
-
-    if (ferror(config_file)) {
-        fclose(config_file);
-        return -1;
-    }
-
-    // config is a text file, should not have \0 inside; but when it has, part
-    // after it will be ignored
-    config[read_count] = 0;
-
-    while ((current_line = strsep(&config_iter, "\n"))) {
-        // ignore comments
-        if (current_line[0] == '#')
-            continue;
-        sscanf(current_line, "wait-for-session=%d", wait_for_session);
-    }
-
-    fclose(config_file);
-    return 1;
-}
-
 /* Check if requested command/service require GUI session and if so, initiate
  * waiting process.
  *
@@ -573,90 +519,41 @@ static int load_service_config(const char *service_name, int *wait_for_session) 
  *  - 0 - waiting is not needed, caller may proceed with request immediately
  */
 static int wait_for_session_maybe(char *cmdline) {
-    char *realcmd = strchr(cmdline, ':');
-    char *user, *service_name, *source_domain, *service_argument;
+    struct qrexec_parsed_command *cmd;
     int stdin_pipe[2];
     int wait_for_session = 0;
+    int ret = 0;
 
-    if (!realcmd)
-        /* no colon in command line, this will be properly reported later */
+    cmd = parse_qubes_rpc_command(cmdline, true);
+    if (!cmd)
+        /* error parsing the command, this will be properly reported later */
         return 0;
 
-    /* "nogui:" prefix have priority - do not wait for session */
-    if (strncmp(realcmd, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) == 0)
-        return 0;
-
-    /* extract username */
-    user = strndup(cmdline, realcmd - cmdline);
-    realcmd++;
+    /* "nogui:" prefix has priority - do not wait for session */
+    if (cmd->nogui)
+        goto out;
 
     /* wait for session only for service requests */
-    if (strncmp(realcmd, RPC_REQUEST_COMMAND " ", RPC_REQUEST_COMMAND_LEN+1) != 0) {
-        free(user);
-        return 0;
-    }
+    if (!cmd->service_descriptor)
+        goto out;
 
-    realcmd += RPC_REQUEST_COMMAND_LEN+1;
-    /* now realcmd contains service name (possibly with argument after '+'
-     * char) and source domain name, after space */
-    source_domain = strchr(realcmd, ' ');
-    if (!source_domain) {
-        /* qrexec-rpc-multiplexer will properly report this */
-        free(user);
-        return 0;
-    }
-    service_name = strndup(realcmd, source_domain - realcmd);
-    source_domain++;
+    /* load service config - if it fails, use initial value */
+    load_service_config(cmd, &wait_for_session);
 
-    /* first try to load config for specific argument */
-    switch (load_service_config(service_name, &wait_for_session)) {
-        case 0:
-            /* no config for specific argument, try for bare service name */
-            service_argument = strchr(service_name, '+');
-            if (!service_argument) {
-                /* there was no argument, so no config at all - do not wait for
-                 * session */
-                free(user);
-                return 0;
-            }
-            /* cut off the argument */
-            *service_argument = '\0';
-
-            if (load_service_config(service_name, &wait_for_session) != 1) {
-                /* no config, or load error -> no wait for session */
-                free(user);
-                return 0;
-            }
-            break;
-
-        case 1:
-            /* config loaded */
-            break;
-
-        case -1:
-            /* load error -> no wait for session */
-            free(user);
-            return 0;
-    }
-
-    if (!wait_for_session) {
+    if (!wait_for_session)
         /* setting not set, or set to 0 */
-        free(user);
-        return 0;
-    }
+        goto out;
 
     /* ok, now we know that service is configured to wait for session */
-
     if (wait_for_session_pid != -1) {
         /* we're already waiting */
-        free(user);
-        return 1;
+        ret = 1;
+        goto out;
     }
 
     if (pipe(stdin_pipe) == -1) {
         PERROR("pipe for wait-for-session");
-        free(user);
-        return 0;
+        goto out;
     }
     /* start waiting process */
     wait_for_session_pid = fork();
@@ -664,24 +561,27 @@ static int wait_for_session_maybe(char *cmdline) {
         case 0:
             close(stdin_pipe[1]);
             dup2(stdin_pipe[0], 0);
-            execl("/etc/qubes-rpc/qubes.WaitForSession", "qubes.WaitForSession",
-                    source_domain, (char*)NULL);
+            exec_wait_for_session(cmd->source_domain);
+            PERROR("exec");
             exit(1);
         case -1:
-            PERROR("fork wait-for-session");
-            free(user);
-            return 0;
+            PERROR("fork");
+            goto out;
         default:
             close(stdin_pipe[0]);
-            if (write(stdin_pipe[1], user, strlen(user)) == -1)
+            if (write(stdin_pipe[1], cmd->username, strlen(cmd->username)) == -1)
                 PERROR("write error");
             if (write(stdin_pipe[1], "\n", 1) == -1)
                 PERROR("write error");
             close(stdin_pipe[1]);
     }
-    free(user);
+
     /* qubes.WaitForSession started, postpone request until it report back */
-    return 1;
+    ret = 1;
+
+out:
+    destroy_qrexec_parsed_command(cmd);
+    return ret;
 }
 
 

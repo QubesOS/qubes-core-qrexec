@@ -40,15 +40,14 @@ void LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         return;
     }
 
-    // fprintf(stderr, "%s %s %s", cmd->username, cmd->command, cmd->service_descriptor);
-
-    if (cmd->username)
-        assert(strlen(cmd->username) < size);
+    assert(strlen(cmd->username) < size);
+    assert(strlen(cmd->command) < size);
     if (cmd->service_descriptor) {
-        int len = strlen(cmd->service_descriptor);
-        assert(len < size);
-        assert(cmd->service_descriptor_length <= len);
-        assert(cmd->service_name_length <= len);
+        assert(cmd->service_name);
+        assert(cmd->source_domain);
+        assert(strlen(cmd->service_descriptor) < size);
+        assert(strlen(cmd->service_name) <= strlen(cmd->service_descriptor));
+        assert(strlen(cmd->source_domain) < size);
     }
     destroy_qrexec_parsed_command(cmd);
     free(cmdline);

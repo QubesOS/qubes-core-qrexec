@@ -99,6 +99,7 @@ rm -f %{name}-%{version}
 %dir %{_sysconfdir}/qubes-rpc/policy/include
 
 %{_sysconfdir}/qubes-rpc/policy.RegisterArgument
+%{_sysconfdir}/qubes-rpc/qubes.WaitForSession
 
 /lib/systemd/system/qubes-qrexec-policy-daemon.service
 

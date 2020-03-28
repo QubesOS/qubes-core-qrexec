@@ -208,6 +208,50 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
 }
 
 
+/* See also qrexec-agent.c:wait_for_session_maybe() */
+static void wait_for_session_maybe(char *cmdline)
+{
+    int wait_for_session = 0;
+    struct qrexec_parsed_command *cmd;
+    pid_t pid;
+    int status;
+
+    cmd = parse_qubes_rpc_command(cmdline, false);
+    if (!cmd)
+        goto out;
+
+    if (cmd->nogui)
+        goto out;
+
+    if (!cmd->service_descriptor)
+        goto out;
+
+    load_service_config(cmd, &wait_for_session);
+    if (!wait_for_session)
+        goto out;
+
+    pid = fork();
+    switch (pid) {
+        case 0:
+            close(0);
+            exec_wait_for_session(cmd->source_domain);
+            PERROR("exec");
+            exit(1);
+        case -1:
+            PERROR("fork");
+            goto out;
+    }
+
+    if (waitpid(local_pid, &status, 0) > 0) {
+        if (status != 0)
+            LOG(ERROR, "wait-for-session exited with status %d", status);
+    } else
+        PERROR("waitpid");
+
+out:
+    destroy_qrexec_parsed_command(cmd);
+}
+
 static void prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
 {
     if (stdin_buffer == NULL)
@@ -527,6 +571,7 @@ int main(int argc, char **argv)
 
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
+        wait_for_session_maybe(remote_cmdline);
         prepare_local_fds(remote_cmdline, &stdin_buffer);
         if (connect_existing) {
             void (*old_handler)(int);

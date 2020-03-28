@@ -50,6 +50,7 @@ class TestAgentBase(unittest.TestCase):
         self.tempdir = tempfile.mkdtemp()
         os.mkdir(os.path.join(self.tempdir, 'local-rpc'))
         os.mkdir(os.path.join(self.tempdir, 'rpc'))
+        os.mkdir(os.path.join(self.tempdir, 'rpc-config'))
         self.addCleanup(shutil.rmtree, self.tempdir)
 
     def start_agent(self):
@@ -61,6 +62,8 @@ class TestAgentBase(unittest.TestCase):
             os.path.join(self.tempdir, 'local-rpc'),
             os.path.join(self.tempdir, 'rpc'),
         ])
+        env['QUBES_RPC_CONFIG_PATH'] = \
+            os.path.join(self.tempdir, 'rpc-config')
         env['QREXEC_MULTIPLEXER_PATH'] = os.path.join(
             ROOT_PATH, 'lib', 'qubes-rpc-multiplexer')
         cmd = [
@@ -290,6 +293,37 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
         messages = target.recv_all_messages()
         self.assertListEqual(util.sort_messages(messages), [
             (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: domX\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_STDERR, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
+        ])
+
+    def test_wait_for_session(self):
+        log = os.path.join(self.tempdir, 'wait-for-session.log')
+        util.make_executable_service(self.tempdir, 'rpc', 'qubes.WaitForSession', '''\
+#!/bin/sh
+read user
+echo "wait for session: arg: $1, user: $user" >{}
+'''.format(log))
+        util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
+#!/bin/sh
+cat {}
+read input
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
+'''.format(log))
+        with open(os.path.join(self.tempdir, 'rpc-config', 'qubes.Service+arg'),
+                  'w') as f:
+            f.write('wait-for-session=1')
+        user = getpass.getuser()
+
+        target = self.execute_qubesrpc('qubes.Service+arg', 'domX')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
+        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        messages = target.recv_all_messages()
+        self.assertListEqual(util.sort_messages(messages), [
+            (qrexec.MSG_DATA_STDOUT, (b'wait for session: arg: domX, user: ' +
+                                      user.encode() + b'\n')),
+            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: domX, input: stdin data\n'),
             (qrexec.MSG_DATA_STDOUT, b''),
             (qrexec.MSG_DATA_STDERR, b''),
             (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')

@@ -288,6 +288,7 @@ class TestClient(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
         os.mkdir(os.path.join(self.tempdir, 'rpc'))
+        os.mkdir(os.path.join(self.tempdir, 'rpc-config'))
         self.addCleanup(shutil.rmtree, self.tempdir)
 
     def make_executable_service(self, *args):
@@ -304,6 +305,8 @@ class TestClient(unittest.TestCase):
         ])
         env['QREXEC_MULTIPLEXER_PATH'] = os.path.join(
             ROOT_PATH, 'lib', 'qubes-rpc-multiplexer')
+        env['QUBES_RPC_CONFIG_PATH'] = \
+            os.path.join(self.tempdir, 'rpc-config')
         cmd = [
             os.path.join(ROOT_PATH, 'daemon', 'qrexec-client'),
             '--socket-dir=' + self.tempdir,
@@ -501,12 +504,44 @@ class TestClient(unittest.TestCase):
         read input
         echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         ''')
+
         cmd = 'QUBESRPC qubes.Service+arg src_domain name src_domain'
         source = self.connect_service_request(cmd)
 
         source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
         source.send_message(qrexec.MSG_DATA_STDIN, b'')
         self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: src_domain, '
+                                     b'input: stdin data\n'),
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_service_wait_for_session(self):
+        log = os.path.join(self.tempdir, 'wait-for-session.log')
+        util.make_executable_service(self.tempdir, 'rpc', 'qubes.WaitForSession', '''\
+#!/bin/sh
+echo "wait for session: arg: $1" >{}
+'''.format(log))
+        util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
+        #!/bin/sh
+        read input
+        cat {}
+        echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
+'''.format(log))
+        with open(os.path.join(self.tempdir, 'rpc-config', 'qubes.Service+arg'),
+                  'w') as f:
+            f.write('wait-for-session=1')
+
+        cmd = 'QUBESRPC qubes.Service+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
+        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+        self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b'wait for session: arg: src_domain\n'),
             (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: src_domain, '
                                      b'input: stdin data\n'),
             (qrexec.MSG_DATA_STDOUT, b''),

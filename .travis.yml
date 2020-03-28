@@ -18,12 +18,14 @@ env:
 
 jobs:
   include:
-    - install:
+    - name: pylint
+      install:
        - docker build -t qrexec-test ci
       env: DOCKER_RUN="docker run -v $TRAVIS_BUILD_DIR:$TRAVIS_BUILD_DIR -w $TRAVIS_BUILD_DIR -- qrexec-test"
       script:
        - $DOCKER_RUN pylint qrexec
-    - install:
+    - name: run-tests
+      install:
        - pip install --quiet codecov
        - pip install --quiet 'coverage<5.0'
        - docker build -t qrexec-test ci
@@ -33,6 +35,11 @@ jobs:
        # use gcov from within the container
        - $DOCKER_RUN find . -type f -name '*.gcno'  -execdir gcov -pb  {} +
        - find . -type f -name '*.gcno'  -exec rm  {} +
+    - name: fuzz
+      install:
+       - sudo apt-get -y install clang
+      script:
+       - make -C fuzz test
     - stage: deploy
       python: '3.6'
       script: ~/qubes-builder/scripts/travis-deploy

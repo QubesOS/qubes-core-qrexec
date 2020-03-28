@@ -168,4 +168,9 @@ enum {
 #define QREXEC_POLICY_PROGRAM "/usr/bin/qrexec-policy-exec"
 #define QREXEC_SERVICE_PATH "/usr/local/etc/qubes-rpc:/etc/qubes-rpc"
 
+// directory for services configuration (for example 'wait-for-session' flag)
+#define QUBES_RPC_CONFIG_PATH "/etc/qubes/rpc-config"
+// support only very small configuration files,
+#define MAX_CONFIG_SIZE 4096
+
 #endif /* _QREXEC_H */

@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# Waits for qubes-guid to become available for a given domain.
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 source_domain" >&2
+    exit 1
+fi
+
+# Traverse /var/run/qubes/qrexec.NAME -> qrexec.ID symlink
+
+qrexec_name_sock="/var/run/qubes/qrexec.$1"
+
+if ! [ -L "$qrexec_name_sock" ]; then
+    echo "$0: $qrexec_name_sock not found, domain might be dead" >&2
+    exit 1
+fi
+
+qrexec_id_sock=$(readlink "$qrexec_name_sock")
+
+if [ -z "$qrexec_id_sock" ]; then
+    echo "$0: readlink failed for $qrexec_name_sock" >&2
+    exit 1
+fi
+
+# Watch for /var/run/qubes/guid-running.ID
+
+guid_running=${qrexec_id_sock/qrexec./guid-running.}
+
+while true; do
+    if [ -f "$guid_running" ]; then
+        break
+    fi
+
+    if ! [ -e "$qrexec_id_sock" ]; then
+        echo "$0: $qrexec_id_sock not found, domain might be dead" >&2
+        exit 1
+    fi
+
+    sleep 0.5
+done
