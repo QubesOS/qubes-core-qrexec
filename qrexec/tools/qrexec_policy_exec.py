@@ -30,6 +30,7 @@ from .. import exc
 from .. import utils
 from ..policy import parser
 from ..policy.utils import PolicyCache
+from ..server import call_socket_service
 
 
 def create_default_policy(service_name):
@@ -37,14 +38,20 @@ def create_default_policy(service_name):
         policy.write(DEFAULT_POLICY)
 
 
+class JustEvaluateResult(Exception):
+    def __init__(self, exit_code):
+        super().__init__()
+        self.exit_code = exit_code
+
+
 class JustEvaluateAllowResolution(parser.AllowResolution):
     async def execute(self, caller_ident):
-        sys.exit(0)
+        raise JustEvaluateResult(0)
 
 
 class JustEvaluateAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
-        sys.exit(1)
+        raise JustEvaluateResult(1)
 
 
 class AssumeYesForAskResolution(parser.AskResolution):
@@ -53,12 +60,17 @@ class AssumeYesForAskResolution(parser.AskResolution):
             True, self.request.target).execute(caller_ident)
 
 
-class DBusAskResolution(parser.AskResolution):
+class AgentAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
-        import pydbus
-        bus = pydbus.SystemBus()
-        proxy = bus.get('org.qubesos.PolicyAgent',
-            '/org/qubesos/PolicyAgent')
+        guivm = \
+            self.request.system_info['domains'][self.request.source]['guivm']
+        if not guivm:
+            log = logging.getLogger('policy')
+            log.error('%s not allowed from %s: the resolution was "ask", '
+                      'but source domain has no GuiVM',
+                      self.request.service, self.request.source)
+            self.handle_user_response(False, None)
+            assert False, 'handle_user_response should throw'
 
         # prepare icons
         icons = {name: self.request.system_info['domains'][name]['icon']
@@ -73,16 +85,79 @@ class DBusAskResolution(parser.AskResolution):
             icons[dispvm_api_name] = \
                 icons[dispvm_api_name].replace('app', 'disp')
 
-        response = proxy.Ask(self.request.source, self.request.service,
-            self.targets_for_ask, self.default_target or '', icons)
+        params = {
+            'source': self.request.source,
+            'service': self.request.service,
+            'argument': self.request.argument,
+            'targets': self.targets_for_ask,
+            'default_target': self.default_target or '',
+            'icons': icons,
+        }
 
-        if response:
-            return await self.handle_user_response(True, response).execute(
-                caller_ident)
-        return self.handle_user_response(False, None)
+        service = 'policy.Ask'
+        source_domain = 'dom0'
+        ask_response = await call_socket_service(
+            guivm, service, source_domain, params)
+
+        if ask_response == 'deny':
+            self.handle_user_response(False, None)
+            assert False, 'handle_user_response should throw'
+
+        if ask_response.startswith('allow:'):
+            target = ask_response[len('allow:'):]
+            resolution = self.handle_user_response(True, target)
+            return await resolution.execute(caller_ident)
+
+        log = logging.getLogger('policy')
+        log.error('invalid ask response for %s: %s',
+                  self.request.service, ask_response)
+        self.handle_invalid_response()
+        assert False, 'handle_invalid_response should throw'
 
 
-class LogAllowedResolution(parser.AllowResolution):
+class NotifyAllowedResolution(parser.AllowResolution):
+    async def execute(self, caller_ident):
+        guivm = \
+            self.request.system_info['domains'][self.request.source]['guivm']
+
+        if self.notify:
+            if guivm:
+                await notify(guivm, {
+                    'resolution': 'allow',
+                    'service': self.request.service,
+                    'argument': self.request.argument,
+                    'source': self.request.source,
+                    'target': self.target,
+                })
+        try:
+            await super().execute(caller_ident)
+        except exc.ExecutionFailed:
+            if guivm:
+                await notify(guivm, {
+                    'resolution': 'fail',
+                    'service': self.request.service,
+                    'argument': self.request.argument,
+                    'source': self.request.source,
+                    'target': self.target,
+                })
+            # Handle in handle_request()
+            raise
+
+
+async def notify(guivm, params):
+    service = 'policy.Notify'
+    source_domain = 'dom0'
+    try:
+        await call_socket_service(guivm, service, source_domain, params)
+    # pylint: disable=broad-except
+    except Exception:
+        # qrexec-policy-agent might be dead or malfunctioning, log exception
+        # but do not fail the whole operation
+        log = logging.getLogger('policy')
+        log.exception('error calling qrexec-policy-agent in %s', guivm)
+
+
+class LogAllowedResolution(NotifyAllowedResolution):
     async def execute(self, caller_ident):
         log_prefix = 'qrexec: {request.service}{request.argument}: ' \
                      '{request.source} -> {request.target}:'.format(
@@ -91,13 +166,13 @@ class LogAllowedResolution(parser.AllowResolution):
         log = logging.getLogger('policy')
         log.info('%s allowed to %s', log_prefix, self.target)
 
-        await super(LogAllowedResolution, self).execute(caller_ident)
+        await super().execute(caller_ident)
 
 
 def prepare_resolution_types(*, just_evaluate, assume_yes_for_ask,
                              allow_resolution_type):
     ret = {
-        'ask_resolution_type': DBusAskResolution,
+        'ask_resolution_type': AgentAskResolution,
         'allow_resolution_type': allow_resolution_type}
     if just_evaluate:
         ret['ask_resolution_type'] = JustEvaluateAskResolution
@@ -159,7 +234,7 @@ def main(args=None):
 async def handle_request(
         domain_id, source, intended_target, service_and_arg, process_ident,
         log, just_evaluate=False, assume_yes_for_ask=False,
-        allow_resolution_type=None, origin_writer=None, policy_cache=None):
+        allow_resolution_type=None, policy_cache=None):
     # Add source domain information, required by qrexec-client for establishing
     # connection
     caller_ident = process_ident + "," + source + "," + domain_id
@@ -175,6 +250,7 @@ async def handle_request(
         service, argument = service_and_arg[:i], service_and_arg[i:]
     except ValueError:
         service, argument = service_and_arg, '+'
+
     try:
         if policy_cache:
             policy = policy_cache.get_policy()
@@ -193,8 +269,6 @@ async def handle_request(
                 just_evaluate=just_evaluate,
                 assume_yes_for_ask=assume_yes_for_ask,
                 allow_resolution_type=allow_resolution_class))
-        if origin_writer:
-            request.origin_writer = origin_writer
         resolution = policy.evaluate(request)
         await resolution.execute(caller_ident)
 
@@ -203,7 +277,27 @@ async def handle_request(
         return 1
     except exc.AccessDenied as err:
         log.info('%s denied: %s', log_prefix, err)
+
+        if err.notify and not just_evaluate:
+            guivm = \
+                system_info['domains'][source]['guivm']
+            if guivm:
+                await notify(guivm, {
+                    'resolution': 'deny',
+                    'service': service,
+                    'argument': argument,
+                    'source': source,
+                    'target': intended_target,
+                })
+
         return 1
+    except exc.ExecutionFailed as err:
+        # Return 1, so that the source receives MSG_SERVICE_REFUSED instead of
+        # hanging indefinitely.
+        log.error('%s error while executing: %s', log_prefix, err)
+        return 1
+    except JustEvaluateResult as err:
+        return err.exit_code
     return 0
 
 

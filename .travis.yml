@@ -6,8 +6,6 @@ services:
   - xvfb
   - docker
 install:
- - sudo apt-get -y install python3-gi gir1.2-gtk-3.0
- - pip install --quiet -r ci/requirements.txt
  - git clone https://github.com/QubesOS/qubes-builder ~/qubes-builder
 script: ~/qubes-builder/scripts/travis-build
 env:
@@ -20,8 +18,11 @@ env:
 
 jobs:
   include:
-    - python: '3.7'
-      script: pylint qrexec
+    - install:
+       - docker build -t qrexec-test ci
+      env: DOCKER_RUN="docker run -v $TRAVIS_BUILD_DIR:$TRAVIS_BUILD_DIR -w $TRAVIS_BUILD_DIR -- qrexec-test"
+      script:
+       - $DOCKER_RUN pylint qrexec
     - install:
        - pip install --quiet codecov
        - pip install --quiet 'coverage<5.0'
@@ -32,8 +33,6 @@ jobs:
        # use gcov from within the container
        - $DOCKER_RUN find . -type f -name '*.gcno'  -execdir gcov -pb  {} +
        - find . -type f -name '*.gcno'  -exec rm  {} +
-#    - python: '3.7'
-#      script: python -m coverage run -m unittest discover -s qrexec/tests -t . -p '*.py' -v
     - stage: deploy
       python: '3.6'
       script: ~/qubes-builder/scripts/travis-deploy

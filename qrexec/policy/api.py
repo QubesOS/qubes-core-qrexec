@@ -34,7 +34,7 @@
     https://github.com/QubesOS/qubes-policy-control
 '''
 
-from .. import call as _call
+from ..client import call as _call
 
 QREXEC_CLIENT = '/usr/bin/qrexec-client-vm'
 

@@ -1,5 +1,8 @@
 etc/pam.d/qrexec
 etc/qubes/rpc-config/README
+etc/qubes-rpc/policy.Ask
+etc/qubes-rpc/policy.Notify
+etc/xdg/autostart/qrexec-policy-agent.desktop
 lib/systemd/system/qubes-qrexec-agent.service
 usr/bin/qrexec-client-vm
 usr/bin/qrexec-fork-server
@@ -14,5 +17,6 @@ usr/lib/qubes/qrexec-agent
 usr/lib/qubes/qrexec-client-vm
 usr/lib/qubes/qrexec_client_vm
 usr/lib/qubes/qubes-rpc-multiplexer
+usr/lib/qubes/qrexec-policy-agent-autostart
 usr/share/man/man1/qrexec-client-vm.1.gz
 

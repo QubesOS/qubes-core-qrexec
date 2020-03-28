@@ -44,7 +44,7 @@ from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
 from .. import exc
 from .. import utils
 from ..exc import (
-    AccessDenied, PolicySyntaxError, QubesMgmtException)
+    AccessDenied, PolicySyntaxError, QubesMgmtException, ExecutionFailed)
 
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + '_.-')
 
@@ -457,6 +457,8 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         self.request = request
         #: the user to run command as, or None for default
         self.user = user
+        #: whether to notify the user about the action taken
+        self.notify = rule.action.notify
 
     @abc.abstractmethod
     async def execute(self, caller_ident):
@@ -512,7 +514,7 @@ class AllowResolution(AbstractResolution):
             self.ensure_target_running()
             dispvm = False
 
-        qrexec_opts = ['-d', target, '-c', caller_ident]
+        qrexec_opts = ['-d', target, '-c', caller_ident, '-E']
         if dispvm:
             qrexec_opts.append('-W')
         try:
@@ -523,7 +525,7 @@ class AllowResolution(AbstractResolution):
             if dispvm:
                 self.cleanup_dispvm(target)
         if process.returncode != 0:
-            raise AccessDenied('qrexec-client failed')
+            raise ExecutionFailed('qrexec-client failed: {}'.format(command))
 
     def spawn_dispvm(self):
         '''
@@ -613,7 +615,8 @@ class AskResolution(AbstractResolution):
         # pylint: disable=redefined-variable-type
         if not response:
             raise AccessDenied('denied by the user {}:{}'.format(
-                self.rule.filepath, self.rule.lineno))
+                self.rule.filepath, self.rule.lineno),
+                notify=self.notify)
 
         if target not in self.targets_for_ask:
             raise AccessDenied(
@@ -621,6 +624,13 @@ class AskResolution(AbstractResolution):
 
         return self.request.allow_resolution_type.from_ask_resolution(self,
             target=target)
+
+    def handle_invalid_response(self):
+        '''
+        Handle invalid response for the 'ask' action. Throws AccessDenied.
+        '''
+        # pylint: disable=no-self-use
+        raise AccessDenied('invalid response')
 
     async def execute(self, caller_ident):
         '''Ask the user for permission.
@@ -648,7 +658,7 @@ class Request:
 
     Args:
         service (str or None): Service name.
-        argument (str or None): The argument. Must start with ``'+'``.
+        argument (str): The argument. Must start with ``'+'``.
         source (str): name of source qube
         target (str): target designation
         system_info (dict): as returned from
@@ -733,6 +743,10 @@ class ActionType(metaclass=abc.ABCMeta):
 
 class Deny(ActionType):
     # pylint: disable=missing-docstring
+    def __init__(self, *args, notify=None, **kwds):
+        super().__init__(*args, **kwds)
+        self.notify = True if notify is None else notify
+
     def __repr__(self):
         return '<{}>'.format(type(self).__name__)
 
@@ -742,7 +756,8 @@ class Deny(ActionType):
             qrexec.exc.AccessDenied:
         '''
         raise AccessDenied('denied by policy {}:{}'.format(
-            self.rule.filepath, self.rule.lineno))
+            self.rule.filepath, self.rule.lineno),
+            notify=self.notify)
 
     def actual_target(self, intended_target):
         '''''' # not documented in HTML
@@ -752,11 +767,12 @@ class Deny(ActionType):
 
 class Allow(ActionType):
     # pylint: disable=missing-docstring
-    def __init__(self, *args, target=None, user=None, **kwds):
+    def __init__(self, *args, target=None, user=None, notify=None, **kwds):
         super().__init__(*args, **kwds)
         self.target = Redirect(target,
             filepath=self.rule.filepath, lineno=self.rule.lineno)
         self.user = user
+        self.notify = False if notify is None else notify
 
     def __repr__(self):
         return '<{} target={!r} user={!r}>'.format(
@@ -794,13 +810,14 @@ class Allow(ActionType):
 class Ask(ActionType):
     # pylint: disable=missing-docstring
     def __init__(self, *args, target=None, default_target=None, user=None,
-            **kwds):
+                 notify=None, **kwds):
         super().__init__(*args, **kwds)
         self.target = Redirect(target,
             filepath=self.rule.filepath, lineno=self.rule.lineno)
         self.default_target = Redirect(default_target,
             filepath=self.rule.filepath, lineno=self.rule.lineno)
         self.user = user
+        self.notify = False if notify is None else notify
 
     def __repr__(self):
         return '<{} target={!r} default_target={!r} user={!r}>'.format(
@@ -887,6 +904,15 @@ class Rule:
                 raise PolicySyntaxError(filepath, lineno,
                     'parameter given twice: {!r}'.format(key))
             kwds[key] = value
+
+        if 'notify' in kwds:
+            if kwds['notify'] not in ['yes', 'no']:
+                raise PolicySyntaxError(
+                    filepath, lineno,
+                    "'notify' is {!r}, but can be only 'yes' or 'no'".format(
+                        kwds['notify']))
+            kwds['notify'] = (kwds['notify'] == 'yes')
+
         try:
             #: policy action
             self.action = actiontype(rule=self, **kwds)

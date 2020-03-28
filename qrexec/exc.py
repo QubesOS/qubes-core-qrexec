@@ -20,7 +20,17 @@
 #
 
 class AccessDenied(Exception):
-    ''' Raised when qrexec policy denied access '''
+    '''
+    Raised when qrexec policy denied access.
+
+    :py:attr:`notify` controls whether to notify the user about denying
+    access. This defaults to true, except when specified otherwise
+    (e.g. because we applied a policy that says `notify=no`).
+    '''
+
+    def __init__(self, *args, notify=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.notify = notify
 
 class PolicySyntaxError(AccessDenied):
     ''' Syntax error in qrexec policy, abort parsing '''
@@ -39,3 +49,6 @@ class QubesMgmtException(Exception):
     def __init__(self, exc_type):
         super(QubesMgmtException, self).__init__()
         self.exc_type = exc_type
+
+class ExecutionFailed(Exception):
+    ''' Something went wrong while executing the service '''

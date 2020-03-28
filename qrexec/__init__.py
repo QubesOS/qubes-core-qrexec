@@ -1,21 +1,5 @@
 # pylint: disable=anomalous-backslash-in-string
 '''
-Functions
----------
-
-.. function:: call(dest, rpcname[, arg=None, \*, input=None])
-
-   Execute a qrexec call.
-
-   :param str dest: destination (a qube name or a valid ``@token``)
-   :param str rpcname: name of the invoked call
-   :param arg: argument of the call
-   :type arg: str or None
-   :param input: input to the qrexec call
-   :type input: str or bytes or file or None
-   :rtype: bytes
-   :raises subprocess.CalledProcessError: on failure
-
 Constants
 ---------
 
@@ -51,6 +35,8 @@ QREXEC_CLIENT = '/usr/lib/qubes/qrexec-client'
 QUBESD_INTERNAL_SOCK = '/var/run/qubesd.internal.sock'
 QUBESD_SOCK = '/var/run/qubesd.sock'
 
+RPC_PATH = '/etc/qubes-rpc'
+POLICY_AGENT_SOCKET_PATH = '/var/run/qubes/policy-agent.sock'
 POLICYPATH = pathlib.Path('/etc/qubes/policy.d')
 POLICYSOCKET = pathlib.Path('/var/run/qubes/policy.sock')
 INCLUDEPATH = POLICYPATH / 'include'
@@ -69,11 +55,3 @@ DEFAULT_POLICY = '''\
 
 @anyvm  @anyvm  ask
 '''
-
-try:
-    from .client_dom0 import call
-except ImportError:
-    try:
-        from .client_vm import call
-    except ImportError:
-        pass

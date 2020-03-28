@@ -25,17 +25,24 @@ decisions.'''
 
 import itertools
 import os
+import argparse
+import asyncio
 
 import pkg_resources
-import pydbus
 
 # pylint: disable=import-error,wrong-import-position
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib
+from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib, Gio
 # pylint: enable=import-error
 
+# pylint: disable=wrong-import-order
+import gbulb
+gbulb.install()
+
+from .. import POLICY_AGENT_SOCKET_PATH
 from ..utils import sanitize_domain_name, sanitize_service_name
+from ..server import SocketService
 
 # pylint: enable=wrong-import-position
 
@@ -374,20 +381,6 @@ class RPCConfirmationWindow:
     def _can_perform_action(self):
         return self._focus_helper.can_perform_action()
 
-    @staticmethod
-    def _escape_and_format_rpc_text(rpc_operation):
-        escaped = GLib.markup_escape_text(rpc_operation)
-
-        partitioned = escaped.partition('.')
-        formatted = partitioned[0] + partitioned[1]
-
-        if partitioned[2]:
-            formatted += "<b>" + partitioned[2] + "</b>"
-        else:
-            formatted = "<b>" + formatted + "</b>"
-
-        return formatted
-
     def _connect_events(self):
         self._rpc_window.connect("key-press-event", self._key_pressed)
         self._rpc_ok_button.connect("clicked", self._clicked_ok)
@@ -395,7 +388,7 @@ class RPCConfirmationWindow:
 
         self._error_bar.connect("response", self._close_error)
 
-    def __init__(self, entries_info, source, rpc_operation, targets_list,
+    def __init__(self, entries_info, source, service, argument, targets_list,
             target=None):
         # pylint: disable=too-many-arguments
         sanitize_domain_name(source, assert_sanitized=True)
@@ -424,7 +417,7 @@ class RPCConfirmationWindow:
         self._focus_helper = self._new_focus_stealing_helper()
 
         self._rpc_label.set_markup(
-                    self._escape_and_format_rpc_text(rpc_operation))
+            escape_and_format_rpc_text(service, argument))
 
         self._entries_info = entries_info
         list_modeler = self._new_vm_list_modeler()
@@ -445,12 +438,12 @@ class RPCConfirmationWindow:
     def _close(self):
         self._rpc_window.close()
 
+    async def _wait_for_close(self):
+        await gbulb.wait_signal(self._rpc_window, 'delete-event')
+
     def _show(self):
         self._rpc_window.set_keep_above(True)
-        self._rpc_window.connect("delete-event", Gtk.main_quit)
         self._rpc_window.show_all()
-
-        Gtk.main()
 
     def _new_vm_list_modeler(self):
         return VMListModeler(self._entries_info)
@@ -461,59 +454,146 @@ class RPCConfirmationWindow:
                     self._rpc_ok_button,
                     1)
 
-    def confirm_rpc(self):
+    async def confirm_rpc(self):
         self._show()
+        await self._wait_for_close()
 
         if self._confirmed:
             return self._target_name
         return False
 
 
-def confirm_rpc(entries_info, source, rpc_operation, targets_list, target=None):
-    window = RPCConfirmationWindow(entries_info, source, rpc_operation,
-        targets_list, target)
+async def confirm_rpc(entries_info, source, service, argument, targets_list,
+                      target=None):
+    # pylint: disable=too-many-arguments
+    window = RPCConfirmationWindow(entries_info, source, service, argument,
+                                   targets_list, target)
 
-    return window.confirm_rpc()
+    return await window.confirm_rpc()
 
 
-class PolicyAgent:
-    # pylint: disable=too-few-public-methods
-    dbus = """
-    <node>
-      <interface name='org.qubesos.PolicyAgent'>
-        <method name='Ask'>
-          <arg type='s' name='source' direction='in'/>
-          <arg type='s' name='service_name' direction='in'/>
-          <arg type='as' name='targets' direction='in'/>
-          <arg type='s' name='default_target' direction='in'/>
-          <arg type='a{ss}' name='icons' direction='in'/>
-          <arg type='s' name='response' direction='out'/>
-        </method>
-      </interface>
-    </node>
-    """
+def escape_and_format_rpc_text(service, argument=''):
+    service = GLib.markup_escape_text(service)
+    argument = GLib.markup_escape_text(argument)
 
-    @staticmethod
-    def Ask(source, service_name, targets, default_target,
-            icons):
-        # pylint: disable=invalid-name
+    domain, dot, name = service.partition('.')
+    if dot and name:
+        result = '{}.<b>{}</b>'.format(domain, name)
+    else:
+        result = '<b>{}</b>'.format(service)
+
+    if argument != '+':
+        result += argument
+
+    return result
+
+
+class PolicyAgent(SocketService):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._app = Gtk.Application()
+        self._app.set_application_id('qubes.qrexec-policy-agent')
+        self._app.register()
+
+    async def handle_request(self, params, service, source_domain):
+        if service == 'policy.Ask':
+            return await self.handle_ask(params)
+        if service == 'policy.Notify':
+            return await self.handle_notify(params)
+        raise Exception('unknown service name: {}'.format(service))
+
+    async def handle_ask(self, params):
+        source = params['source']
+        service = params['service']
+        argument = params['argument']
+        targets = params['targets']
+        default_target = params['default_target']
+
         entries_info = {}
-        for entry in icons:
-            entries_info[entry] = {}
-            entries_info[entry]['icon'] = icons.get(entry, None)
+        for domain_name, icon in params['icons'].items():
+            entries_info[domain_name] = {'icon': icon}
 
-        response = confirm_rpc(
-            entries_info, source, service_name,
+        target = await confirm_rpc(
+            entries_info, source, service, argument,
             targets, default_target or None)
-        return response or ''
+
+        if target:
+            return 'allow:{}'.format(target)
+        return 'deny'
+
+    async def handle_notify(self, params):
+        resolution = params['resolution']
+        service = params['service']
+        argument = params['argument']
+        source = params['source']
+        target = params['target']
+
+        assert resolution in ['allow', 'deny', 'fail'], resolution
+
+        self.notify(resolution, service, argument, source, target)
+        return ''
+
+    def notify(self, resolution, service, argument, source, target):
+        # pylint: disable=too-many-arguments
+        if argument == '+':
+            rpc = service
+        else:
+            rpc = service + argument
+
+        if resolution == 'allow':
+            app_icon = None
+            summary = 'Allowed: {service}'
+            body = ('Allowed <b>{rpc}</b> '
+                    'from <b>{source}</b> to <b>{target}</b>')
+        elif resolution == 'deny':
+            app_icon = 'dialog-error'
+            summary = 'Denied: {service}'
+            body = ('Denied <b>{rpc}</b> '
+                    'from <b>{source}</b> to <b>{target}</b>')
+        elif resolution == 'fail':
+            app_icon = 'dialog-warning'
+            summary = 'Failed: {service}'
+            body = ('Failed to execute <b>{rpc}</b> '
+                    '(from <b>{source}</b> to <b>{target}</b>)')
+        else:
+            assert False, resolution
+
+        # summary is plain text, body is markup
+        summary = summary.format(service=service)
+        body = body.format(
+            rpc=GLib.markup_escape_text(rpc),
+            source=GLib.markup_escape_text(source),
+            target=GLib.markup_escape_text(target))
+
+        notification = Gio.Notification.new(summary)
+        notification.set_priority(Gio.NotificationPriority.NORMAL)
+        notification.set_body(body)
+        if app_icon:
+            icon = Gio.ThemedIcon.new(app_icon)
+            notification.set_icon(icon)
+
+        self._app.send_notification(None, notification)
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    '-s', '--socket-path', metavar='DIR', type=str,
+    default=POLICY_AGENT_SOCKET_PATH,
+    help='path to socket')
 
 
 def main():
-    loop = GLib.MainLoop()
-    bus = pydbus.SystemBus()
-    obj = PolicyAgent()
-    bus.publish('org.qubesos.PolicyAgent', obj)
-    loop.run()
+    args = parser.parse_args()
+
+    agent = PolicyAgent(args.socket_path)
+
+    loop = asyncio.get_event_loop()
+    tasks = [
+        agent.run(),
+    ]
+    loop.run_until_complete(asyncio.wait(tasks))
+
 
 if __name__ == '__main__':
     main()
