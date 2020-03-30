@@ -7,7 +7,11 @@ CFLAGS += -std=c11 -D_GNU_SOURCE -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 
 ifndef LIB_FUZZING_ENGINE
 CC = clang
+CXX = clang++
 CFLAGS += -O1 -fno-omit-frame-pointer -gline-tables-only \
+		-fsanitize=address \
+		-fsanitize-address-use-after-scope -fsanitize=fuzzer
+CXXFLAGS += -O1 -fno-omit-frame-pointer -gline-tables-only \
 		-fsanitize=address \
 		-fsanitize-address-use-after-scope -fsanitize=fuzzer
 endif
@@ -35,7 +39,7 @@ test-%: % %_seed_corpus.zip
 	./$< $<_seed_corpus -runs=100000
 
 %_fuzzer: %_fuzzer.o fuzz.o $(LIBQREXEC_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LIB_FUZZING_ENGINE)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LIB_FUZZING_ENGINE)
 
 %_fuzzer.o: %_fuzzer.c
 	$(CC) $(CFLAGS) -o $@ -c $^
