@@ -51,6 +51,7 @@ Conflicts:  qubes-gpg-split < 2.0.45
 Conflicts:  qubes-gui-daemon < 4.1.4
 Conflicts:  qubes-input-proxy < 1.0.17
 Conflicts:  qubes-pdf-converter < 2.1.7
+Conflicts:  qubes-usb-proxy < 1.0.28
 
 Source0: qubes-core-qrexec-%{version}.tar.gz
 
