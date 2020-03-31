@@ -174,13 +174,20 @@ int process_io(const struct process_io_request *req) {
          * incoming data).
          * Check libvchan_is_open() before libvchan_data_ready() to avoid a
          * race condition.
+         *
+         * TODO: Refactor this exit logic (including "if all done" above, and
+         * waitpid() below); it's pretty confusing and it's not clear what is
+         * expected behaviour and what is an error.
          */
         if (!libvchan_is_open(vchan) &&
                 !libvchan_data_ready(vchan) &&
                 !buffer_len(stdin_buf)) {
-            LOG(ERROR,
-                "vchan connection closed early (fds: %d %d %d, status: %d %d)",
-                stdin_fd, stdout_fd, stderr_fd, local_status, remote_status);
+            bool all_closed = stdin_fd == -1 && stdout_fd == -1 && stderr_fd == -1;
+            if (is_service || !(all_closed && remote_status >= 0)) {
+                LOG(ERROR,
+                    "vchan connection closed early (fds: %d %d %d, status: %d %d)",
+                    stdin_fd, stdout_fd, stderr_fd, local_status, remote_status);
+            }
             break;
         }
 
