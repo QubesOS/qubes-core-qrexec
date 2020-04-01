@@ -519,6 +519,18 @@ class TestClient(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
+    def test_run_dom0_service_failed(self):
+        # qubes.Service does not exist
+        cmd = 'QUBESRPC qubes.Service+arg src_domain name src_domain'
+        source = self.connect_service_request(cmd)
+
+        self.assertEqual(source.recv_all_messages(), [
+            (qrexec.MSG_DATA_STDOUT, b''),
+            (qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 127)),
+        ])
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 127)
+
     def test_run_dom0_service_wait_for_session(self):
         log = os.path.join(self.tempdir, 'wait-for-session.log')
         util.make_executable_service(self.tempdir, 'rpc', 'qubes.WaitForSession', '''\

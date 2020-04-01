@@ -252,18 +252,47 @@ out:
     destroy_qrexec_parsed_command(cmd);
 }
 
-static void prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
+static int prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
 {
     if (stdin_buffer == NULL)
         abort();
     if (!cmdline) {
         local_stdin_fd = 1;
         local_stdout_fd = 0;
-        return;
+        return 0;
     }
     signal(SIGCHLD, sigchld_handler);
-    execute_qubes_rpc_command(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
+    return execute_qubes_rpc_command(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
             NULL, false, stdin_buffer);
+}
+
+// See also qrexec-agent/qrexec-agent-data.c
+static _Noreturn void handle_failed_exec(libvchan_t *data_vchan)
+{
+    int exit_code = 127;
+    struct msg_header hdr = {
+        .type = MSG_DATA_STDOUT,
+        .len = 0,
+    };
+
+    LOG(ERROR, "failed to spawn process, exiting");
+    /*
+     * TODO: In case we fail to execute a *local* process (is_service false),
+     * we should either
+     *  - exit even before connecting to remote domain, or
+     *  - send stdin EOF and keep waiting for remote exit code.
+     *
+     * That will require a slightly bigger refactoring. Right now it's not
+     * important, because this function should handle QUBESRPC command failure
+     * only (normal commands go through fork+exec), but it will be necessary
+     * when we support sockets as a local process.
+     */
+    if (is_service) {
+        libvchan_send(data_vchan, &hdr, sizeof(hdr));
+        send_exit_code(data_vchan, exit_code);
+        libvchan_close(data_vchan);
+    }
+    exit(exit_code);
 }
 
 /* ask the daemon to allocate vchan port */
@@ -491,6 +520,7 @@ int main(int argc, char **argv)
     int connection_timeout = 5;
     struct service_params svc_params;
     int data_protocol_version;
+    int prepare_ret;
 
     setup_logging("qrexec-client");
 
@@ -572,7 +602,7 @@ int main(int argc, char **argv)
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
         wait_for_session_maybe(remote_cmdline);
-        prepare_local_fds(remote_cmdline, &stdin_buffer);
+        prepare_ret = prepare_local_fds(remote_cmdline, &stdin_buffer);
         if (connect_existing) {
             void (*old_handler)(int);
 
@@ -595,6 +625,8 @@ int main(int argc, char **argv)
         data_protocol_version = handle_agent_handshake(data_vchan, connect_existing);
         if (data_protocol_version < 0)
             exit(1);
+        if (prepare_ret < 0)
+            handle_failed_exec(data_vchan);
         select_loop(data_vchan, data_protocol_version, &stdin_buffer);
     } else {
         msg_type = just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE;
@@ -615,7 +647,7 @@ int main(int argc, char **argv)
         set_remote_domain(domname);
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
-        prepare_local_fds(local_cmdline, &stdin_buffer);
+        prepare_ret = prepare_local_fds(local_cmdline, &stdin_buffer);
         if (connect_existing) {
             s = connect_unix_socket(src_domain_name);
             send_service_connect(s, request_id, data_domain, data_port);
@@ -642,6 +674,8 @@ int main(int argc, char **argv)
             data_protocol_version = handle_agent_handshake(data_vchan, 0);
             if (data_protocol_version < 0)
                 exit(1);
+            if (prepare_ret < 0)
+                handle_failed_exec(data_vchan);
             select_loop(data_vchan, data_protocol_version, &stdin_buffer);
         }
     }
