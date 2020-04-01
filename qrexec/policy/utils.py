@@ -70,10 +70,11 @@ class PolicyCache:
 
     def cleanup(self):
         for wdd in self.watches:
-            self.watch_manager.rm_watch(wdd.values())
+            self.watch_manager.rm_watch(list(wdd.values()))
         self.watches = []
 
-        self.notifier.stop()
+        if self.notifier is not None:
+            self.notifier.stop()
         self.notifier = None
         self.watch_manager = None
 
