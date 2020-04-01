@@ -41,7 +41,7 @@ BuildRequires:	qubes-libvchan-devel
 BuildRequires:  python3-rpm-macros
 
 Requires:   python%{python3_pkgversion}
-Requires:   python3-gbulb
+Requires:   python%{python3_pkgversion}-gbulb
 Conflicts:  qubes-utils-libs < 4.1.0
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 Conflicts:  qubes-core-dom0 < 4.1.10
