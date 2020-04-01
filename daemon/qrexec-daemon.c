@@ -811,6 +811,7 @@ static void handle_execute_service(
     int policy_pending_slot;
     pid_t pid;
     char remote_domain_id_str[10];
+    sigset_t sigmask;
 
     policy_pending_slot = find_policy_pending_slot();
     if (policy_pending_slot < 0) {
@@ -841,6 +842,8 @@ static void handle_execute_service(
 
     for (i = 3; i < MAX_FDS; i++)
         close(i);
+    sigemptyset(&sigmask);
+    sigprocmask(SIG_SETMASK, &sigmask, NULL);
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
     snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",

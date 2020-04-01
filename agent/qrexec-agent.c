@@ -151,11 +151,14 @@ _Noreturn void do_exec(const char *cmd, const char *user)
     char *arg0;
     char *shell_basename;
 #endif
+    sigset_t sigmask;
 
     /* ignore "nogui:" prefix in linux agent */
     if (strncmp(cmd, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) == 0)
         cmd += NOGUI_CMD_PREFIX_LEN;
 
+    sigemptyset(&sigmask);
+    sigprocmask(SIG_SETMASK, &sigmask, NULL);
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
 
@@ -523,6 +526,7 @@ static int wait_for_session_maybe(char *cmdline) {
     int stdin_pipe[2];
     int wait_for_session = 0;
     int ret = 0;
+    sigset_t sigmask;
 
     cmd = parse_qubes_rpc_command(cmdline, true);
     if (!cmd)
@@ -559,6 +563,9 @@ static int wait_for_session_maybe(char *cmdline) {
     wait_for_session_pid = fork();
     switch (wait_for_session_pid) {
         case 0:
+            sigemptyset(&sigmask);
+            sigprocmask(SIG_SETMASK, &sigmask, NULL);
+
             close(stdin_pipe[1]);
             dup2(stdin_pipe[0], 0);
             exec_wait_for_session(cmd->source_domain);
