@@ -1,3 +1,22 @@
+qubes-core-qrexec (4.1.7-1) unstable; urgency=medium
+
+  [ Paweł Marczewski ]
+  * fuzzer: use C++ compiler for linking
+
+  [ Marek Marczykowski-Górecki ]
+  * Adjust dependencies to avoid breaking USB proxy
+  * policy/utils: fix pyinotify cleanup
+
+  [ Paweł Marczewski ]
+  * Remove false error message on vchan disconnect
+  * qrexec-agent, qrexec-daemon: unblock signals before exec()
+  * qrexec-client: handle failed service exec
+
+  [ Frédéric Pierret (fepitre) ]
+  * spec: fix hardcoded python3 prefix for CentOS
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 04 Apr 2020 19:18:23 +0200
+
 qubes-core-qrexec (4.1.6-1) unstable; urgency=medium
 
   [ Paweł Marczewski ]
