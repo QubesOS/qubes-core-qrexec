@@ -68,6 +68,9 @@ make all-dom0
 %preun
 %systemd_preun qubes-qrexec-policy-daemon.service
 
+%postun
+%systemd_postun_with_restart qubes-qrexec-policy-daemon.service
+
 %install
 make install-dom0 \
     DESTDIR=$RPM_BUILD_ROOT \
