@@ -1598,10 +1598,12 @@ class TestPolicy(ToposortMixIn, TestLoader, AbstractPolicy):
     ...     '__main__': '!include policy2'
     ...     'policy2': '* * @anyvm @anyvm allow'})
     '''
-    def __init__(self, *, policy, policy_compat={}, **kwds):
+    def __init__(self, *, policy, policy_compat=None, **kwds):
         if not isinstance(policy, collections.abc.Mapping):
             policy = {'__main__': policy}
         super().__init__(policy=policy, **kwds)
+        if policy_compat is None:
+            policy_compat = {}
         self.policy_compat = policy_compat
         file, filepath = self.resolve_filepath('__main__',
             filepath=None, lineno=None)
