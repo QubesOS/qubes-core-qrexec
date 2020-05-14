@@ -42,6 +42,8 @@ from .. import POLICYPATH_OLD
 from ..exc import PolicySyntaxError
 from . import parser
 
+IGNORED_SUFFIXES = ('.rpmsave', '.rpmnew', '.swp')
+
 @functools.total_ordering
 class _NoArgumentLastKey:
     def __init__(self, arg):
@@ -71,6 +73,14 @@ def _list_compat_files(legacy_path):
     for filepath in legacy_path.iterdir():
         if not filepath.is_file():
             logging.info('ignoring %s (not a file)', filepath)
+            continue
+
+        if filepath.suffix in IGNORED_SUFFIXES:
+            logging.info('ignoring %s (ignored suffix)')
+            continue
+
+        if filepath.name.startswith('.'):
+            logging.info('ignoring %s (dotfile)')
             continue
 
         invalid_chars = parser.get_invalid_characters(filepath.name)
