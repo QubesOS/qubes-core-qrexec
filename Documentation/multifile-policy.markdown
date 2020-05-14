@@ -91,8 +91,8 @@ policy file is opened for editing.
 ```
 
 Those commands include files or directories. Symbolic links are followed.
-Relative paths are relative to file locations. There may be a limit to include
-depth.
+Relative paths are relative to the base policy directory. There may be a limit
+to include depth.
 
 If the file at FILENAME does not exist or is not a file, policy check
 immediately fails. If the directory at DIRPATH does not exist or is not
