@@ -20,7 +20,6 @@
 
 import argparse
 import json
-import os
 import pathlib
 
 import sys
@@ -56,20 +55,20 @@ def handle_single_action(args, action):
     if args.skip_labels:
         service = ''
     else:
-        service = action.service
-    target = action.target or action.original_target
+        service = action.request.service
+    target = action.request.target
     # handle forced target=
-    if action.rule.override_target:
-        target = action.rule.override_target
+    if action.rule.action.target:
+        target = action.rule.action.target
     if args.target and target not in args.target:
         return ''
-    if action.action == parser.Action.ask:
+    if isinstance(action, parser.AskResolution):
         if args.include_ask:
             return '  "{}" -> "{}" [label="{}" color=orange];\n'.format(
-                action.source, target, service)
-    elif action.action == parser.Action.allow:
+                action.request.source, target, service)
+    elif isinstance(action, parser.AllowResolution):
         return '  "{}" -> "{}" [label="{}" color=red];\n'.format(
-                action.source, target, service)
+                action.request.source, target, service)
     return ''
 
 def main(args=None):
@@ -98,19 +97,19 @@ def main(args=None):
 
     policy = parser.FilePolicy(policy_path=args.policy_dir)
     output.write('digraph g {\n')
-    # TODO: list defined services and arguments
-    for service in os.listdir(args.policy_dir):
-        if os.path.isdir(os.path.join(args.policy_dir, service)):
-            continue
+    services = set()
+    for rule in policy.rules:
+        services.add((rule.service, rule.argument))
+    for service, argument in services:
         if args.service and service not in args.service and \
-                not any(service.startswith(srv + '+') for srv in args.service):
+                not service + (argument or '') in args.service:
             continue
 
         for source in sources:
             for target in targets:
                 try:
                     request = parser.Request(
-                         service, '+', source, target,
+                         service, argument or '+', source, target,
                          system_info=system_info)
                     action = policy.evaluate(request)
                     line = handle_single_action(args, action)
