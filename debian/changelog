@@ -1,3 +1,17 @@
+qubes-core-qrexec (4.1.8-1) unstable; urgency=medium
+
+  * Fix dangerous-default-value pylint warning
+  * test: downgrade pytest-asyncio
+  * Revert "test: downgrade pytest-asyncio"
+  * Update for changed qubesd socket protocol
+  * rpm: restart qrexec-policy-daemon on upgrade
+  * Fix documentation for relative paths in !include directive
+  * parser: ignore .rpmsave/.rpmnew/.swp and .* policy files...
+  * Update qrexec-policy-graph tool for new qrexec module
+  * rpm: adjust depencency on qubes-core-dom0
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 24 May 2020 04:38:25 +0200
+
 qubes-core-qrexec (4.1.7-1) unstable; urgency=medium
 
   [ Paweł Marczewski ]
