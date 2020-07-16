@@ -301,7 +301,8 @@ class IntendedTarget(VMToken):
 
         This function check if given value is not only syntactically correct,
         but also if names valid service call target (existing domain, or valid
-        ``'@dispvm'`` like keyword)
+        ``'@dispvm'`` like keyword). If the domain does not exist,
+        returns a DefaultVM.
 
         Args:
             system_info: information about the system
@@ -318,7 +319,11 @@ class IntendedTarget(VMToken):
             raise NotImplementedError()
 
         if self not in system_info['domains']:
-            raise AccessDenied('invalid target: {}'.format(str.__repr__(self)))
+            logging.warning(
+                'qrexec: target %r does not exist, using @default instead',
+                str(self))
+            return DefaultVM('@default',
+                filepath=self.filepath, lineno=self.lineno)
 
         return self
 
