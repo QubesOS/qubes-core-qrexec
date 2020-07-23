@@ -741,6 +741,19 @@ class ActionType(metaclass=abc.ABCMeta):
         '''
         return IntendedTarget(self.target or intended_target)
 
+    @staticmethod
+    def allow_no_autostart(target, system_info):
+        '''
+        Should we allow this target when autostart is disabled
+        '''
+        if target == '@adminvm':
+            return True
+        if target.startswith('@dispvm'):
+            return False
+        assert target in system_info['domains']
+        return system_info['domains'][target]['power_state'] == 'Running'
+
+
 class Deny(ActionType):
     # pylint: disable=missing-docstring
     def __init__(self, *args, notify=None, **kwds):
@@ -767,12 +780,13 @@ class Deny(ActionType):
 
 class Allow(ActionType):
     # pylint: disable=missing-docstring
-    def __init__(self, *args, target=None, user=None, notify=None, **kwds):
+    def __init__(self, *args, target=None, user=None, notify=None, autostart=None, **kwds):
         super().__init__(*args, **kwds)
         self.target = Redirect(target,
             filepath=self.rule.filepath, lineno=self.rule.lineno)
         self.user = user
         self.notify = False if notify is None else notify
+        self.autostart = True if autostart is None else autostart
 
     def __repr__(self):
         return '<{} target={!r} user={!r}>'.format(
@@ -804,13 +818,19 @@ class Allow(ActionType):
                     'but no DispVM base is set for this VM'.format(
                         self.rule.filepath, self.rule.lineno))
 
+        if not self.autostart and not self.allow_no_autostart(
+                target, request.system_info):
+            raise AccessDenied(
+                'target {} is denied because it would require autostart')
+
         return request.allow_resolution_type(self.rule, request,
             user=self.user, target=target)
+
 
 class Ask(ActionType):
     # pylint: disable=missing-docstring
     def __init__(self, *args, target=None, default_target=None, user=None,
-                 notify=None, **kwds):
+                 notify=None, autostart=None, **kwds):
         super().__init__(*args, **kwds)
         self.target = Redirect(target,
             filepath=self.rule.filepath, lineno=self.rule.lineno)
@@ -818,6 +838,7 @@ class Ask(ActionType):
             filepath=self.rule.filepath, lineno=self.rule.lineno)
         self.user = user
         self.notify = False if notify is None else notify
+        self.autostart = True if autostart is None else autostart
 
     def __repr__(self):
         return '<{} target={!r} default_target={!r} user={!r}>'.format(
@@ -838,6 +859,12 @@ class Ask(ActionType):
         else:
             targets_for_ask = list(self.rule.policy.collect_targets_for_ask(
                 request))
+
+        if not self.autostart:
+            targets_for_ask = [
+                target for target in targets_for_ask
+                if self.allow_no_autostart(target, request.system_info)
+            ]
 
         if not targets_for_ask:
             raise AccessDenied(
@@ -905,13 +932,15 @@ class Rule:
                     'parameter given twice: {!r}'.format(key))
             kwds[key] = value
 
-        if 'notify' in kwds:
-            if kwds['notify'] not in ['yes', 'no']:
-                raise PolicySyntaxError(
-                    filepath, lineno,
-                    "'notify' is {!r}, but can be only 'yes' or 'no'".format(
-                        kwds['notify']))
-            kwds['notify'] = (kwds['notify'] == 'yes')
+        # boolean parameters
+        for key in ['notify', 'autostart']:
+            if key in kwds:
+                if kwds[key] not in ['yes', 'no']:
+                    raise PolicySyntaxError(
+                        filepath, lineno,
+                        "{!r} is {!r}, but can be only 'yes' or 'no'".format(
+                            key, kwds[key]))
+                kwds[key] = (kwds[key] == 'yes')
 
         try:
             #: policy action
