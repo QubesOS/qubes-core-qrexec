@@ -197,7 +197,7 @@ class VMToken(str, metaclass=VMTokenMeta):
             token = '@adminvm'
 
         # if user specified just qube name, use it directly
-        if not token.startswith('@'):
+        if not (token.startswith('@') or token == '*'):
             return super().__new__(cls, token)
 
         # token starts with @, we search for right subclass
@@ -253,7 +253,7 @@ class VMToken(str, metaclass=VMTokenMeta):
     def is_special_value(self):
         '''Check if the token specification is special (keyword) value
         '''
-        return self.startswith('@')
+        return self.startswith('@') or self == '*'
 
     @property
     def type(self):
@@ -323,6 +323,21 @@ class IntendedTarget(VMToken):
         return self
 
 # And the tokens. Inheritance defines, where the token can be used.
+
+class WildcardVM(Source, Target):
+    # any, including AdminVM
+
+    # pylint: disable=missing-docstring,unused-argument
+    EXACT = '*'
+    def match(self, other, *, system_info, source=None):
+        return True
+
+    def expand(self, *, system_info):
+        for name, domain in system_info['domains'].items():
+            yield IntendedTarget(name)
+            if domain['template_for_dispvms']:
+                yield DispVMTemplate('@dispvm:' + name)
+        yield DispVM('@dispvm')
 
 class AdminVM(Source, Target, Redirect, IntendedTarget):
     # no Source, for calls originating from AdminVM policy is not evaluated

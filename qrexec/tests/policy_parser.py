@@ -107,6 +107,7 @@ class TC_00_VMToken(unittest.TestCase):
         parser.Source('@adminvm')
         parser.Source('dom0')
         parser.Source('@anyvm')
+        parser.Source('*')
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Source('@default')
         parser.Source('@type:AppVM')
@@ -132,6 +133,7 @@ class TC_00_VMToken(unittest.TestCase):
         parser.Target('@adminvm')
         parser.Target('dom0')
         parser.Target('@anyvm')
+        parser.Target('*')
         parser.Target('@default')
         parser.Target('@type:AppVM')
         parser.Target('@tag:tag1')
@@ -162,6 +164,13 @@ class TC_00_VMToken(unittest.TestCase):
             ['@adminvm'])
         self.assertCountEqual(
             parser.Target('@anyvm').expand(system_info=SYSTEM_INFO), [
+                'test-vm1', 'test-vm2', 'test-vm3',
+                '@dispvm:test-vm3',
+                'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
+                'test-no-dvm', 'test-template', 'test-standalone', '@dispvm'])
+        self.assertCountEqual(
+            parser.Target('*').expand(system_info=SYSTEM_INFO), [
+                '@adminvm',
                 'test-vm1', 'test-vm2', 'test-vm3',
                 '@dispvm:test-vm3',
                 'default-dvm', '@dispvm:default-dvm', 'test-invalid-dvm',
@@ -219,6 +228,8 @@ class TC_00_VMToken(unittest.TestCase):
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect('@anyvm')
         with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect('*')
+        with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect('@default')
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect('@type:AppVM')
@@ -246,6 +257,8 @@ class TC_00_VMToken(unittest.TestCase):
         parser.IntendedTarget('dom0')
         with self.assertRaises(exc.PolicySyntaxError):
             parser.IntendedTarget('@anyvm')
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget('*')
         parser.IntendedTarget('@default')
         with self.assertRaises(exc.PolicySyntaxError):
             parser.IntendedTarget('@type:AppVM')
@@ -268,123 +281,74 @@ class TC_00_VMToken(unittest.TestCase):
             parser.IntendedTarget('@type:')
 
     def test_100_match_single(self):
-        self.assertTrue(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('@default').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@default').match(
-            parser.IntendedTarget('@default').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@tag:tag1').match(
-            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@type:AppVM').match(
-            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@type:TemplateVM').match(
-            parser.IntendedTarget('test-template').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('@dispvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('@dispvm:default-dvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@dispvm').match(
-            parser.IntendedTarget('@dispvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@dispvm:@tag:tag3').match(
-            parser.IntendedTarget('@dispvm:test-vm3').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@adminvm').match(
-            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@adminvm').match(
-            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('dom0').match(
-            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('dom0').match(
-            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@dispvm:default-dvm').match(
-            parser.IntendedTarget('@dispvm:default-dvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('@dispvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertTrue(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
+        # pytest: disable=no-self-use
+        cases = [
+            ('@anyvm', 'test-vm1', True),
+            ('@anyvm', '@default', True),
+            ('@default', '@default', True),
+            ('@tag:tag1', 'test-vm1', True),
+            ('@type:AppVM', 'test-vm1', True),
+            ('@type:TemplateVM', 'test-template', True),
+            ('@anyvm', '@dispvm', True),
+            ('@anyvm', '@dispvm:default-dvm', True),
+            ('@dispvm', '@dispvm', True),
+            ('@dispvm:@tag:tag3', '@dispvm:test-vm3', True),
+            ('@adminvm', '@adminvm', True),
+            ('@adminvm', 'dom0', True),
+            ('dom0', '@adminvm', True),
+            ('dom0', 'dom0', True),
+            ('@dispvm:default-dvm', '@dispvm:default-dvm', True),
+            ('@anyvm', '@dispvm', True),
 
-        self.assertFalse(parser.VMToken('@default').match(
-            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@tag:tag1').match(
-            parser.IntendedTarget('test-vm3').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
+            ('*', 'test-vm1', True),
+            ('*', '@dispvm', True),
+            ('*', '@adminvm', True),
 
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('no-such-vm').verify(system_info=SYSTEM_INFO)
+            ('@default', 'test-vm1', False),
+            ('@tag:tag1', 'test-vm3', False),
 
-        # test-vm1.template_for_dispvms=False
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('@dispvm:test-vm1').verify(
+            # test-vm3 has not tag1
+            ('@dispvm:@tag:tag1', '@dispvm:test-vm3', False),
+            # default-dvm has no tag3
+            ('@dispvm:@tag:tag3', '@dispvm:default-dvm', False),
+            ('@anyvm', 'dom0', False),
+            ('@anyvm', '@adminvm', False),
+            ('@tag:dom0-tag', '@adminvm', False),
+            ('@type:AdminVM', '@adminvm', False),
+            ('@tag:dom0-tag', 'dom0', False),
+            ('@type:AdminVM', 'dom0', False),
+            ('@tag:tag1', 'dom0', False),
+            ('@dispvm', 'test-vm1', False),
+            ('@dispvm', 'default-dvm', False),
+            ('@dispvm:default-dvm', 'default-dvm', False),
+        ]
+
+        for token, target, expected_result in cases:
+            match_result = parser.VMToken(token).match(
+                parser.IntendedTarget(target).verify(system_info=SYSTEM_INFO),
                 system_info=SYSTEM_INFO)
+            assert match_result == expected_result, \
+                '{} match {} should be {}'.format(token, target, expected_result)
 
-        # test-vm3 has not tag1
-        self.assertFalse(parser.VMToken('@dispvm:@tag:tag1').match(
-            parser.IntendedTarget('@dispvm:test-vm3').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        # default-dvm has no tag3
-        self.assertFalse(parser.VMToken('@dispvm:@tag:tag3').match(
-            parser.IntendedTarget('@dispvm:default-dvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@anyvm').match(
-            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@tag:dom0-tag').match(
-            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@type:AdminVM').match(
-            parser.IntendedTarget('@adminvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@tag:dom0-tag').match(
-            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@type:AdminVM').match(
-            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@tag:tag1').match(
-            parser.IntendedTarget('dom0').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('@tag:tag1').verify(system_info=SYSTEM_INFO)
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('@type:AppVM').verify(system_info=SYSTEM_INFO)
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('@invalid').verify(system_info=SYSTEM_INFO)
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('no-such-vm').verify(system_info=SYSTEM_INFO)
-        self.assertFalse(parser.VMToken('@dispvm').match(
-            parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@dispvm').match(
-            parser.IntendedTarget('default-dvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        self.assertFalse(parser.VMToken('@dispvm:default-dvm').match(
-            parser.IntendedTarget('default-dvm').verify(system_info=SYSTEM_INFO),
-            system_info=SYSTEM_INFO))
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('test-vm1\n').verify(system_info=SYSTEM_INFO)
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('test-vm1  ').verify(system_info=SYSTEM_INFO)
+    def test_101_match_single_access_denied(self):
+        targets = [
+            # test-vm1.template_for_dispvms=False
+            '@dispvm:test-vm1',
+            '@tag:tag1',
+            '@type:AppVM',
+            '@invalid',
+            'no-such-vm',
+            'test-vm1\n',
+            'test-vm1  ',
+        ]
+
+        for target in targets:
+            with self.assertRaises(
+                    exc.AccessDenied,
+                    msg='{} should raise AccessDenied'.format(target)):
+                parser.IntendedTarget(target).verify(
+                    system_info=SYSTEM_INFO)
+
 
 class TC_01_Request(unittest.TestCase):
     def test_000_init(self):
