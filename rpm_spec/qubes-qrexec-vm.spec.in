@@ -104,6 +104,10 @@ fi
 /usr/lib/qubes/qrexec-client-vm
 /usr/lib/qubes/qrexec_client_vm
 /lib/systemd/system/qubes-qrexec-agent.service
+#### KVM:
+%dir /lib/systemd/system/qubes-qrexec-agent.service.d
+/lib/systemd/system/qubes-qrexec-agent.service.d/30_qubes-kvm.conf
+########
 
 %changelog
 @CHANGELOG@

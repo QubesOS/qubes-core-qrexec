@@ -77,6 +77,10 @@ install-vm: all-vm
 	install -m 0644 -D qubes-rpc-config/README $(DESTDIR)/etc/qubes/rpc-config/README
 #	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 #	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc/*
+#### KVM:
+	install -d $(DESTDIR)/lib/systemd/system/qubes-qrexec-agent.service.d -m 755
+	install -t $(DESTDIR)/lib/systemd/system/qubes-qrexec-agent.service.d -m 644 systemd/qubes-qrexec-agent.service.d/30_qubes-kvm.conf
+########
 .PHONY: install-vm
 
 all: all-vm all-dom0
