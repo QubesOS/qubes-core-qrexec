@@ -155,11 +155,7 @@ Parsers
 Miscellaneous and test facilities
 ---------------------------------
 
-.. .. autoclass:: ValidateIncludesParser
-   :members:
-   :member-order: bysource
-
-.. .. autoclass:: CheckIfNotIncludedParser
+.. autoclass:: ValidateParser
    :members:
    :member-order: bysource
 

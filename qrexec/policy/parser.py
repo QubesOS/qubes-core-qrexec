@@ -38,6 +38,8 @@ from typing import (
     List,
     TextIO,
     Tuple,
+    Dict,
+    Optional,
 )
 
 from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
@@ -1398,57 +1400,45 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
         subparser = Compat40Loader(master=self)
         subparser.execute(filepath=filepath, lineno=lineno)
 
-class ValidateIncludesParser(AbstractParser):
-    '''A parser that checks if included file does indeed exist.
 
-    The included file is not read, because if it exists, it is assumed it
-    already passed syntax check.
+class ValidateParser(FilePolicy):
     '''
-    def handle_include(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
-        # TODO disallow anything other that @include:[include/]<file>
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_file():
-            raise PolicySyntaxError(filepath, lineno,
-                'included path {!s} does not exist'.format(included_path))
+    A parser that validates the policy directory along with proposed changes.
 
-    def handle_include_service(self, service, argument,
-            included_path: pathlib.PurePosixPath, *, filepath, lineno):
-        # TODO disallow anything other that @include:[include/]<file>
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_file():
-            raise PolicySyntaxError(filepath, lineno,
-                'included path {!s} does not exist'.format(included_path))
-
-    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
-        included_path = (filepath.resolve().parent / included_path).resolve()
-        if not included_path.is_dir():
-            raise PolicySyntaxError(filepath, lineno,
-                'included path {!s} does not exist'.format(included_path))
-
-    def handle_rule(self, rule, *, filepath, lineno):
-        pass
-
-class CheckIfNotIncludedParser(FilePolicy):
-    '''A parser that checks if a particular file is *not* included.
-
-    This is used while removing a particular file, to check that it is not used
-    anywhere else.
+    Pass files to be overriden in the ``overrides`` dictionary, with either
+    new content, or None if the file is to be deleted.
     '''
-    def __init__(self, *args, to_be_removed, **kwds):
-        self.to_be_removed = self.policy_path / to_be_removed
+
+    def __init__(self, *args,
+                 overrides: Dict[pathlib.Path, Optional[str]],
+                 **kwds):
+        self.overrides = overrides
         super().__init__(*args, **kwds)
 
-    def resolve_path(self, included_path):
-        included_path = super().resolve_path(included_path)
-        if included_path.samefile(self.to_be_removed):
-            raise ValueError(
-                'included path {!s}'.format(included_path))
-        return included_path
+    def load_policy_dir(self, dirpath):
+        for path in filter_filepaths(dirpath.iterdir()):
+            if path not in self.overrides:
+                with path.open() as file:
+                    self.load_policy_file(file, path)
+        for path, content in self.overrides.items():
+            if path.parent == dirpath and content is not None:
+                self.load_policy_file(io.StringIO(content), path)
+
+    def resolve_filepath(self, included_path: pathlib.PurePosixPath, *,
+            filepath, lineno) -> Tuple[TextIO, pathlib.PurePath]:
+        path = self.resolve_path(included_path)
+        if path in self.overrides:
+            if self.overrides[path] is None:
+                raise exc.PolicySyntaxError(
+                    filepath, lineno,
+                    'including a file that will be removed: {}'.format(path))
+            return io.StringIO(self.overrides[path]), path
+        return super().resolve_filepath(included_path,
+                                        filepath=filepath, lineno=lineno)
 
     def handle_rule(self, rule, *, filepath, lineno):
         pass
+
 
 class ToposortMixIn:
     '''A helper for topological sorting the policy files'''
