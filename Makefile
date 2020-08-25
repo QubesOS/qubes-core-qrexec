@@ -55,8 +55,10 @@ install-dom0: all-dom0
 	install -d $(DESTDIR)/etc/qubes-rpc/policy -m 775
 	install -d $(DESTDIR)/etc/qubes-rpc/policy/include -m 775
 	install -d $(DESTDIR)/etc/qubes/policy.d -m 775
+	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/*.policy
+	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/README
 	install -d $(DESTDIR)/etc/qubes/policy.d/include -m 775
-	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/*
+	install -t $(DESTDIR)/etc/qubes/policy.d/include -m 664 policy.d/include/*
 	install -d $(DESTDIR)/lib/systemd/system -m 755
 	install -t $(DESTDIR)/lib/systemd/system -m 644 systemd/qubes-qrexec-policy-daemon.service
 .PHONY: install-dom0
