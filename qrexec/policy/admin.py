@@ -22,11 +22,11 @@ from pathlib import Path
 import contextlib
 import fcntl
 import os
-import string
 import hashlib
 
 from .parser import ValidateParser
 from ..exc import PolicySyntaxError
+from .. import RPCNAME_ALLOWED_CHARSET
 
 
 class PolicyAdminException(Exception):
@@ -49,14 +49,6 @@ def method(service_name, *, no_arg=False, no_payload=False):
         return func
     return decorator
 
-
-# Characters allowed as part of RPC name.
-# See sanitize_name() in core-admin-linux/qrexec/qrexec-daemon.c
-ALLOWED_CHARS = set(
-    string.ascii_uppercase +
-    string.ascii_lowercase +
-    string.digits +
-    '+-._')
 
 RENAME_PREFIX = '!'
 
@@ -91,7 +83,7 @@ class PolicyAdmin:
         Throws PolicyAdminException in case of user error.
         '''
 
-        assert all(char in ALLOWED_CHARS for char in arg)
+        assert all(char in RPCNAME_ALLOWED_CHARSET for char in arg)
 
         func = self._find_method(service_name)
         if not func:

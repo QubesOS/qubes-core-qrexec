@@ -156,7 +156,6 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/cli.py
 %{python3_sitelib}/qrexec/tests/gtkhelpers.py
 %{python3_sitelib}/qrexec/tests/rpcconfirmation.py
-%{python3_sitelib}/qrexec/tests/policy_api.py
 %{python3_sitelib}/qrexec/tests/policy_parser.py
 %{python3_sitelib}/qrexec/tests/qrexec_policy_daemon.py
 %{python3_sitelib}/qrexec/tests/policy_cache.py
