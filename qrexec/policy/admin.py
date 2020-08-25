@@ -23,6 +23,7 @@ import contextlib
 import fcntl
 import os
 import string
+import hashlib
 
 from .parser import ValidateParser
 from ..exc import PolicySyntaxError
@@ -31,6 +32,12 @@ from ..exc import PolicySyntaxError
 class PolicyAdminException(Exception):
     '''
     An exception with message to the user.
+    '''
+
+
+class PolicyAdminTokenException(Exception):
+    '''
+    A token check exception, indicating that a file is in unexpected state.
     '''
 
 
@@ -61,6 +68,13 @@ class PolicyAdmin:
     All changes (Replace / Remove) are be validated to check if they will not
     introduce errors: (syntax error, removing a file that is still included,
     including a file in wrong context, etc.)
+
+    The API optionally uses tokens (currently, SHA256 hashes) to prevent race
+    conditions when removing or replacing a file. The Get calls returns the
+    token as the first output line.  The Remove and Replace calls take token as
+    first line of payload, or one of special values: "new" when the file is not
+    supposed to be there, "any" when the client doesn't want a token to be
+    checked.
     '''
 
     # pylint: disable=no-self-use
@@ -163,7 +177,9 @@ class PolicyAdmin:
         if not path.is_file():
             raise PolicyAdminException('Not found: {}'.format(path))
 
-        return path.read_bytes()
+        data = path.read_bytes()
+        token = compute_token(data)
+        return token + b'\n' + data
 
     # Replace
 
@@ -178,27 +194,34 @@ class PolicyAdmin:
         return self._common_replace(path, payload)
 
     def _common_replace(self, path: Path, payload: bytes) -> bytes:
+        if b'\n' not in payload:
+            raise PolicyAdminException(
+                'Payload needs to include first line with token')
+        token, data = payload.split(b'\n', 1)
+        self._check_token(token, path)
+
+        data_string = data.decode('utf-8')
+        self._validate(path, data_string)
+
         temp_path = path.with_name(RENAME_PREFIX + path.name)
-
-        content = payload.decode('utf-8')
-        self._validate(path, content)
-
-        temp_path.write_bytes(payload)
+        temp_path.write_bytes(data)
         temp_path.rename(path)
 
     # Remove
 
-    @method('policy.Remove', no_payload=True)
-    def policy_remove(self, arg):
+    @method('policy.Remove')
+    def policy_remove(self, arg, payload):
         path = self._get_path(arg, self.policy_path, '.policy')
-        return self._common_remove(path)
+        return self._common_remove(path, payload)
 
-    @method('policy.include.Remove', no_payload=True)
-    def policy_include_remove(self, arg):
+    @method('policy.include.Remove')
+    def policy_include_remove(self, arg, payload):
         path = self._get_path(arg, self.include_path, '')
-        return self._common_remove(path)
+        return self._common_remove(path, payload)
 
-    def _common_remove(self, path: Path) -> None:
+    def _common_remove(self, path: Path, payload: str) -> None:
+        self._check_token(payload, path)
+
         if not path.is_file():
             raise PolicyAdminException('Not found: {}'.format(path))
 
@@ -225,3 +248,28 @@ class PolicyAdmin:
         except PolicySyntaxError as exc:
             raise PolicyAdminException(
                 'Policy change validation failed: {}'.format(exc))
+
+    def _check_token(self, token: bytes, path: Path):
+        if token == b'any':
+            return
+
+        if token == b'new':
+            if path.exists():
+                raise PolicyAdminTokenException(
+                    "File exists but token is 'new'")
+            return
+
+        if not token.startswith(b'sha256:'):
+            raise PolicyAdminException('Unrecognized token')
+
+        if not path.exists():
+            raise PolicyAdminTokenException(
+                "File doesn't exist, but token isn't 'new'")
+
+        current_token = compute_token(path.read_bytes())
+        if current_token != token:
+            raise PolicyAdminTokenException('Token mismatch')
+
+
+def compute_token(data: bytes) -> bytes:
+    return b'sha256:' + hashlib.sha256(data).hexdigest().encode('ascii')
