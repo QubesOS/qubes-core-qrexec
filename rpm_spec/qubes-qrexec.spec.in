@@ -107,6 +107,7 @@ rm -f %{name}-%{version}
 %{_bindir}/qrexec-policy-restore
 %{_bindir}/qrexec-policy-daemon
 %{_bindir}/qubes-policy
+%{_bindir}/qubes-policy-admin
 %{_bindir}/qrexec-policy
 
 /usr/lib/qubes/qubes-rpc-multiplexer
@@ -133,7 +134,8 @@ rm -f %{name}-%{version}
 %dir %{python3_sitelib}/qrexec/policy/__pycache__
 %{python3_sitelib}/qrexec/policy/__pycache__/*
 %{python3_sitelib}/qrexec/policy/__init__.py
-%{python3_sitelib}/qrexec/policy/api.py
+%{python3_sitelib}/qrexec/policy/admin.py
+%{python3_sitelib}/qrexec/policy/admin_client.py
 %{python3_sitelib}/qrexec/policy/parser.py
 %{python3_sitelib}/qrexec/policy/parser_compat.py
 %{python3_sitelib}/qrexec/policy/utils.py
@@ -143,6 +145,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tools/__pycache__/*
 %{python3_sitelib}/qrexec/tools/__init__.py
 %{python3_sitelib}/qrexec/tools/qubes_policy.py
+%{python3_sitelib}/qrexec/tools/qubes_policy_admin.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_agent.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_exec.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_daemon.py
@@ -160,6 +163,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/qrexec_policy_daemon.py
 %{python3_sitelib}/qrexec/tests/policy_cache.py
 %{python3_sitelib}/qrexec/tests/server.py
+%{python3_sitelib}/qrexec/tests/policy_admin.py
 
 %dir %{python3_sitelib}/qrexec/tests/socket
 %dir %{python3_sitelib}/qrexec/tests/socket/__pycache__
