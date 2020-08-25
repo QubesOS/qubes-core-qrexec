@@ -239,7 +239,7 @@ class PolicyAdmin:
                 overrides={path: content})
         except PolicySyntaxError as exc:
             raise PolicyAdminException(
-                'Policy change validation failed: {}'.format(exc))
+                'Policy change validation failed: {}'.format(exc)) from exc
 
     def _check_token(self, token: bytes, path: Path):
         if token == b'any':

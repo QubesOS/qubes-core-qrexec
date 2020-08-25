@@ -891,17 +891,17 @@ class Rule:
 
         try:
             actiontype = Action[action].value
-        except KeyError:
+        except KeyError as err:
             raise PolicySyntaxError(filepath, lineno,
-                'invalid action: {}'.format(action))
+                'invalid action: {}'.format(action)) from err
 
         kwds = {}
         for param in params:
             try:
                 key, value = param.split('=', maxsplit=1)
-            except ValueError:
+            except ValueError as err:
                 raise PolicySyntaxError(filepath, lineno,
-                    'invalid action parameter syntax: {!r}'.format(param))
+                    'invalid action parameter syntax: {!r}'.format(param)) from err
             if key in kwds:
                 raise PolicySyntaxError(filepath, lineno,
                     'parameter given twice: {!r}'.format(key))
@@ -918,10 +918,10 @@ class Rule:
         try:
             #: policy action
             self.action = actiontype(rule=self, **kwds)
-        except TypeError:
+        except TypeError as err:
             raise PolicySyntaxError(filepath, lineno,
                 'invalid parameters for action {}: {}'.format(
-                    actiontype.__name__, params))
+                    actiontype.__name__, params)) from err
 
         # verify special cases
         if (isinstance(self.target, DefaultVM)
@@ -955,8 +955,8 @@ class Rule:
 
         try:
             service, argument, source, target, action, *params = line.split()
-        except ValueError:
-            raise PolicySyntaxError(filepath, lineno, 'wrong number of fields')
+        except ValueError as err:
+            raise PolicySyntaxError(filepath, lineno, 'wrong number of fields') from err
 
         return cls(service, argument, source, target, action, params,
             policy=policy, filepath=filepath, lineno=lineno)
@@ -978,8 +978,9 @@ class Rule:
         '''
         try:
             source, target, action, *params = line.split()
-        except ValueError:
-            raise PolicySyntaxError(filepath, lineno, 'wrong number of fields')
+        except ValueError as err:
+            raise PolicySyntaxError(
+                filepath, lineno, 'wrong number of fields') from err
 
         params = tuple(itertools.chain(*(p.split(',') for p in params)))
 
@@ -1060,18 +1061,18 @@ class AbstractParser(metaclass=abc.ABCMeta):
                 if directive == '!include':
                     try:
                         included_path, = params
-                    except ValueError:
+                    except ValueError as err:
                         raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params')
+                            'invalid number of params') from err
                     self.handle_include(pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
                     continue
                 if directive == '!include-dir':
                     try:
                         included_path, = params
-                    except ValueError:
+                    except ValueError as err:
                         raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params')
+                            'invalid number of params') from err
                     self.handle_include_dir(
                         pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
@@ -1079,9 +1080,9 @@ class AbstractParser(metaclass=abc.ABCMeta):
                 if directive == '!include-service':
                     try:
                         service, argument, included_path = params
-                    except ValueError:
+                    except ValueError as err:
                         raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params')
+                            'invalid number of params') from err
                     self.handle_include_service(service, argument,
                         pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
@@ -1130,9 +1131,9 @@ class AbstractParser(metaclass=abc.ABCMeta):
                 if directive == '!include':
                     try:
                         included_path, = params
-                    except ValueError:
+                    except ValueError as err:
                         raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params')
+                            'invalid number of params') from err
                     self.handle_include_service(service, argument,
                         pathlib.PurePosixPath(included_path),
                         filepath=filepath, lineno=lineno)
@@ -1374,7 +1375,7 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
             self.load_policy_dir(self.policy_path)
         except OSError as err:
             raise AccessDenied(
-                'failed to load {} file: {!s}'.format(err.filename, err))
+                'failed to load {} file: {!s}'.format(err.filename, err)) from err
 
     def resolve_path(self, included_path):
         return (self.policy_path / included_path).resolve()
@@ -1570,9 +1571,9 @@ class TestLoader(AbstractFileLoader):
         included_path = str(included_path)
         try:
             file = io.StringIO(self.policy[included_path])
-        except KeyError:
+        except KeyError as err:
             raise exc.PolicySyntaxError(filepath, lineno,
-                'no such policy file: {!r}'.format(included_path))
+                'no such policy file: {!r}'.format(included_path)) from err
         return file, pathlib.PurePosixPath(included_path + '[in-memory]')
 
     def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
