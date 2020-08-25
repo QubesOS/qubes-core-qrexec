@@ -58,18 +58,16 @@ class PolicyAdmin:
     '''
     A class that implements Qubes RPC interface for policy administration.
 
-    Paths in include/ directory are supported when the argument has 'include++'
-    prefix.
-
     All changes (Replace / Remove) are be validated to check if they will not
     introduce errors: (syntax error, removing a file that is still included,
     including a file in wrong context, etc.)
     '''
 
+    # pylint: disable=no-self-use
+
     def __init__(self, policy_path):
         self.policy_path = policy_path
         self.include_path = policy_path / 'include'
-        self.include_prefix = 'include++'
 
     def handle_request(self, service_name: str, arg: str, payload: bytes) \
         -> Optional[bytes]:
@@ -125,33 +123,61 @@ class PolicyAdmin:
         finally:
             os.close(lock_fd)
 
+    # List
+
     @method('policy.List', no_arg=True, no_payload=True)
     def policy_list(self):
-        names = []
-        for file_path in self.policy_path.iterdir():
-            if file_path.is_file() and file_path.name.endswith('.policy'):
-                names.append(file_path.name)
+        return self._common_list(self.policy_path, '.policy')
 
-        if self.include_path.is_dir():
-            for file_path in self.include_path.iterdir():
-                if file_path.is_file():
-                    names.append(self.include_prefix + file_path.name)
+    @method('policy.include.List', no_arg=True, no_payload=True)
+    def policy_include_list(self):
+        return self._common_list(self.include_path, '')
+
+    def _common_list(self, dir_path: Path, suffix: str) -> bytes:
+        names = []
+        for file_path in dir_path.iterdir():
+            if file_path.is_file():
+                name = file_path.name
+                if suffix and name.endswith(suffix):
+                    name = name[:-len(suffix)]
+                    names.append(name)
+                elif not suffix:
+                    names.append(name)
 
         names.sort()
         return ''.join(name + '\n' for name in names).encode('ascii')
 
+    # Get
+
     @method('policy.Get', no_payload=True)
     def policy_get(self, arg):
-        path = self.get_path(arg)
+        path = self._get_path(arg, self.policy_path, '.policy')
+        return self._common_get(path)
 
+    @method('policy.include.Get', no_payload=True)
+    def policy_include_get(self, arg):
+        path = self._get_path(arg, self.include_path, '')
+        return self._common_get(path)
+
+    def _common_get(self, path: Path) -> bytes:
         if not path.is_file():
             raise PolicyAdminException('Not found: {}'.format(path))
 
         return path.read_bytes()
 
+    # Replace
+
     @method('policy.Replace')
     def policy_replace(self, arg, payload):
-        path = self.get_path(arg)
+        path = self._get_path(arg, self.policy_path, '.policy')
+        return self._common_replace(path, payload)
+
+    @method('policy.include.Replace')
+    def policy_include_replace(self, arg, payload):
+        path = self._get_path(arg, self.include_path, '')
+        return self._common_replace(path, payload)
+
+    def _common_replace(self, path: Path, payload: bytes) -> bytes:
         temp_path = path.with_name(RENAME_PREFIX + path.name)
 
         content = payload.decode('utf-8')
@@ -160,31 +186,34 @@ class PolicyAdmin:
         temp_path.write_bytes(payload)
         temp_path.rename(path)
 
+    # Remove
+
     @method('policy.Remove', no_payload=True)
     def policy_remove(self, arg):
-        path = self.get_path(arg)
-        if not path.is_file:
+        path = self._get_path(arg, self.policy_path, '.policy')
+        return self._common_remove(path)
+
+    @method('policy.include.Remove', no_payload=True)
+    def policy_include_remove(self, arg):
+        path = self._get_path(arg, self.include_path, '')
+        return self._common_remove(path)
+
+    def _common_remove(self, path: Path) -> None:
+        if not path.is_file():
             raise PolicyAdminException('Not found: {}'.format(path))
 
         self._validate(path, None)
 
         path.unlink()
 
-    def get_path(self, arg: str) -> Path:
-        if arg.startswith(self.include_prefix):
-            path = self.include_path / arg[len(self.include_prefix):]
-            path = path.resolve()
-            if path.parent != self.include_path:
-                raise PolicyAdminException('Expecting a path inside {}'.format(
-                    self.include_path))
-        else:
-            path = self.policy_path / arg
-            path = path.resolve()
-            if path.parent != self.policy_path:
-                raise PolicyAdminException('Expecting a path inside {}'.format(
-                    self.policy_path))
-            if not path.name.endswith('.policy'):
-                raise PolicyAdminException("File name doesn't end with .policy")
+    # helpers
+
+    def _get_path(self, arg: str, dir_path, suffix: str) -> Path:
+        path = dir_path / (arg + suffix)
+        path = path.resolve()
+        if path.parent != dir_path:
+            raise PolicyAdminException('Expecting a path inside {}'.format(
+                dir_path))
 
         return path
 

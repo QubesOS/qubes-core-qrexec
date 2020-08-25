@@ -48,90 +48,80 @@ def test_api_list(policy_dir, api):
     (policy_dir / 'file3').touch()
 
     assert api.handle_request('policy.List', '', b'') == \
-        b'file1.policy\nfile2.policy\n'
+        b'file1\nfile2\n'
+
+    assert api.handle_request('policy.include.List', '', b'') == \
+        b''
 
     (policy_dir / 'include/inc').touch()
 
-    assert api.handle_request('policy.List', '', b'') == \
-        b'file1.policy\nfile2.policy\ninclude++inc\n'
+    assert api.handle_request('policy.include.List', '', b'') == \
+        b'inc\n'
 
 
 def test_api_get(policy_dir, api):
     (policy_dir / 'file1.policy').write_text('policy text')
 
-    assert api.handle_request('policy.Get', 'file1.policy', b'') == \
+    assert api.handle_request('policy.Get', 'file1', b'') == \
         b'policy text'
 
     (policy_dir / 'include/inc').write_text('include text')
 
-    assert api.handle_request('policy.Get', 'include++inc', b'') == \
+    assert api.handle_request('policy.include.Get', 'inc', b'') == \
         b'include text'
 
     with pytest.raises(PolicyAdminException,
                        match='Not found'):
-        api.handle_request('policy.Get', 'nonexistent.policy', b'')
-
-
-def test_get_path(policy_dir, api):
-    (policy_dir / 'file1').touch()
-    (policy_dir / 'file1.policy').touch()
-    (policy_dir / 'include/inc').touch()
-
-    assert api.get_path('file1.policy') == policy_dir / 'file1.policy'
-    assert api.get_path('include++inc') == policy_dir / 'include/inc'
-
-    with pytest.raises(PolicyAdminException,
-                       match="File name doesn't end with .policy"):
-        api.get_path('file1')
+        api.handle_request('policy.Get', 'nonexistent', b'')
 
     with pytest.raises(PolicyAdminException,
                        match='Expecting a path inside'):
-        api.get_path('..')
+        api.handle_request('policy.include.Get', '..', b'')
 
     with pytest.raises(PolicyAdminException,
                        match='Expecting a path inside'):
-        api.get_path('include++..')
+        api.handle_request('policy.include.Get', '', b'')
 
 
 def test_api_replace(policy_dir, api):
-    api.handle_request('policy.Replace', 'file1.policy', b'')
+    api.handle_request('policy.Replace', 'file1', b'')
     assert (policy_dir / 'file1.policy').read_text() == ''
 
-    api.handle_request('policy.Replace', 'file1.policy', b'rpc.Name * * * deny')
+    api.handle_request('policy.Replace', 'file1', b'rpc.Name * * * deny')
     assert (policy_dir / 'file1.policy').read_text() == 'rpc.Name * * * deny'
 
-    api.handle_request('policy.Replace', 'include++inc', b'rpc.Name * * * deny')
+    api.handle_request('policy.include.Replace', 'inc', b'rpc.Name * * * deny')
     assert (policy_dir / 'include/inc').read_text() == 'rpc.Name * * * deny'
 
-    api.handle_request('policy.Replace', 'file1.policy', b'!include include/inc')
+    api.handle_request('policy.Replace', 'file1', b'!include include/inc')
 
 
 def test_api_replace_validate(api):
     with pytest.raises(PolicyAdminException,
                        match='wrong number of fields'):
-        api.handle_request('policy.Replace', 'file1.policy', b'xxx')
+        api.handle_request('policy.Replace', 'file1', b'xxx')
 
     # Trying to include a nonexistent file
     with pytest.raises(PolicyAdminException,
                        match='not a file'):
-        api.handle_request('policy.Replace', 'file1.policy', b'!include include/inc')
+        api.handle_request('policy.Replace', 'file1', b'!include include/inc')
 
     # File that can be included, but not using !include-service
-    api.handle_request('policy.Replace', 'include++inc', b'rpc.Name * * * deny')
-    api.handle_request('policy.Replace', 'file1.policy', b'!include include/inc')
+    api.handle_request('policy.include.Replace', 'inc', b'rpc.Name * * * deny')
+    api.handle_request('policy.Replace', 'file1', b'!include include/inc')
     with pytest.raises(PolicyAdminException,
                        match='invalid number of params'):
-        api.handle_request('policy.Replace', 'file1.policy', b'!include-service include/inc')
+        api.handle_request('policy.Replace', 'file1', b'!include-service include/inc')
 
 
 def test_api_remove(policy_dir, api):
     (policy_dir / 'file1.policy').touch()
     (policy_dir / 'include/inc').touch()
 
-    api.handle_request('policy.Remove', 'file1.policy', b'')
-    assert not (policy_dir / 'file1.policy').exists()
+    api.handle_request('policy.Remove', 'file1', b'')
+    assert not (policy_dir / 'file1').exists()
 
-    api.handle_request('policy.Remove', 'include++inc', b'')
+    api.handle_request('policy.include.Remove', 'inc', b'')
     assert not (policy_dir / 'include/inc').exists()
 
 
@@ -141,4 +131,4 @@ def test_api_remove_validate(policy_dir, api):
 
     with pytest.raises(PolicyAdminException,
                        match='including a file that will be removed'):
-        api.handle_request('policy.Remove', 'include++inc', b'')
+        api.handle_request('policy.include.Remove', 'inc', b'')
