@@ -15,7 +15,8 @@ Each line consist of three values separated by white characters (space(s), tab(s
 1. Source specification, which is one of:
 
   - domain name
-  - `$anyvm` - any domain
+  - `$anyvm` - any domain, excluding dom0
+  - `*` - any domain
   - `$tag:some-tag` - VM having tag `some-tag`
   - `$type:vm-type` - VM of `vm-type` type, available types:
     AppVM, TemplateVM, StandaloneVM, DispVM
@@ -24,6 +25,7 @@ Each line consist of three values separated by white characters (space(s), tab(s
 
   - domain name
   - `$anyvm` - any domain, excluding dom0
+  - `*` - any domain
   - `$tag:some-tag` - domain having tag `some-tag`
   - `$type:vm-type` - domain of `vm-type` type, available types:
     AppVM, TemplateVM, StandaloneVM, DispVM
