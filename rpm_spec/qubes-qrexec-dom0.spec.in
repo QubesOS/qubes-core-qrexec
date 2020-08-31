@@ -98,12 +98,23 @@ rm -f %{name}-%{version}
 %dir %{_sysconfdir}/qubes/policy.d/include
 %{_sysconfdir}/qubes/policy.d/README
 %{_sysconfdir}/qubes/policy.d/35-compat.policy
+%{_sysconfdir}/qubes/policy.d/90-admin-policy-default.policy
+%{_sysconfdir}/qubes/policy.d/include/admin-policy-ro
+%{_sysconfdir}/qubes/policy.d/include/admin-policy-rwx
 
 %attr(2775,root,qubes) %dir %{_sysconfdir}/qubes-rpc/policy
 %dir %{_sysconfdir}/qubes-rpc/policy/include
 
 %{_sysconfdir}/qubes-rpc/policy.RegisterArgument
 %{_sysconfdir}/qubes-rpc/qubes.WaitForSession
+%{_sysconfdir}/qubes-rpc/policy.List
+%{_sysconfdir}/qubes-rpc/policy.Get
+%{_sysconfdir}/qubes-rpc/policy.Replace
+%{_sysconfdir}/qubes-rpc/policy.Remove
+%{_sysconfdir}/qubes-rpc/policy.include.List
+%{_sysconfdir}/qubes-rpc/policy.include.Get
+%{_sysconfdir}/qubes-rpc/policy.include.Replace
+%{_sysconfdir}/qubes-rpc/policy.include.Remove
 
 /lib/systemd/system/qubes-qrexec-policy-daemon.service
 

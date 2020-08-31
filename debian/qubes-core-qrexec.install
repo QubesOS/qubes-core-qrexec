@@ -13,6 +13,7 @@ usr/bin/qrexec-policy-daemon
 usr/bin/qrexec-policy
 usr/bin/qrexec-policy-agent
 usr/bin/qubes-policy
+usr/bin/qubes-policy-admin
 usr/lib/qubes/qrexec-agent
 usr/lib/qubes/qrexec-client-vm
 usr/lib/qubes/qrexec_client_vm

@@ -1,0 +1,24 @@
+## Do not modify this file, create a new policy file with a lower number in the
+## filename instead. For example `30-admin-policy.policy`.
+
+###
+### Policy Admin API qrexec policy
+###
+
+## WARNING: the services here allow viewing and changing the Qubes RPC policy,
+## which effectively gives the caller full control over the system. You should
+## allow them only to trusted qubes.
+
+## For convenience of maintaining this policy, all services include one of:
+##  - include/admin-policy-rwx (services to modify the policy)
+##  - include/admin-policy-ro (services to read the policy)
+
+!include-service policy.List             *  include/admin-policy-ro
+!include-service policy.include.List     *  include/admin-policy-ro
+!include-service policy.Get              *  include/admin-policy-ro
+!include-service policy.include.Get      *  include/admin-policy-ro
+
+!include-service policy.Replace          *  include/admin-policy-rwx
+!include-service policy.include.Replace  *  include/admin-policy-rwx
+!include-service policy.Remove           *  include/admin-policy-rwx
+!include-service policy.include.Remove   *  include/admin-policy-rwx

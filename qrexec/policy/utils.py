@@ -89,7 +89,7 @@ class PolicyCache:
 class PolicyWatcher(pyinotify.ProcessEvent):
     def __init__(self, cache):
         self.cache = cache
-        super(PolicyWatcher, self).__init__()
+        super().__init__()
 
     def process_IN_CREATE(self, _):
         self.cache.outdated = True

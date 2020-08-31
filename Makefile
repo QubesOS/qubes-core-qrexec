@@ -45,11 +45,20 @@ install-dom0: all-dom0
 	+$(MAKE) install -C daemon
 	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc-dom0/*
+
+	for RPCNAME in \
+		policy.List policy.Get policy.Replace policy.Remove \
+		policy.include.List policy.include.Get policy.include.Replace policy.include.Remove; \
+	do ln -s /usr/bin/qubes-policy-admin $(DESTDIR)/etc/qubes-rpc/$$RPCNAME; \
+	done
+
 	install -d $(DESTDIR)/etc/qubes-rpc/policy -m 775
 	install -d $(DESTDIR)/etc/qubes-rpc/policy/include -m 775
 	install -d $(DESTDIR)/etc/qubes/policy.d -m 775
+	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/*.policy
+	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/README
 	install -d $(DESTDIR)/etc/qubes/policy.d/include -m 775
-	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/*
+	install -t $(DESTDIR)/etc/qubes/policy.d/include -m 664 policy.d/include/*
 	install -d $(DESTDIR)/lib/systemd/system -m 755
 	install -t $(DESTDIR)/lib/systemd/system -m 644 systemd/qubes-qrexec-policy-daemon.service
 .PHONY: install-dom0
