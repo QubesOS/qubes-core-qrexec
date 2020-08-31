@@ -327,8 +327,9 @@ class TC_00_VMToken(unittest.TestCase):
             parser.IntendedTarget('test-vm3').verify(system_info=SYSTEM_INFO),
             system_info=SYSTEM_INFO))
 
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('no-such-vm').verify(system_info=SYSTEM_INFO)
+        self.assertTrue(parser.DefaultVM('@default').match(
+            parser.IntendedTarget('no-such-vm').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
 
         # test-vm1.template_for_dispvms=False
         with self.assertRaises(exc.AccessDenied):
@@ -370,8 +371,6 @@ class TC_00_VMToken(unittest.TestCase):
             parser.IntendedTarget('@type:AppVM').verify(system_info=SYSTEM_INFO)
         with self.assertRaises(exc.AccessDenied):
             parser.IntendedTarget('@invalid').verify(system_info=SYSTEM_INFO)
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('no-such-vm').verify(system_info=SYSTEM_INFO)
         self.assertFalse(parser.VMToken('@dispvm').match(
             parser.IntendedTarget('test-vm1').verify(system_info=SYSTEM_INFO),
             system_info=SYSTEM_INFO))
@@ -381,10 +380,12 @@ class TC_00_VMToken(unittest.TestCase):
         self.assertFalse(parser.VMToken('@dispvm:default-dvm').match(
             parser.IntendedTarget('default-dvm').verify(system_info=SYSTEM_INFO),
             system_info=SYSTEM_INFO))
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('test-vm1\n').verify(system_info=SYSTEM_INFO)
-        with self.assertRaises(exc.AccessDenied):
-            parser.IntendedTarget('test-vm1  ').verify(system_info=SYSTEM_INFO)
+        self.assertTrue(parser.DefaultVM('@default').match(
+            parser.IntendedTarget('test-vm1\n').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
+        self.assertTrue(parser.DefaultVM('@default').match(
+            parser.IntendedTarget('test-vm1  ').verify(system_info=SYSTEM_INFO),
+            system_info=SYSTEM_INFO))
 
 class TC_01_Request(unittest.TestCase):
     def test_000_init(self):
@@ -404,13 +405,24 @@ class TC_01_Request(unittest.TestCase):
                 system_info=SYSTEM_INFO)
 
     def test_002_invalid_target(self):
-        for invalid_target in ['no-such-vm', '@type:AppVM',
+        for invalid_target in ['@type:AppVM',
                 '@dispvm:test-invalid-dvm', '@dispvm:test-vm1', #'@default',
                 '@anyvm', '@tag:tag1', '@dispvm:@tag:tag1', '@invalid']:
             with self.subTest(invalid_target):
                 with self.assertRaises(exc.AccessDenied):
                     parser.Request('qrexec.Service', '+argument', 'test-vm1',
                         invalid_target, system_info=SYSTEM_INFO)
+
+    def test_003_non_existing_target(self):
+        request = parser.Request(
+            'qrexec.Service', '+argument', 'test-vm1', 'no-such-vm',
+            system_info=SYSTEM_INFO)
+        self.assertEqual(request.service, 'qrexec.Service')
+        self.assertEqual(request.argument, '+argument')
+        self.assertEqual(request.source, 'test-vm1')
+        self.assertEqual(request.target, '@default')
+        self.assertEqual(request.system_info, SYSTEM_INFO)
+
 
 #class TC_00_Rule(qubes.tests.QubesTestCase):
 class TC_10_Rule(unittest.TestCase):
