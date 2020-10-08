@@ -894,9 +894,23 @@ class Ask(ActionType):
                 'available to choose from'.format(
                     self.rule.filepath, self.rule.lineno))
 
+        default_target = self.default_target
+        if default_target is not None:
+            # expand default DispVM
+            if isinstance(default_target, DispVM):
+                # pylint is confused by the metaclass - default_target is
+                # constructed as Redirect(), but in fact it can be any subclass
+                # pylint: disable=no-member
+                default_target = default_target.get_dispvm_template(
+                    request.source,
+                    system_info=request.system_info)
+            # expand default AdminVM
+            elif isinstance(default_target, AdminVM):
+                default_target = 'dom0'
+
         return request.ask_resolution_type(self.rule, request,
             user=self.user, targets_for_ask=targets_for_ask,
-            default_target=self.default_target)
+            default_target=default_target)
 
 @enum.unique
 class Action(enum.Enum):

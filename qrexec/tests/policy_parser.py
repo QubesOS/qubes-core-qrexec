@@ -1151,6 +1151,27 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.target, '@dispvm:default-dvm')
         self.assertEqual(resolution.request.target, '@dispvm')
 
+    def test_054_eval_resolve_dispvm_from_target(self):
+        policy = parser.TestPolicy(policy='''\
+            * * @anyvm @anyvm allow target=@dispvm''')
+        resolution = policy.evaluate(_req('test-vm3', 'test-vm1'))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, '@dispvm:default-dvm')
+        self.assertEqual(resolution.request.target, 'test-vm1')
+
+    def test_055_eval_resolve_dispvm_from_default_target(self):
+        policy = parser.TestPolicy(policy='''\
+            * * @anyvm @anyvm ask default_target=@dispvm
+            * * @anyvm @dispvm ask''')
+        resolution = policy.evaluate(_req('test-vm3', 'test-vm1'))
+
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.default_target, '@dispvm:default-dvm')
+        self.assertEqual(resolution.request.target, 'test-vm1')
+
     @unittest.expectedFailure
     def test_060_eval_to_dom0(self):
         policy = parser.TestPolicy(policy='''\
@@ -1171,6 +1192,50 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.rule, policy.rules[0])
         self.assertEqual(resolution.target, '@adminvm')
         self.assertEqual(resolution.request.target, '@adminvm')
+
+    def test_070_eval_to_dom0_ask_default_target(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 dom0 ask default_target=dom0''')
+        resolution = policy.evaluate(_req('test-vm3', 'dom0'))
+
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.default_target, 'dom0')
+        self.assertEqual(resolution.request.target, '@adminvm')
+        self.assertEqual(resolution.targets_for_ask, ['dom0'])
+
+    def test_071_eval_to_dom0_ask_default_target(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 dom0 ask default_target=@adminvm''')
+        resolution = policy.evaluate(_req('test-vm3', 'dom0'))
+
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.default_target, 'dom0')
+        self.assertEqual(resolution.request.target, '@adminvm')
+        self.assertEqual(resolution.targets_for_ask, ['dom0'])
+
+    def test_072_eval_to_dom0_ask_default_target(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 @adminvm ask default_target=dom0''')
+        resolution = policy.evaluate(_req('test-vm3', 'dom0'))
+
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.default_target, 'dom0')
+        self.assertEqual(resolution.request.target, '@adminvm')
+        self.assertEqual(resolution.targets_for_ask, ['dom0'])
+
+    def test_073_eval_to_dom0_ask_default_target(self):
+        policy = parser.TestPolicy(policy='''\
+            * * test-vm3 @adminvm ask default_target=@adminvm''')
+        resolution = policy.evaluate(_req('test-vm3', 'dom0'))
+
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.default_target, 'dom0')
+        self.assertEqual(resolution.request.target, '@adminvm')
+        self.assertEqual(resolution.targets_for_ask, ['dom0'])
 
     def test_110_handle_user_response_allow(self):
         rule = parser.Rule.from_line(None, '* * @anyvm @anyvm ask',
