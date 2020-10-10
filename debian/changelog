@@ -1,3 +1,32 @@
+qubes-core-qrexec (4.1.9-1) unstable; urgency=medium
+
+  [ Frédéric Pierret (fepitre) ]
+  * Update travis
+
+  [ Marek Marczykowski-Górecki ]
+  * travis: restore language option
+  * policy: interpret invalid requested target as @default
+
+  [ Paweł Marczewski ]
+  * Add 'autostart=no' option to policy
+  * policy: allow '*' as source and target
+  * Add a QubesRPC API for policy
+  * policy admin: change API to use policy.include.*
+  * policy admin: add tokens to prevent concurrent modification
+  * policy admin: add client API and command-line tool
+  * policy admin: package
+  * policy admin: add default configuration
+  * Handle Pylint upgrade
+
+  [ Frédéric Pierret (fepitre) ]
+  * Fix documentation build
+  * Fix sphinx build
+
+  [ Marek Marczykowski-Górecki ]
+  * Fix handling default_target in ask action
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 10 Oct 2020 05:15:15 +0200
+
 qubes-core-qrexec (4.1.8-1) unstable; urgency=medium
 
   * Fix dangerous-default-value pylint warning
