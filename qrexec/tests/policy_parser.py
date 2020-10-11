@@ -1190,7 +1190,7 @@ class TC_40_evaluate(unittest.TestCase):
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
-        self.assertEqual(resolution.target, '@adminvm')
+        self.assertEqual(resolution.target, 'dom0')
         self.assertEqual(resolution.request.target, '@adminvm')
 
     def test_070_eval_to_dom0_ask_default_target(self):

@@ -520,7 +520,7 @@ class AllowResolution(AbstractResolution):
 
         target = self.target
 
-        if target == '@adminvm':
+        if target in ('dom0', '@adminvm'):
             cmd = ('QUBESRPC {request.service}{request.argument} '
                    '{request.source} {request.target.type} {request.target.text}').\
                 format(request=self.request)
@@ -839,6 +839,9 @@ class Allow(ActionType):
                     'policy define \'allow\' action to @dispvm at {}:{} '
                     'but no DispVM base is set for this VM'.format(
                         self.rule.filepath, self.rule.lineno))
+        # expand default AdminVM
+        elif target == '@adminvm':
+            target = 'dom0'
 
         if not self.autostart and not self.allow_no_autostart(
                 target, request.system_info):
