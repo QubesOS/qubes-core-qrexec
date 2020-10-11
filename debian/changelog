@@ -1,3 +1,12 @@
+qubes-core-qrexec (4.1.10-1) unstable; urgency=medium
+
+  * agent: do not crash on spurious MSG_SERVICE_CONNECT from the daemon
+  * daemon: do not send MSG_SERVICE_* messages twice for a given
+    connection
+  * policy: adjust call target for allow action too
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 11 Oct 2020 19:10:47 +0200
+
 qubes-core-qrexec (4.1.9-1) unstable; urgency=medium
 
   [ Frédéric Pierret (fepitre) ]
