@@ -59,10 +59,16 @@ struct _client {
     int state;		// enum client_state
 };
 
+enum policy_response {
+    RESPONSE_PENDING,
+    RESPONSE_ALLOW,
+    RESPONSE_DENY
+};
+
 struct _policy_pending {
     pid_t pid;
     struct service_params params;
-    int reserved_vchan_port;
+    enum policy_response response_sent;
 };
 
 #define VCHAN_BASE_DATA_PORT (VCHAN_BASE_PORT+1)
@@ -490,17 +496,26 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
     if (hdr->type == MSG_SERVICE_CONNECT) {
         /* if the service was accepted, do not send spurious
          * MSG_SERVICE_REFUSED when service process itself exit with non-zero
-         * code */
+         * code. Avoid also sending MSG_SERVICE_CONNECT twice. */
         for (i = 0; i <= policy_pending_max; i++) {
             if (policy_pending[i].pid &&
                     strncmp(policy_pending[i].params.ident, buf, len) == 0) {
-                policy_pending[i].pid = 0;
-                while (policy_pending_max > 0 &&
-                        policy_pending[policy_pending_max].pid == 0)
-                    policy_pending_max--;
                 break;
             }
         }
+        if (i > policy_pending_max) {
+            LOG(ERROR, "Connection with ident %s not requested or already handled",
+                    policy_pending[i].params.ident);
+            terminate_client(fd);
+            return 0;
+        } else if (policy_pending[i].response_sent != RESPONSE_PENDING) {
+            LOG(ERROR, "Connection with ident %s already handled (%s)",
+                    policy_pending[i].params.ident,
+                    policy_pending[i].response_sent == RESPONSE_ALLOW ? "allow" : "deny");
+            terminate_client(fd);
+            return 0;
+        }
+        policy_pending[i].response_sent = RESPONSE_ALLOW;
     }
 
     if (!params.connect_port) {
@@ -678,7 +693,13 @@ static void reap_children()
             if (policy_pending[i].pid == pid) {
                 status = WEXITSTATUS(status);
                 if (status != 0) {
-                    send_service_refused(vchan, &policy_pending[i].params);
+                    if (policy_pending[i].response_sent != RESPONSE_PENDING) {
+                        LOG(ERROR, "qrexec-policy-exec for connection %s exited with code %d, but the response (%s) was already sent",
+                                policy_pending[i].params.ident, status,
+                                policy_pending[i].response_sent == RESPONSE_ALLOW ? "allow" : "deny");
+                    } else {
+                        send_service_refused(vchan, &policy_pending[i].params);
+                    }
                 }
                 /* in case of allowed calls, we will do the rest in
                  * MSG_SERVICE_CONNECT from client handler */
@@ -829,6 +850,7 @@ static void handle_execute_service(
         default:
             policy_pending[policy_pending_slot].pid = pid;
             policy_pending[policy_pending_slot].params = *request_id;
+            policy_pending[policy_pending_slot].response_sent = RESPONSE_PENDING;
             return;
     }
 

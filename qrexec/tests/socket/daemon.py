@@ -52,7 +52,8 @@ class TestDaemon(unittest.TestCase):
 #!/bin/sh
 
 echo "$@" > {tempdir}/qrexec-policy-params
-exit 1
+sleep $(cat {tempdir}/qrexec-policy-sleep || echo 0)
+exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
 '''
 
     def setUp(self):
@@ -105,6 +106,19 @@ exit 1
         with open(os.path.join(self.tempdir, 'qrexec-policy-params')) as f:
             return f.read().split()
 
+    def wait_for_policy_program_call(self):
+        util.wait_until(
+            lambda: os.path.exists(
+                os.path.join(self.tempdir, 'qrexec-policy-params')),
+            'qrexec-policy-exec not called'
+        )
+
+    def set_policy_params(self, sleep, exitcode):
+        with open(os.path.join(self.tempdir, 'qrexec-policy-sleep'), 'w') as f:
+            f.write(str(sleep))
+        with open(os.path.join(self.tempdir, 'qrexec-policy-exitcode'), 'w') as f:
+            f.write(str(exitcode))
+
     def start_daemon_with_agent(self):
         agent = self.connect_agent()
         self.start_daemon()
@@ -139,17 +153,25 @@ exit 1
         self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
         self.assertEqual(data, struct.pack('<32s', ident.encode()))
 
-    def trigger_service(self,
-                        agent,
-                        target_domain_name: str,
-                        service_name: str,
-                        ident: str) -> Tuple[int, bytes]:
+    def send_trigger_service(self,
+                             agent,
+                             target_domain_name: str,
+                             service_name: str,
+                             ident: str):
         agent.send_message(
             qrexec.MSG_TRIGGER_SERVICE3,
             struct.pack('<64s32s',
                         target_domain_name.encode(), ident.encode()) +
             service_name.encode() + b'\0'
         )
+
+    def trigger_service(self,
+                        agent,
+                        target_domain_name: str,
+                        service_name: str,
+                        ident: str) -> Tuple[int, bytes]:
+        self.send_trigger_service(
+            agent, target_domain_name, service_name, ident)
         message_type, data = agent.recv_message()
         self.assertListEqual(self.get_policy_program_params(), [
             '--',
@@ -265,6 +287,35 @@ exit 1
         agent = self.start_daemon_with_agent()
         agent.handshake()
 
+        target_domain = self.domain + 1
+        target_domain_name = 'target_domain'
+        target_port = 513
+        ident = 'SOCKET11'
+
+        self.set_policy_params(1, 0)
+
+        self.send_trigger_service(agent,
+            target_domain_name,
+            'qubes.Service',
+            ident,
+        )
+
+        self.wait_for_policy_program_call()
+
+        client = self.connect_client()
+        client.handshake()
+
+        data = (struct.pack('<LL', target_domain, target_port) +
+                ident.encode() + b'\0')
+
+        client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
+        self.assertEqual(agent.recv_message(),
+                         (qrexec.MSG_SERVICE_CONNECT, data))
+
+    def test_client_service_connect_unexpected(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
         client = self.connect_client()
         client.handshake()
 
@@ -276,8 +327,53 @@ exit 1
                 ident.encode() + b'\0')
 
         client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
+        # expect the connection to be closed immediately
+        self.assertEqual(client.recv_all_messages(), [])
+        # and no message to the agent
+        self.daemon.terminate()
+        self.assertEqual(agent.recv_all_messages(), [])
+
+    def test_client_service_connect_double(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        target_domain = self.domain + 1
+        target_domain_name = 'target_domain'
+        target_port = 513
+        ident = 'SOCKET11'
+
+        self.set_policy_params(1, 0)
+
+        self.send_trigger_service(agent,
+            target_domain_name,
+            'qubes.Service',
+            ident,
+        )
+
+        self.wait_for_policy_program_call()
+
+        client = self.connect_client()
+        client.handshake()
+
+        data = (struct.pack('<LL', target_domain, target_port) +
+                ident.encode() + b'\0')
+
+        client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
         self.assertEqual(agent.recv_message(),
                          (qrexec.MSG_SERVICE_CONNECT, data))
+
+        client = self.connect_client()
+        client.handshake()
+
+        data = (struct.pack('<LL', target_domain, target_port) +
+                ident.encode() + b'\0')
+
+        client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
+        # expect the connection to be closed immediately
+        self.assertEqual(client.recv_all_messages(), [])
+        # and no message to the agent
+        self.daemon.terminate()
+        self.assertEqual(agent.recv_all_messages(), [])
 
 
 @unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
