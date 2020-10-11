@@ -51,7 +51,7 @@
 
 struct _connection_info {
     int pid; /* pid of child process handling the data */
-    int fd;  /* socket to process handling the data (wait for EOF here) */
+    int fd;  /* socket to the process handling the data (wait for EOF here) */
     int connect_domain;
     int connect_port;
 };
@@ -660,7 +660,15 @@ static void handle_server_exec_request_do(int type, int connect_domain, int conn
          * (which sends back what it got from us earlier), so it isn't critical.
          */
         if (write(client_fd, &params, sizeof(params)) < 0) {
-            /* ignore */
+            /* Do not start pooling invalid FD - it will crash the qrexec-agent with
+             * "pselect: Bad file descriptor"
+             */
+            if (errno == EBADF) {
+                LOG(ERROR, "Got MSG_SERVICE_CONNECT from qrexec-daemon with invalid ident (%s), ignoring",
+                        cmdline);
+                return;
+            }
+            /* ignore other errors */
         }
         /* No need to send request_id (buf) - the client don't need it, there
          * is only meaningless (for the client) socket FD */
