@@ -6,5 +6,6 @@ else
 RPM_SPEC_FILES += rpm_spec/qubes-qrexec-vm.spec
 endif
 DEBIAN_BUILD_DIRS = debian
+ARCH_BUILD_DIRS := archlinux
 
 # vim: ft=make
