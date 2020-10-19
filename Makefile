@@ -3,7 +3,7 @@ CC ?= gcc
 PYTHON ?= python3
 export PYTHON GCC MAKEFLAGS
 
-LIBDIR ?= /lib
+SYSLIBDIR ?= /lib
 
 help:
 	:
@@ -72,8 +72,8 @@ all-vm:
 
 install-vm: all-vm
 	+$(MAKE) install -C agent
-	install -d $(DESTDIR)/$(LIBDIR)/systemd/system -m 755
-	install -t $(DESTDIR)/$(LIBDIR)/systemd/system -m 644 systemd/qubes-qrexec-agent.service
+	install -d $(DESTDIR)/$(SYSLIBDIR)/systemd/system -m 755
+	install -t $(DESTDIR)/$(SYSLIBDIR)/systemd/system -m 644 systemd/qubes-qrexec-agent.service
 	install -m 0644 -D qubes-rpc-config/README $(DESTDIR)/etc/qubes/rpc-config/README
 #	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 #	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc/*
