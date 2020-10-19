@@ -19,7 +19,7 @@ conflicts=()
 replaces=('')
 backup=()
 options=()
-install=
+install=PKGBUILD.install
 changelog=
 
 source=()
