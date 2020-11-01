@@ -529,6 +529,7 @@ int exec_wait_for_session(const char *source_domain) {
         return -1;
     }
 
-    return execl(service_full_path, service_name, source_domain, NULL);
+    setenv("QREXEC_REMOTE_DOMAIN", source_domain, 1);
+    return execl(service_full_path, service_name, NULL);
 }
 // vim: set sw=4 ts=4 sts=4 et:

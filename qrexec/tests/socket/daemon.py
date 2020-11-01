@@ -631,7 +631,7 @@ class TestClient(unittest.TestCase):
         log = os.path.join(self.tempdir, 'wait-for-session.log')
         util.make_executable_service(self.tempdir, 'rpc', 'qubes.WaitForSession', '''\
 #!/bin/sh
-echo "wait for session: arg: $1" >{}
+echo "wait for session: remote domain: $QREXEC_REMOTE_DOMAIN" >{}
 '''.format(log))
         util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
         #!/bin/sh
@@ -649,7 +649,7 @@ echo "wait for session: arg: $1" >{}
         source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
         source.send_message(qrexec.MSG_DATA_STDIN, b'')
         self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b'wait for session: arg: src_domain\n'),
+            (qrexec.MSG_DATA_STDOUT, b'wait for session: remote domain: src_domain\n'),
             (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: src_domain, '
                                      b'input: stdin data\n'),
             (qrexec.MSG_DATA_STDOUT, b''),

@@ -2,14 +2,14 @@
 
 # Waits for qubes-guid to become available for a given domain.
 
-if [ -z "$1" ]; then
-    echo "Usage: $0 source_domain" >&2
+if [ -z "$QREXEC_REMOTE_DOMAIN" ]; then
+    echo "QREXEC_REMOTE_DOMAIN variable needs to be set" >&2
     exit 1
 fi
 
 # Traverse /var/run/qubes/qrexec.NAME -> qrexec.ID symlink
 
-qrexec_name_sock="/var/run/qubes/qrexec.$1"
+qrexec_name_sock="/var/run/qubes/qrexec.$QREXEC_REMOTE_DOMAIN"
 
 if ! [ -L "$qrexec_name_sock" ]; then
     echo "$0: $qrexec_name_sock not found, domain might be dead" >&2

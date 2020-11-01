@@ -303,7 +303,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
         util.make_executable_service(self.tempdir, 'rpc', 'qubes.WaitForSession', '''\
 #!/bin/sh
 read user
-echo "wait for session: arg: $1, user: $user" >{}
+echo "wait for session: arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, user: $user" >{}
 '''.format(log))
         util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
 #!/bin/sh
@@ -321,7 +321,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         target.send_message(qrexec.MSG_DATA_STDIN, b'')
         messages = target.recv_all_messages()
         self.assertListEqual(util.sort_messages(messages), [
-            (qrexec.MSG_DATA_STDOUT, (b'wait for session: arg: domX, user: ' +
+            (qrexec.MSG_DATA_STDOUT, (b'wait for session: arg: , remote domain: domX, user: ' +
                                       user.encode() + b'\n')),
             (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: domX, input: stdin data\n'),
             (qrexec.MSG_DATA_STDOUT, b''),
