@@ -499,6 +499,7 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
          * code. Avoid also sending MSG_SERVICE_CONNECT twice. */
         for (i = 0; i <= policy_pending_max; i++) {
             if (policy_pending[i].pid &&
+                    policy_pending[i].response_sent == RESPONSE_PENDING &&
                     strncmp(policy_pending[i].params.ident, buf, len) == 0) {
                 break;
             }
@@ -506,12 +507,6 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         if (i > policy_pending_max) {
             LOG(ERROR, "Connection with ident %s not requested or already handled",
                     policy_pending[i].params.ident);
-            terminate_client(fd);
-            return 0;
-        } else if (policy_pending[i].response_sent != RESPONSE_PENDING) {
-            LOG(ERROR, "Connection with ident %s already handled (%s)",
-                    policy_pending[i].params.ident,
-                    policy_pending[i].response_sent == RESPONSE_ALLOW ? "allow" : "deny");
             terminate_client(fd);
             return 0;
         }
