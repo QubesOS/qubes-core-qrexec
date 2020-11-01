@@ -38,7 +38,6 @@ from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib, Gio
 
 # pylint: disable=wrong-import-order
 import gbulb
-gbulb.install()
 
 from .. import POLICY_AGENT_SOCKET_PATH
 from ..utils import sanitize_domain_name, sanitize_service_name
@@ -586,6 +585,7 @@ parser.add_argument(
 def main():
     args = parser.parse_args()
 
+    gbulb.install()
     agent = PolicyAgent(args.socket_path)
 
     loop = asyncio.get_event_loop()
