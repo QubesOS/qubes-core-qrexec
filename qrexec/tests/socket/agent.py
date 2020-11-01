@@ -308,6 +308,7 @@ echo "wait for session: arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, user: $us
         util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
 #!/bin/sh
 cat {}
+sleep 0.1
 read input
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 '''.format(log))
