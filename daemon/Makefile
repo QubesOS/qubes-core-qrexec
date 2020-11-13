@@ -1,4 +1,5 @@
 CC ?=gcc
+BACKEND_VMM ?= xen
 override QUBES_CFLAGS:=-I../libqrexec -g -O2 -Wall -Wextra -Werror -pie -fPIC \
    $(shell pkg-config --cflags vchan-$(BACKEND_VMM)) -fstack-protector \
    -D_FORTIFY_SOURCE=2 -fstack-protector-strong -std=gnu11 -D_POSIX_C_SOURCE=200809L \
