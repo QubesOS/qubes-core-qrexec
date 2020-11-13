@@ -1,3 +1,24 @@
+qubes-core-qrexec (4.1.11-1) unstable; urgency=medium
+
+  [ Frédéric Pierret (fepitre) ]
+  * Add ArchLinux packaging
+  * archlinux: ensure python-setuptools make deps
+  * archlinux: don't need to qubes-vm-utils
+  * makefile: /lib is SYSLIBDIR
+  * archlinux: ensure PKGBUILD.install
+
+  [ icequbes1 ]
+  * [archlinux] Fix qrexec installing wrong qrexec.pam file
+
+  [ Marek Marczykowski-Górecki ]
+  * daemon: fix handling multiple parallel qrexec-policy processes
+  * libqrexec: fix calling qubes.WaitForSession
+  * tests: minor adjustment
+  * qrexec-policy-agent: do not patch event loop on module import
+  * Start qrexec-agent only after systemd let in normal users
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 13 Nov 2020 03:43:37 +0100
+
 qubes-core-qrexec (4.1.10-1) unstable; urgency=medium
 
   * agent: do not crash on spurious MSG_SERVICE_CONNECT from the daemon
