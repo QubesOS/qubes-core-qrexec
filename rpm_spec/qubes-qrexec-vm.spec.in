@@ -56,7 +56,6 @@ The Qubes qrexec files for installation on a qube.
 
 %build
 %{?set_build_flags}
-export BACKEND_VMM=@BACKEND_VMM@
 make all-vm
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
 

@@ -1,13 +1,12 @@
 CC=gcc
-BACKEND_VMM ?= xen
 override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
-   $(shell pkg-config --cflags vchan-$(BACKEND_VMM)) -fstack-protector \
+   $(shell pkg-config --cflags vchan) -fstack-protector \
    -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC -std=gnu11 -D_POSIX_C_SOURCE=200809L \
    -D_GNU_SOURCE $(CFLAGS)
 override LDFLAGS += -pie -Wl,-z,relro,-z,now -shared
 
 override SO_VER=3
-override VCHANLIBS := $(shell pkg-config --libs vchan-$(BACKEND_VMM))
+override VCHANLIBS := $(shell pkg-config --libs vchan)
 LIBDIR ?= /usr/lib
 INCLUDEDIR ?= /usr/include
 

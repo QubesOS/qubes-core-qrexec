@@ -59,7 +59,6 @@ The Qubes qrexec files for installation on Dom0.
 
 %build
 %{?set_build_flags}
-export BACKEND_VMM=@BACKEND_VMM@
 make all-dom0
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
 

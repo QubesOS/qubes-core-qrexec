@@ -35,8 +35,8 @@ build() {
         (ln -s "$srcdir/../$source" "$srcdir/$source")
     done
 
-    make all-base BACKEND_VMM=xen
-    make all-vm BACKEND_VMM=xen
+    make all-base
+    make all-vm
 }
 
 package() {
