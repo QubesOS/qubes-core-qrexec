@@ -81,6 +81,7 @@ disable=
  bad-option-value,
  locally-disabled,
  locally-enabled,
+ unsubscriptable-object,
 
 [REPORTS]
 

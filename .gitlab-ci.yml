@@ -1,0 +1,40 @@
+include:
+  - project: 'QubesOS/qubes-continuous-integration'
+    file: '/r4.1/gitlab-base.yml'
+  - project: 'QubesOS/qubes-continuous-integration'
+    file: '/r4.1/gitlab-dom0.yml'
+  - project: 'QubesOS/qubes-continuous-integration'
+    file: '/r4.1/gitlab-vm.yml'
+
+.qrexec_checks:
+  stage: checks
+  tags:
+    - short-living-job
+    - docker
+  before_script: &before-script
+    - "PATH=$PATH:$HOME/.local/bin"
+    - sudo dnf install -y python3-pip python3-gobject gtk3 python3-pytest
+        python3-coverage python3-devel pam-devel pandoc gcc git make findutils clang
+        xorg-x11-server-Xvfb
+    - git clone https://github.com/QubesOS/qubes-core-vchan-socket ~/qubes-core-vchan-socket
+    - make -C ~/qubes-core-vchan-socket all
+    - sudo make -C ~/qubes-core-vchan-socket install LIBDIR=/usr/lib64
+    - pip3 install --user --quiet -r ci/requirements.txt
+
+checks:pylint:
+  extends: .qrexec_checks
+  script:
+    - python3 -m pylint qrexec
+
+checks:tests:
+  extends: .qrexec_checks
+  script:
+    - xvfb-run ./run-tests
+  after_script:
+    - "PATH=$PATH:$HOME/.local/bin"
+    - codecov
+
+checks:fuzz:
+  extends: .qrexec_checks
+  script:
+   - make -C fuzz test
