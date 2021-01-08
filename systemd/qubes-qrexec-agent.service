@@ -6,6 +6,7 @@ After=xendriverdomain.service systemd-user-sessions.service
 Type=notify
 ExecStartPre=/bin/sh -c '[ -e /dev/xen/evtchn ] || modprobe xen_evtchn'
 ExecStart=/usr/lib/qubes/qrexec-agent
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target
