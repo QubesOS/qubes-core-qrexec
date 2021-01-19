@@ -19,8 +19,6 @@
  *
  */
 
-#define HAVE_PAM
-
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -162,6 +160,7 @@ _Noreturn void do_exec(const char *cmd, const char *user)
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
 
+#ifdef HAVE_PAM
     if (geteuid() != 0) {
         /* We're not root, assume this is a testing environment. */
 
@@ -184,7 +183,6 @@ _Noreturn void do_exec(const char *cmd, const char *user)
         exit(1);
     }
 
-#ifdef HAVE_PAM
     pw = getpwnam(user);
     if (! (pw && pw->pw_name && pw->pw_name[0] && pw->pw_dir && pw->pw_dir[0]
                 && pw->pw_passwd)) {
