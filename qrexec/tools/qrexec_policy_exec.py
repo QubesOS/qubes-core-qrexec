@@ -117,8 +117,11 @@ class AgentAskResolution(parser.AskResolution):
 
 class NotifyAllowedResolution(parser.AllowResolution):
     async def execute(self, caller_ident):
-        guivm = \
+        try:
+            guivm = \
             self.request.system_info['domains'][self.request.source]['guivm']
+        except Exception:
+            guivm = None
 
         if self.notify:
             if guivm:
