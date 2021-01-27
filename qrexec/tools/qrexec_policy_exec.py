@@ -120,7 +120,7 @@ class NotifyAllowedResolution(parser.AllowResolution):
         try:
             guivm = \
             self.request.system_info['domains'][self.request.source]['guivm']
-        except Exception:
+        except KeyError:
             guivm = None
 
         if self.notify:
