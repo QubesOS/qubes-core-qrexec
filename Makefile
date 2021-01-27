@@ -67,7 +67,7 @@ install-dom0: all-dom0
 
 
 all-vm:
-	+$(MAKE) all CFLAGS=-DHAVE_PAM LDLIBS=-lpam -C agent
+	+$(MAKE) all -C agent
 .PHONY: all-vm
 
 install-vm: all-vm
