@@ -66,6 +66,20 @@ Conflicts:  qubes-utils-libs < 4.1.0
 %description libs
 Libraries for qubes-qrexec
 
+# Set the proper debuginfo package
+%define _debuginfo_template\
+%package libs-debuginfo\
+Summary: Debug information for package %{name}\
+Group: Development/Debug\
+AutoReq: 0\
+AutoProv: 1\
+%description libs-debuginfo\
+This package provides debug information for package %{name}.\
+Debug information is useful when developing applications that use this\
+package or when debugging this package.\
+%files libs-debuginfo -f debugfiles.list\
+%{nil}
+
 %package devel
 Summary:    Development headers for qubes-qrexec
 Requires:   %{name}-libs
