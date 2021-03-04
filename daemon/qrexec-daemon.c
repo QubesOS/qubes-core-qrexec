@@ -799,12 +799,13 @@ static int connect_daemon_socket(
          return -1;
     }
 
-    result = recv(daemon_socket, response, sizeof(response), 0);
+    result = recv(daemon_socket, response, sizeof(response) - 1, 0);
     if (result < 0) {
          PERROR("error reading from socket");
          return -1;
     }
     else {
+        response[result] = '\0';
         if (!strncmp(response, "result=allow\n", sizeof("result=allow\n")-1)) {
             return 0;
         } else if (!strncmp(response, "result=deny\n", sizeof("result=deny\n")-1)) {
