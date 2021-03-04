@@ -549,18 +549,20 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         hdr->len -= default_user_keyword_len_without_colon;
         hdr->len += strlen(default_user);
     }
-    if (libvchan_send(vchan, hdr, sizeof(*hdr)) < 0)
+    if (libvchan_send(vchan, hdr, sizeof(*hdr)) != sizeof(*hdr))
         handle_vchan_error("send");
-    if (libvchan_send(vchan, &params, sizeof(params)) < 0)
+    if (libvchan_send(vchan, &params, sizeof(params)) != sizeof(params))
         handle_vchan_error("send params");
     if (use_default_user) {
-        if (libvchan_send(vchan, default_user, strlen(default_user)) < 0)
+        int send_len = strlen(default_user);
+        if (libvchan_send(vchan, default_user, send_len) != send_len)
             handle_vchan_error("send default_user");
+        send_len = len-default_user_keyword_len_without_colon;
         if (libvchan_send(vchan, buf+default_user_keyword_len_without_colon,
-                    len-default_user_keyword_len_without_colon) < 0)
+                    send_len) != send_len)
             handle_vchan_error("send buf");
     } else
-        if (libvchan_send(vchan, buf, len) < 0)
+        if (libvchan_send(vchan, buf, len) < len)
             handle_vchan_error("send buf");
     return 1;
 }
@@ -881,7 +883,8 @@ static void handle_connection_terminated()
 {
     struct exec_params untrusted_params, params;
 
-    if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params)) < 0)
+    if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params))
+            != sizeof(untrusted_params))
         handle_vchan_error("recv params");
     /* sanitize start */
     if (untrusted_params.connect_port < VCHAN_BASE_DATA_PORT ||
@@ -948,7 +951,8 @@ static void handle_message_from_agent(void)
     char *untrusted_service_name = NULL, *service_name = NULL;
     size_t service_name_len;
 
-    if (libvchan_recv(vchan, &untrusted_hdr, sizeof(untrusted_hdr)) < 0)
+    if (libvchan_recv(vchan, &untrusted_hdr, sizeof(untrusted_hdr))
+            != sizeof(untrusted_hdr))
         handle_vchan_error("recv hdr");
     /* sanitize start */
     sanitize_message_from_agent(&untrusted_hdr);
@@ -960,7 +964,8 @@ static void handle_message_from_agent(void)
 
     switch (hdr.type) {
         case MSG_TRIGGER_SERVICE:
-            if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params)) < 0)
+            if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params))
+                    != sizeof(untrusted_params))
                 handle_vchan_error("recv params");
 
             /* sanitize start */
@@ -984,9 +989,11 @@ static void handle_message_from_agent(void)
             if (!untrusted_service_name)
                 handle_vchan_error("malloc(service_name)");
 
-            if (libvchan_recv(vchan, &untrusted_params3, sizeof(untrusted_params3)) < 0)
+            if (libvchan_recv(vchan, &untrusted_params3, sizeof(untrusted_params3))
+                    != sizeof(untrusted_params3))
                 handle_vchan_error("recv params3");
-            if (libvchan_recv(vchan, untrusted_service_name, service_name_len) < 0)
+            if (libvchan_recv(vchan, untrusted_service_name, service_name_len)
+                    != (int)service_name_len)
                 handle_vchan_error("recv params3(service_name)");
 
             /* sanitize start */

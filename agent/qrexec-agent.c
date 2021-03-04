@@ -600,9 +600,9 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
 
     assert((hdr->len >= sizeof params));
 
-    if (libvchan_recv(ctrl_vchan, &params, sizeof(params)) < 0)
+    if (libvchan_recv(ctrl_vchan, &params, sizeof(params)) != sizeof(params))
         handle_vchan_error("read exec params");
-    if (libvchan_recv(ctrl_vchan, buf, buf_len) < 0)
+    if (libvchan_recv(ctrl_vchan, buf, buf_len) != buf_len)
         handle_vchan_error("read exec cmd");
 
     buf[buf_len-1] = 0;
@@ -698,7 +698,7 @@ static void handle_service_refused(struct msg_header *hdr)
         exit(1);
     }
 
-    if (libvchan_recv(ctrl_vchan, &params, sizeof(params)) < 0)
+    if (libvchan_recv(ctrl_vchan, &params, sizeof(params)) != sizeof(params))
         handle_vchan_error("read exec params");
 
     if (sscanf(params.ident, "SOCKET%d", &socket_fd))
@@ -711,7 +711,7 @@ static void handle_server_cmd(void)
 {
     struct msg_header s_hdr;
 
-    if (libvchan_recv(ctrl_vchan, &s_hdr, sizeof(s_hdr)) < 0)
+    if (libvchan_recv(ctrl_vchan, &s_hdr, sizeof(s_hdr)) != sizeof(s_hdr))
         handle_vchan_error("read s_hdr");
 
     //      fprintf(stderr, "got %x %x %x\n", s_hdr.type, s_hdr.client_id,
@@ -764,9 +764,9 @@ static void release_connection(int id) {
     hdr.len = sizeof(struct exec_params);
     params.connect_domain = connection_info[id].connect_domain;
     params.connect_port = connection_info[id].connect_port;
-    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) < 0)
+    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) != sizeof(hdr))
         handle_vchan_error("send (MSG_CONNECTION_TERMINATED hdr)");
-    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) < 0)
+    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) != sizeof(params))
         handle_vchan_error("send (MSG_CONNECTION_TERMINATED data)");
     connection_info[id].pid = 0;
 }
@@ -852,11 +852,11 @@ static void handle_trigger_io()
         goto error;
 
     snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
-    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) < 0)
+    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) != sizeof(hdr))
         handle_vchan_error("write hdr");
-    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) < 0)
+    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) != sizeof(params))
         handle_vchan_error("write params");
-    if (libvchan_send(ctrl_vchan, command, command_len) < 0)
+    if (libvchan_send(ctrl_vchan, command, command_len) != (int)command_len)
         handle_vchan_error("write command");
 
     free(command);

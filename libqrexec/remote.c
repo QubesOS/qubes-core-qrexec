@@ -59,7 +59,7 @@ int handle_remote_data(
     }
 
     while (libvchan_data_ready(data_vchan) > 0) {
-        if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) < 0)
+        if (libvchan_recv(data_vchan, &hdr, sizeof(hdr)) != sizeof(hdr))
             goto out;
         if (hdr.len > max_len) {
             LOG(ERROR, "Too big data chunk received: %" PRIu32 " > %zu",
@@ -166,7 +166,7 @@ int handle_input(
         }
         hdr.len = (uint32_t)len;
         /* do not fail on sending EOF (think: close()), it will be handled just below */
-        if (libvchan_send(vchan, &hdr, sizeof(hdr)) < 0 && hdr.len != 0)
+        if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr) && hdr.len != 0)
             goto out;
 
         if (len && !write_vchan_all(vchan, buf, len))
