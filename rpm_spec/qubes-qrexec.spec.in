@@ -79,7 +79,7 @@ Development header and files for qubes-qrexec
 %build
 %{?set_build_flags}
 make all-base PYTHON=%{__python3}
-make -C doc PYTHON=python3 SPHINXBUILD=sphinx-build-3 man
+make -C doc LC_ALL=C.UTF-8 LANG=C.UTF-8 LANGUAGE=en_US:en PYTHON=python3 SPHINXBUILD=sphinx-build-3 man
 
 %install
 make install-base \

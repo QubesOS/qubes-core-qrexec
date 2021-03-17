@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/sh
 
 if ! test -f /var/run/qubes-service/guivm-gui-agent && \
         ! test -f /etc/qubes-release; then

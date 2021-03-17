@@ -1,3 +1,4 @@
+ROOTDIR := $(patsubst %agent/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 MAKEFLAGS=-r
 CC ?= gcc
 PANDOC ?= pandoc
@@ -9,7 +10,7 @@ override os := $(shell lsb_release -is)
 override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
    $(shell pkg-config --cflags $(VCHAN_PKG)) -fstack-protector \
    -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC -std=gnu11 -D_POSIX_C_SOURCE=200809L \
-	-D_GNU_SOURCE $(CFLAGS) $(if $(HAVE_PAM_APPL),-DHAVE_PAM,-UHAVE_PAM)
+	-D_GNU_SOURCE $(CFLAGS) $(if $(HAVE_PAM_APPL),-DHAVE_PAM,-UHAVE_PAM) -ffile-prefix-map=$(ROOTDIR)=.
 override LDFLAGS += -pie -Wl,-z,relro,-z,now -L../libqrexec
 override LDLIBS=-lqrexec-utils $(shell pkg-config --libs $(VCHAN_PKG)) $(if $(HAVE_PAM_APPL),-lpam,)
 

@@ -1,4 +1,4 @@
-#!/bin/sh -l
+#!/usr/bin/sh -l
 
 if [ -z "$QREXEC_SERVICE_PATH" ]; then
     QREXEC_SERVICE_PATH=/usr/local/etc/qubes-rpc:/etc/qubes-rpc
