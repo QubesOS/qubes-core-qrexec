@@ -25,8 +25,9 @@ import asyncio
 import logging
 import os
 
+from .. import utils
 from .qrexec_policy_exec import handle_request
-from .. import POLICYPATH, POLICYSOCKET
+from .. import POLICYPATH, POLICYSOCKET, POLICY_EVAL_SOCKET
 from ..policy.utils import PolicyCache
 
 argparser = argparse.ArgumentParser(description='Evaluate qrexec policy daemon')
@@ -37,6 +38,9 @@ argparser.add_argument('--policy-path',
 argparser.add_argument('--socket-path',
     type=pathlib.Path, default=POLICYSOCKET,
     help='Use alternative policy socket path')
+argparser.add_argument('--eval-socket-path',
+    type=pathlib.Path, default=POLICY_EVAL_SOCKET,
+    help='Use alternative policy eval socket path')
 
 REQUIRED_REQUEST_ARGUMENTS = ('domain_id', 'source', 'intended_target',
                               'service_and_arg', 'process_ident')
@@ -99,6 +103,70 @@ async def handle_client_connection(log, policy_cache,
     finally:
         writer.close()
 
+async def handle_qrexec_connection(log, policy_cache,
+                                   reader, writer):
+
+    try:
+        untrusted_data = await reader.read(65536)
+        if len(untrusted_data) > 65535:
+            log.error('Request length too long: %d', len(untrusted_data))
+            return
+        try:
+            # Qrexec guarantees that this will be present
+            qrexec_command_with_arg, untrusted_data = untrusted_data.split(b' ', 1)
+            # pylint: disable=unused-variable
+            _trusted_call_info, untrusted_data = untrusted_data.split(b'\0', 1)
+            try:
+                invoked_service, service_queried = qrexec_command_with_arg.split(b'+', 1)
+            except ValueError:
+                log.warning('policy.EvalSimple requires an argument (the service to query)')
+                return
+
+            if invoked_service != b'policy.EvalSimple':
+                log.warning('policy.EvalSimple invoked with the wrong name')
+                return
+
+            ### SANITIZE BEGIN
+            if not service_queried:
+                log.warning('Empty string is not a valid service')
+                return
+            if len(untrusted_data) > 63:
+                log.warning('Request data too long: %d', len(untrusted_data))
+                return
+            untrusted_source, untrusted_target = untrusted_data.split(b'\0', 1)
+            # Check that qube name lengths are reasonable
+            if not (1 <= len(untrusted_target) <= 31) or \
+               not (1 <= len(untrusted_source) <= 31):
+                raise ValueError
+            untrusted_source = untrusted_source.decode('ascii', 'strict')
+            untrusted_target = untrusted_target.decode('ascii', 'strict')
+
+            # these throw exceptions if the domain name is not valid
+            utils.sanitize_domain_name(untrusted_source, True)
+            utils.sanitize_domain_name(untrusted_target, True)
+            ### SANITIZE END
+            source, intended_target = untrusted_source, untrusted_target
+        except (ValueError, UnicodeError):
+            log.warning('Invalid data from qube')
+            return
+
+        result = await handle_request(
+                source=source,
+                intended_target=intended_target,
+                service_and_arg=service_queried.decode('ascii', 'strict'),
+                domain_id = 'dummy_id',
+                process_ident = '0',
+                assume_yes_for_ask=True,
+                just_evaluate=True,
+                log=log,
+                policy_cache=policy_cache)
+
+        writer.write(b"result=allow\n" if result == 0 else b"result=deny\n")
+        await writer.drain()
+
+    finally:
+        writer.close()
+
 
 async def start_serving(args=None):
     args = argparser.parse_args(args)
@@ -109,17 +177,23 @@ async def start_serving(args=None):
 
     policy_cache = PolicyCache(args.policy_path)
     policy_cache.initialize_watcher()
-
-    server = await asyncio.start_unix_server(
+    policy_server = await asyncio.start_unix_server(
         functools.partial(
             handle_client_connection, log, policy_cache),
         path=args.socket_path)
-    os.chmod(args.socket_path, 0o660)
 
-    await server.serve_forever()
+    eval_server = await asyncio.start_unix_server(
+        functools.partial(
+            handle_qrexec_connection, log, policy_cache),
+        path=args.eval_socket_path)
+    os.chmod(args.socket_path, 0o660)
+    os.chmod(args.eval_socket_path, 0o660)
+
+    await asyncio.wait([server.serve_forever() for server in (policy_server, eval_server)])
 
 
 def main(args=None):
+    os.umask(0o007)
     # pylint: disable=no-member
     # due to travis' limitations we have to use python 3.5 in pylint
     asyncio.run(start_serving(args))
