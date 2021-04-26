@@ -33,16 +33,30 @@ License:	GPL
 URL:		http://www.qubes-os.org
 
 BuildRequires:	gcc
+BuildRequires:	qubes-libvchan-devel
+
+%if 0%{?suse_version} > 0
+BuildRequires: sphinx
+BuildRequires: python3
+BuildRequires: %{python3_default}-pydbus
+# for building documentation
+BuildRequires: %{python3_default}-Sphinx
+BuildRequires: %{python3_default}-recommonmark
+
+Requires:   %{python3_default}
+Requires:   %{python3_default}-gbulb
+%else
 BuildRequires:  python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-dbus
 # for building documentation
 BuildRequires:	python%{python3_pkgversion}-sphinx
 BuildRequires:	python%{python3_pkgversion}-recommonmark
-BuildRequires:	qubes-libvchan-devel
 BuildRequires:  python%{python3_pkgversion}-rpm-macros
 
-Requires:   python%{python3_pkgversion}
-Requires:   python%{python3_pkgversion}-gbulb
+Requires: python%{python3_pkgversion}
+Requires: python%{python3_pkgversion}-gbulb
+%endif
+
 Conflicts:  qubes-utils-libs < 4.1.0
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 Conflicts:  qubes-core-dom0 < 4.1.10
@@ -79,7 +93,7 @@ Development header and files for qubes-qrexec
 %build
 %{?set_build_flags}
 make all-base PYTHON=%{__python3}
-make -C doc PYTHON=python3 SPHINXBUILD=sphinx-build-3 man
+make -C doc PYTHON=python3 SPHINXBUILD=sphinx-build-%{python3_version} man
 
 %install
 make install-base \
@@ -93,7 +107,7 @@ make install-base \
 
 make -C doc \
     DESTDIR=$RPM_BUILD_ROOT \
-    SPHINXBUILD=sphinx-build-3 \
+    SPHINXBUILD=sphinx-build-%{python3_version} \
     install
 
 %clean

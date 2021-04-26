@@ -40,7 +40,11 @@ BuildRequires:	qubes-core-qrexec-devel
 BuildRequires:	lsb-core-noarch
 BuildRequires:	systemd-devel
 
+%if 0%{?suse_version} > 0
+Requires:   %{python3_default}
+%else
 Requires:   python%{python3_pkgversion}
+%endif
 Requires:   qubes-core-qrexec = %{version}-%{release}
 
 Provides:   qubes-core-agent-qrexec = 4.1.0-1
