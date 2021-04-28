@@ -1,7 +1,8 @@
 #%PAM-1.0
-auth		sufficient	pam_rootok.so
-auth		substack	common-auth
-account		sufficient	pam_succeed_if.so uid = 0 use_uid quiet
-account		include		common-auth
-password	include		common-auth
-session		include		common-auth
+auth      sufficient  pam_rootok.so
+auth      include     common-auth
+account   sufficient  pam_rootok.so
+account   include     common-account
+password  include     common-password
+session   include     common-session
+session   optional    pam_xauth.so

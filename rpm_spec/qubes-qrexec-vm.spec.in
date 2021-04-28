@@ -107,7 +107,7 @@ fi
 /usr/lib/qubes/qrexec-agent
 /usr/lib/qubes/qrexec-client-vm
 /usr/lib/qubes/qrexec_client_vm
-/lib/systemd/system/qubes-qrexec-agent.service
+%{_unitdir}/qubes-qrexec-agent.service
 
 %changelog
 @CHANGELOG@
