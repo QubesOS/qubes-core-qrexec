@@ -134,7 +134,9 @@ async def handle_qrexec_connection(log, policy_cache,
                 log.warning('Request data too long: %d', len(untrusted_data))
                 return
             untrusted_source, untrusted_target = untrusted_data.split(b'\0', 1)
+
             # Check that qube name lengths are reasonable
+            # pylint: disable=superfluous-parens
             if not (1 <= len(untrusted_target) <= 31) or \
                not (1 <= len(untrusted_source) <= 31):
                 raise ValueError
