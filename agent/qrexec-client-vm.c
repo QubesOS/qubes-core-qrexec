@@ -27,6 +27,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <getopt.h>
+#include <errno.h>
+#include <limits.h>
 #include "libqrexec-utils.h"
 #include "qrexec.h"
 #include "qrexec-agent.h"
@@ -125,7 +127,7 @@ int main(int argc, char **argv)
     struct trigger_service_params3 params;
     struct exec_params exec_params;
     size_t service_name_len;
-    char *service_name;
+    char *service_name, *endptr;
     ssize_t ret;
     int i;
     int start_local_process = 0;
@@ -146,9 +148,26 @@ int main(int argc, char **argv)
         if (opt == -1)
             break;
         switch (opt) {
-            case 'b':
-                buffer_size = atoi(optarg);
+            case 'b': {
+                if (*optarg < '0' || *optarg > '9') {
+                    fputs("Bad buffer size: does not begin with a number\n", stderr);
+                    exit(1);
+                }
+                errno = 0;
+                unsigned long res = strtoul(optarg, &endptr, 0);
+                if (res > INT_MAX)
+                    errno = ERANGE;
+                if (errno) {
+                    PERROR("strtoul");
+                    exit(1);
+                }
+                if (*endptr) {
+                    fputs("Bad buffer size: trailing junk\n", stderr);
+                    exit(1);
+                }
+                buffer_size = (int)res;
                 break;
+            }
             case 't':
                 replace_chars_stdout = 1;
                 break;
@@ -162,7 +181,10 @@ int main(int argc, char **argv)
                 replace_chars_stderr = 0;
                 break;
             case 'a':
-                agent_trigger_path = strdup(optarg);
+                if ((agent_trigger_path = strdup(optarg)) == NULL) {
+                    PERROR("strdup");
+                    exit(1);
+                }
                 break;
             case '?':
                 usage(argv[0]);
