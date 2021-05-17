@@ -236,6 +236,13 @@ struct process_io_request {
 
     bool replace_chars_stdout;
     bool replace_chars_stderr;
+
+    bool use_stdio_socket;
+
+    /* local and remote statuses */
+    pid_t local_status;
+    pid_t remote_status;
+
     int data_protocol_version;
 
     volatile sig_atomic_t *sigchld;
@@ -249,7 +256,7 @@ struct process_io_request {
  *
  * Returns intended exit code (local or remote), but calls exit() on errors.
  */
-int process_io(const struct process_io_request *req);
+int process_io(struct process_io_request *req);
 
 // Logging
 
