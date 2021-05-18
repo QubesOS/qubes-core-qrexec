@@ -27,7 +27,7 @@ import os
 
 from .. import utils
 from .qrexec_policy_exec import handle_request
-from .. import POLICYPATH, POLICYSOCKET, POLICY_EVAL_SOCKET
+from .. import POLICYPATH, POLICYSOCKET, POLICY_EVAL_SOCKET, POLICY_GUI_SOCKET
 from ..policy.utils import PolicyCache
 
 argparser = argparse.ArgumentParser(description='Evaluate qrexec policy daemon')
@@ -41,6 +41,9 @@ argparser.add_argument('--socket-path',
 argparser.add_argument('--eval-socket-path',
     type=pathlib.Path, default=POLICY_EVAL_SOCKET,
     help='Use alternative policy eval socket path')
+argparser.add_argument('--gui-socket-path',
+    type=pathlib.Path, default=POLICY_GUI_SOCKET,
+    help='Use alternative policy gui eval socket path')
 
 REQUIRED_REQUEST_ARGUMENTS = ('domain_id', 'source', 'intended_target',
                               'service_and_arg', 'process_ident')
@@ -103,9 +106,14 @@ async def handle_client_connection(log, policy_cache,
     finally:
         writer.close()
 
+# This is a complicated function, and it needs a lot of returns
+# pylint: disable=too-many-return-statements
 async def handle_qrexec_connection(log, policy_cache,
                                    reader, writer):
 
+    """
+    Handle a connection to the qrexec policy socket.
+    """
     try:
         untrusted_data = await reader.read(65536)
         if len(untrusted_data) > 65535:
@@ -115,14 +123,18 @@ async def handle_qrexec_connection(log, policy_cache,
             # Qrexec guarantees that this will be present
             qrexec_command_with_arg, untrusted_data = untrusted_data.split(b' ', 1)
             # pylint: disable=unused-variable
-            _trusted_call_info, untrusted_data = untrusted_data.split(b'\0', 1)
+            trusted_call_info, untrusted_data = untrusted_data.split(b'\0', 1)
             try:
                 invoked_service, service_queried = qrexec_command_with_arg.split(b'+', 1)
             except ValueError:
                 log.warning('policy.EvalSimple requires an argument (the service to query)')
                 return
 
-            if invoked_service != b'policy.EvalSimple':
+            if invoked_service == b'policy.EvalGUI':
+                check_gui = True
+            elif invoked_service == b'policy.EvalSimple':
+                check_gui = False
+            else:
                 log.warning('policy.EvalSimple invoked with the wrong name')
                 return
 
@@ -152,6 +164,17 @@ async def handle_qrexec_connection(log, policy_cache,
             log.warning('Invalid data from qube')
             return
 
+        if check_gui:
+            system_info = utils.get_system_info()['domains']
+            remote_domain = trusted_call_info.split(b' ', 1)[0]
+            tag = 'guivm-' + remote_domain
+            for i in (source, intended_target):
+                if i not in system_info or tag not in system_info[i]['tags']:
+                    log.warning('policy.EvalGUI can only be invoked by a'
+                                'domain that provides GUI to both the source'
+                                'and target domains')
+                    return
+
         result = await handle_request(
                 source=source,
                 intended_target=intended_target,
@@ -177,6 +200,12 @@ async def start_serving(args=None):
     log = logging.getLogger('policy')
     log.setLevel(logging.INFO)
 
+    for i in (args.eval_socket_path, args.gui_socket_path,
+              args.socket_path):
+        try:
+            os.unlink(i)
+        except FileNotFoundError:
+            pass
     policy_cache = PolicyCache(args.policy_path)
     policy_cache.initialize_watcher()
     policy_server = await asyncio.start_unix_server(
@@ -188,8 +217,10 @@ async def start_serving(args=None):
         functools.partial(
             handle_qrexec_connection, log, policy_cache),
         path=args.eval_socket_path)
+
     os.chmod(args.socket_path, 0o660)
     os.chmod(args.eval_socket_path, 0o660)
+    os.link(args.eval_socket_path, args.gui_socket_path, follow_symlinks=False)
 
     await asyncio.wait([server.serve_forever() for server in (policy_server, eval_server)])
 
