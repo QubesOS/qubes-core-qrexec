@@ -41,7 +41,8 @@
 #define QREXEC_SOCKET_PATH "/var/run/qubes/policy.sock"
 
 #ifdef COVERAGE
-void __gcov_flush();
+void __gcov_dump(void);
+void __gcov_reset(void);
 #endif
 
 enum client_state {
@@ -1093,7 +1094,8 @@ static int handle_agent_restart(int xid) {
 
 #ifdef COVERAGE
     /* Dump coverage in case we are killed here. */
-    __gcov_flush();
+    __gcov_dump();
+    __gcov_reset();
 #endif
 
     vchan = libvchan_client_init(remote_domain_id, VCHAN_BASE_PORT);
