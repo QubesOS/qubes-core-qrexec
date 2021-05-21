@@ -504,6 +504,8 @@ class AllowResolution(AbstractResolution):
     @classmethod
     def from_ask_resolution(cls, ask_resolution, *, target):
         '''This happens after user manually approved the call'''
+        if target.startswith('@dispvm:'):
+            target = DispVMTemplate(target)
         return cls(
             ask_resolution.rule,
             ask_resolution.request,
