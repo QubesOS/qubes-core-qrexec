@@ -106,10 +106,9 @@ async def handle_client_connection(log, policy_cache,
     finally:
         writer.close()
 
-# This is a complicated function, and it needs a lot of returns
-# pylint: disable=too-many-return-statements
-async def handle_qrexec_connection(log, policy_cache, check_gui, service_name,
-                                   reader, writer):
+# pylint: disable=too-many-return-statements,too-many-arguments
+async def handle_qrexec_connection(log, policy_cache, check_gui,
+                                   service_name, reader, writer):
 
     """
     Handle a connection to the qrexec policy socket.
@@ -229,7 +228,9 @@ async def start_serving(args=None):
     os.chmod(args.eval_socket_path, 0o660)
     os.chmod(args.gui_socket_path, 0o660)
 
-    await asyncio.wait([server.serve_forever() for server in (policy_server, eval_server, gui_eval_server)])
+    await asyncio.wait([server.serve_forever()
+                       for server
+                       in (policy_server, eval_server, gui_eval_server)])
 
 
 def main(args=None):

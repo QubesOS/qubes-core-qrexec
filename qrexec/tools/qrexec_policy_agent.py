@@ -33,7 +33,7 @@ import pkg_resources
 # pylint: disable=import-error,wrong-import-position
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GdkPixbuf, GObject, GLib, Gio
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio
 # pylint: enable=import-error
 
 # pylint: disable=wrong-import-order
