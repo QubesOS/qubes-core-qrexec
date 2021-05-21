@@ -14,4 +14,4 @@ fi
 
 set -x
 
-python3 -m coverage run -m pytest qrexec/tests -o python_files=*.py -v "$@"
+python3 -m coverage run -m pytest -o python_files=*.py -v qrexec/tests "$@"

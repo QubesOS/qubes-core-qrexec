@@ -25,7 +25,7 @@ import asyncio
 import logging
 import os
 
-from .. import utils
+from ..utils import sanitize_domain_name, get_system_info
 from .qrexec_policy_exec import handle_request
 from .. import POLICYPATH, POLICYSOCKET, POLICY_EVAL_SOCKET, POLICY_GUI_SOCKET
 from ..policy.utils import PolicyCache
@@ -133,7 +133,7 @@ async def handle_qrexec_connection(log, policy_cache, check_gui, service_name,
                 return
             if invoked_service != service_name:
                 # This is an error because qrexec should forbid this.
-                log.error('%s invoked with incorrect name %s',
+                log.error('%r invoked with incorrect name %r',
                           service_name, invoked_service)
                 return
 
@@ -157,8 +157,8 @@ async def handle_qrexec_connection(log, policy_cache, check_gui, service_name,
             untrusted_target = untrusted_target.decode('ascii', 'strict')
 
             # these throw exceptions if the domain name is not valid
-            utils.sanitize_domain_name(untrusted_source, True)
-            utils.sanitize_domain_name(untrusted_target, True)
+            sanitize_domain_name(untrusted_source, True)
+            sanitize_domain_name(untrusted_target, True)
             ### SANITIZE END
             source, intended_target = untrusted_source, untrusted_target
         except (ValueError, UnicodeError):
@@ -166,14 +166,15 @@ async def handle_qrexec_connection(log, policy_cache, check_gui, service_name,
             return
 
         if check_gui:
-            system_info = utils.get_system_info()['domains']
-            remote_domain = trusted_call_info.split(b' ', 1)[0]
+            system_info = get_system_info()['domains']
+            remote_domain = trusted_call_info.split(b' ', 1)[0].decode('ascii', 'strict')
             tag = 'guivm-' + remote_domain
             for i in (source, intended_target):
                 if i not in system_info or tag not in system_info[i]['tags']:
-                    log.warning('%s can only be invoked by a'
-                                'domain that provides GUI to both the source'
-                                'and target domains', service_name)
+                    log.warning('%s can only be invoked by a '
+                                'domain that provides GUI to both the source '
+                                'and target domains, not %s', service_name,
+                                remote_domain)
                     return
 
         result = await handle_request(
@@ -216,12 +217,12 @@ async def start_serving(args=None):
 
     eval_server = await asyncio.start_unix_server(
         functools.partial(
-            handle_qrexec_connection, log, policy_cache, False, 'policy.EvalSimple'),
+            handle_qrexec_connection, log, policy_cache, False, b'policy.EvalSimple'),
         path=args.eval_socket_path)
 
     gui_eval_server = await asyncio.start_unix_server(
         functools.partial(
-            handle_qrexec_connection, log, policy_cache, True, 'policy.EvalGUI'),
+            handle_qrexec_connection, log, policy_cache, True, b'policy.EvalGUI'),
         path=args.gui_socket_path)
 
     os.chmod(args.socket_path, 0o660)

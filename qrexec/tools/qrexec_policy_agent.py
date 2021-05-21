@@ -241,7 +241,7 @@ class GtkOneTimerHelper:
 
     def _timer_schedule(self):
         self._invalidate_current_timer()
-        GObject.timeout_add(int(round(self._wait_seconds * 1000)),
+        GLib.timeout_add(int(round(self._wait_seconds * 1000)),
                             self._timer_check_run,
                             self._current_timer_id)
 

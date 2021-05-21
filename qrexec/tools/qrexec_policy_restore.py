@@ -28,7 +28,7 @@ import pathlib
 import sys
 
 from .. import POLICYPATH
-from ..policy import api, parser
+from ..policy import parser
 
 argparser = argparse.ArgumentParser()
 # TODO mode of operation
