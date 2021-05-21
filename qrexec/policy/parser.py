@@ -557,7 +557,8 @@ class AllowResolution(AbstractResolution):
         Returns:
             str: name of new Disposable VM
         '''
-        assert isinstance(self.target, DispVMTemplate)
+        if not isinstance(self.target, DispVMTemplate)
+            self.target=DispVMTemplate(self.target)
         base_appvm = self.target.value
         dispvm_name = utils.qubesd_call(base_appvm, 'admin.vm.CreateDisposable')
         dispvm_name = dispvm_name.decode('ascii')
