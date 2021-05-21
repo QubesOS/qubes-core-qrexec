@@ -108,7 +108,7 @@ async def handle_client_connection(log, policy_cache,
 
 # This is a complicated function, and it needs a lot of returns
 # pylint: disable=too-many-return-statements
-async def handle_qrexec_connection(log, policy_cache,
+async def handle_qrexec_connection(log, policy_cache, check_gui, service_name,
                                    reader, writer):
 
     """
@@ -117,7 +117,8 @@ async def handle_qrexec_connection(log, policy_cache,
     try:
         untrusted_data = await reader.read(65536)
         if len(untrusted_data) > 65535:
-            log.error('Request length too long: %d', len(untrusted_data))
+            log.error('%s: request length too long: %d',
+                      service_name, len(untrusted_data))
             return
         try:
             # Qrexec guarantees that this will be present
@@ -127,23 +128,23 @@ async def handle_qrexec_connection(log, policy_cache,
             try:
                 invoked_service, service_queried = qrexec_command_with_arg.split(b'+', 1)
             except ValueError:
-                log.warning('policy.EvalSimple requires an argument (the service to query)')
+                log.warning('%s requires an argument (the service to query)',
+                            service_name)
                 return
-
-            if invoked_service == b'policy.EvalGUI':
-                check_gui = True
-            elif invoked_service == b'policy.EvalSimple':
-                check_gui = False
-            else:
-                log.warning('policy.EvalSimple invoked with the wrong name')
+            if invoked_service != service_name:
+                # This is an error because qrexec should forbid this.
+                log.error('%s invoked with incorrect name %s',
+                          service_name, invoked_service)
                 return
 
             ### SANITIZE BEGIN
             if not service_queried:
-                log.warning('Empty string is not a valid service')
+                log.warning('%s: empty string is not a valid service name',
+                            service_name)
                 return
             if len(untrusted_data) > 63:
-                log.warning('Request data too long: %d', len(untrusted_data))
+                log.warning('%s: request data too long: %d',
+                            service_name, len(untrusted_data))
                 return
             untrusted_source, untrusted_target = untrusted_data.split(b'\0', 1)
 
@@ -161,7 +162,7 @@ async def handle_qrexec_connection(log, policy_cache,
             ### SANITIZE END
             source, intended_target = untrusted_source, untrusted_target
         except (ValueError, UnicodeError):
-            log.warning('Invalid data from qube')
+            log.warning('%s: invalid data from qube', service_name)
             return
 
         if check_gui:
@@ -170,9 +171,9 @@ async def handle_qrexec_connection(log, policy_cache,
             tag = 'guivm-' + remote_domain
             for i in (source, intended_target):
                 if i not in system_info or tag not in system_info[i]['tags']:
-                    log.warning('policy.EvalGUI can only be invoked by a'
+                    log.warning('%s can only be invoked by a'
                                 'domain that provides GUI to both the source'
-                                'and target domains')
+                                'and target domains', service_name)
                     return
 
         result = await handle_request(
@@ -215,14 +216,19 @@ async def start_serving(args=None):
 
     eval_server = await asyncio.start_unix_server(
         functools.partial(
-            handle_qrexec_connection, log, policy_cache),
+            handle_qrexec_connection, log, policy_cache, False, 'policy.EvalSimple'),
         path=args.eval_socket_path)
+
+    gui_eval_server = await asyncio.start_unix_server(
+        functools.partial(
+            handle_qrexec_connection, log, policy_cache, True, 'policy.EvalGUI'),
+        path=args.gui_socket_path)
 
     os.chmod(args.socket_path, 0o660)
     os.chmod(args.eval_socket_path, 0o660)
-    os.link(args.eval_socket_path, args.gui_socket_path, follow_symlinks=False)
+    os.chmod(args.gui_socket_path, 0o660)
 
-    await asyncio.wait([server.serve_forever() for server in (policy_server, eval_server)])
+    await asyncio.wait([server.serve_forever() for server in (policy_server, eval_server, gui_eval_server)])
 
 
 def main(args=None):
