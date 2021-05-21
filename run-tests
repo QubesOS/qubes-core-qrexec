@@ -1,5 +1,6 @@
 #!/bin/sh -e
 
+case $0 in (/*) cd "${0%/*}/";; (*/*) cd "./${0%/*}";; esac
 if pkg-config vchan-socket; then
     export CFLAGS="--coverage -DCOVERAGE"
     export LDFLAGS=--coverage

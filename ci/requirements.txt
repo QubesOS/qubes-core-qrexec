@@ -5,7 +5,6 @@ pylint
 sphinx
 codecov
 pytest-asyncio
-asynctest
 pyinotify
 psutil
 gbulb

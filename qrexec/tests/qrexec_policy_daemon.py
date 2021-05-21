@@ -22,7 +22,6 @@ import asyncio
 from contextlib import suppress
 
 import pytest
-import asynctest
 from unittest.mock import Mock
 import functools
 
@@ -35,7 +34,7 @@ from ..tools import qrexec_policy_daemon
 class TestPolicyDaemon:
     @pytest.fixture
     def mock_request(self, monkeypatch):
-        mock_request = asynctest.CoroutineMock()
+        mock_request = unittest.mock.AsyncMock()
         monkeypatch.setattr('qrexec.tools.qrexec_policy_daemon.handle_request',
                             mock_request)
         return mock_request
@@ -57,7 +56,7 @@ class TestPolicyDaemon:
     async def qrexec_server(self, tmp_path, request):
         log = unittest.mock.Mock()
 
-        qrexec_server = await asyncio.start_unix_server(
+        server = await asyncio.start_unix_server(
             functools.partial(qrexec_policy_daemon.handle_qrexec_connection,
                               log, Mock()),
             path=str(tmp_path / "socket.qrexec"))
