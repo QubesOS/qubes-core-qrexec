@@ -224,9 +224,9 @@ async def start_serving(args=None):
             handle_qrexec_connection, log, policy_cache, True, b'policy.EvalGUI'),
         path=args.gui_socket_path)
 
-    os.chmod(args.socket_path, 0o660)
-    os.chmod(args.eval_socket_path, 0o660)
-    os.chmod(args.gui_socket_path, 0o660)
+    for i in (args.eval_socket_path, args.gui_socket_path,
+              args.socket_path):
+        os.chmod(i, 0o660)
 
     await asyncio.wait([server.serve_forever()
                        for server
@@ -234,7 +234,10 @@ async def start_serving(args=None):
 
 
 def main(args=None):
+    import grp
     os.umask(0o007)
+    if os.getuid() == 0:
+        os.setgid(grp.getgrnam('qubes').gr_gid)
     # pylint: disable=no-member
     # due to travis' limitations we have to use python 3.5 in pylint
     asyncio.run(start_serving(args))
