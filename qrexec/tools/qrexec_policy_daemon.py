@@ -119,7 +119,7 @@ async def read_all_up_to_limit(stream: asyncio.StreamReader, limit: int) -> byte
         untrusted_data.append(untrusted_data_just_read)
     return b''.join(untrusted_data)
 
-# pylint: disable=too-many-return-statements,too-many-arguments
+# pylint: disable=too-many-return-statements,too-many-arguments,too-many-local-variables
 async def handle_qrexec_connection(log, policy_cache, check_gui,
                                    service_name, reader, writer):
 
@@ -182,11 +182,12 @@ async def handle_qrexec_connection(log, policy_cache, check_gui,
             log.warning('%s: invalid data from qube %s', service_name, remote_domain)
             return
 
+        system_info = get_system_info()
         if check_gui:
-            system_info = get_system_info()['domains']
+            domains = system_info['domains']
             tag = 'guivm-' + remote_domain
             for i in (source, intended_target):
-                if i not in system_info or tag not in system_info[i]['tags']:
+                if i not in domains or tag not in domains[i]['tags']:
                     log.warning('%s can only be invoked by a '
                                 'domain that provides GUI to both the source '
                                 'and target domains, not %s', service_name,
@@ -202,7 +203,8 @@ async def handle_qrexec_connection(log, policy_cache, check_gui,
                 assume_yes_for_ask=True,
                 just_evaluate=True,
                 log=log,
-                policy_cache=policy_cache)
+                policy_cache=policy_cache,
+                system_info=system_info)
 
         writer.write(b"result=allow\n" if result == 0 else b"result=deny\n")
         await writer.drain()
