@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if ! test -f /var/run/qubes-service/guivm-gui-agent && \
+if ! test -f /var/run/qubes-service/guivm && \
         ! test -f /etc/qubes-release; then
     echo "Not in GuiVM or dom0. Exiting."
     exit 0
