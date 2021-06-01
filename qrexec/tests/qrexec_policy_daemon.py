@@ -22,7 +22,7 @@ import asyncio
 from contextlib import suppress
 
 import pytest
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 import functools
 
 import unittest
@@ -38,7 +38,8 @@ log.setLevel(logging.INFO)
 class TestPolicyDaemon:
     @pytest.fixture
     def mock_request(self, monkeypatch):
-        mock_request = unittest.mock.AsyncMock()
+        mock_request = AsyncMock()
+        mock_request.return_value = 1
         monkeypatch.setattr('qrexec.tools.qrexec_policy_daemon.handle_request',
                             mock_request)
         return mock_request
@@ -70,14 +71,15 @@ class TestPolicyDaemon:
 
     @pytest.fixture
     async def qrexec_server(self, tmp_path, request):
+        mock_policy = Mock()
         eval_server = await asyncio.start_unix_server(
             functools.partial(qrexec_policy_daemon.handle_qrexec_connection,
-                              log, Mock(), False, b'policy.EvalSimple'),
+                              log, mock_policy, False, b'policy.EvalSimple'),
             path=str(tmp_path / "socket.Simple"))
 
         gui_server = await asyncio.start_unix_server(
             functools.partial(qrexec_policy_daemon.handle_qrexec_connection,
-                              log, Mock(), True, b'policy.EvalGUI'),
+                              log, mock_policy, True, b'policy.EvalGUI'),
             path=str(tmp_path / "socket.GUI"))
 
         yield {b'Simple': eval_server, b'GUI': gui_server}
@@ -218,6 +220,17 @@ class TestPolicyDaemon:
         await self.send_data(async_server, tmp_path, data)
 
         mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_simple_qrexec_request_succeeds(
+            self, mock_request, qrexec_server, tmp_path, mock_system, server_type):
+        mock_request.return_value = 0
+
+        data = b'policy.Eval%s+d c keyword adminvm\0a\0b' % server_type
+
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data,
+                                    server_type) == b'result=allow\n'
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize('server_type', server_types)
