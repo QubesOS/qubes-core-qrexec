@@ -119,7 +119,92 @@ async def read_all_up_to_limit(stream: asyncio.StreamReader, limit: int) -> byte
         untrusted_data.append(untrusted_data_just_read)
     return b''.join(untrusted_data)
 
-# pylint: disable=too-many-return-statements,too-many-arguments,too-many-local-variables
+
+async def _extract_qrexec_parameters(reader):
+    """
+    Extract data from an incoming socket-based qrexec connection.
+    FIXME: make this a reusable library.
+
+    Returns the qrexec command (with argument) and the remote domain.
+    Both have already been sanitized by qrexec.
+    """
+    # Qrexec guarantees that this space will be present.
+    qrexec_command_with_arg = (await reader.readuntil(b' '))[:-1].split(b'+', 1)
+    try:
+        invoked_service, service_argument = qrexec_command_with_arg
+    except ValueError:
+        invoked_service = qrexec_command_with_arg[0]
+        service_argument = None
+    # Same with this NUL character.
+    qrexec_metadata = (await reader.readuntil(b'\0'))[:-1]
+    # The space will only be present in dom0.
+    remote_domain = qrexec_metadata.split(b' ', 1)[0].decode('ascii', 'strict')
+    return invoked_service, service_argument, remote_domain
+
+# pylint: disable=too-many-return-statements,too-many-arguments
+async def qrexec_policy_eval(log, policy_cache, check_gui, service_name, reader,
+        writer, remote_domain, service_queried):
+    if service_queried is None:
+        log.warning('%s requires an argument (the service to query), but'
+                    '%s did not provide one', service_name, remote_domain)
+        return
+    untrusted_data = await read_all_up_to_limit(reader, 96)
+    try:
+        ### SANITIZE BEGIN
+        untrusted_source, untrusted_target = untrusted_data.split(b'\0', 1)
+        del untrusted_data
+
+        # Check that qube name lengths are reasonable
+        # pylint: disable=superfluous-parens
+        if not (1 <= len(untrusted_target) <= 63):
+            log.warning('%s: %s sent a target of length %d, but the limit is 63',
+                        service_name, remote_domain, len(untrusted_target))
+            return
+        # pylint: disable=superfluous-parens
+        if not (1 <= len(untrusted_source) <= 31):
+            log.warning('%s: %s sent a source of length %d, but the limit is 31',
+                        service_name, remote_domain, len(untrusted_source))
+            return
+        untrusted_source = untrusted_source.decode('ascii', 'strict')
+        untrusted_target = untrusted_target.decode('ascii', 'strict')
+
+        # these throw exceptions if the domain name is not valid
+        sanitize_domain_name(untrusted_source, True)
+        sanitize_domain_name(untrusted_target, True)
+        ### SANITIZE END
+        source, intended_target = untrusted_source, untrusted_target
+    except (ValueError, UnicodeError):
+        log.warning('%s: invalid data from qube %s', service_name, remote_domain)
+        return
+
+    system_info = get_system_info()
+    if check_gui:
+        domains = system_info['domains']
+        tag = 'guivm-' + remote_domain
+        for i in (source, intended_target):
+            if i not in domains or tag not in domains[i]['tags']:
+                log.warning('%s can only be invoked by a '
+                            'domain that provides GUI to both the source '
+                            'and target domains, not %s', service_name,
+                            remote_domain)
+                return
+
+    result = await handle_request(
+            source=source,
+            intended_target=intended_target,
+            service_and_arg=service_queried.decode('ascii', 'strict'),
+            domain_id = 'dummy_id',
+            process_ident = '0',
+            assume_yes_for_ask=True,
+            just_evaluate=True,
+            log=log,
+            policy_cache=policy_cache,
+            system_info=system_info)
+
+    writer.write(b"result=allow\n" if result == 0 else b"result=deny\n")
+    await writer.drain()
+
+# pylint: disable=too-many-arguments
 async def handle_qrexec_connection(log, policy_cache, check_gui,
                                    service_name, reader, writer):
 
@@ -127,88 +212,14 @@ async def handle_qrexec_connection(log, policy_cache, check_gui,
     Handle a connection to the qrexec policy socket.
     """
     try:
-        untrusted_data = await read_all_up_to_limit(reader, 65536)
-        if len(untrusted_data) > 65535:
-            log.error('%s: request length too long: %d',
-                      service_name, len(untrusted_data))
-            return
-        remote_domain = '@unknown'
-        # Qrexec guarantees that this space will be present
-        qrexec_command_with_arg, untrusted_data = untrusted_data.split(b' ', 1)
-        # Same with this NUL character
-        trusted_call_info, untrusted_data = untrusted_data.split(b'\0', 1)
-        # This space will only be present in dom0
-        remote_domain = trusted_call_info.split(b' ', 1)[0].decode('ascii', 'strict')
-        ### SANITIZE BEGIN
-        try:
-            invoked_service, service_queried = qrexec_command_with_arg.split(b'+', 1)
-        except ValueError:
-            log.warning('%s requires an argument (the service to query), but'
-                        '%s did not provide one', service_name, remote_domain)
-            return
+        invoked_service, service_queried, remote_domain = await _extract_qrexec_parameters(reader)
         if invoked_service != service_name:
             # This is an error because qrexec should forbid this.
             log.error('%s invoked with incorrect name %s by %s',
                       service_name, invoked_service, remote_domain)
             return
-
-        if not service_queried:
-            log.warning('%s: %s used the empty string as a service name',
-                        service_name, remote_domain)
-            return
-        try:
-            untrusted_source, untrusted_target = untrusted_data.split(b'\0', 1)
-
-            # Check that qube name lengths are reasonable
-            # pylint: disable=superfluous-parens
-            if not (1 <= len(untrusted_target) <= 63):
-                log.warning('%s: %s sent a target of length %d, but the limit is 63',
-                            service_name, remote_domain, len(untrusted_target))
-                return
-            # pylint: disable=superfluous-parens
-            if not (1 <= len(untrusted_source) <= 31):
-                log.warning('%s: %s sent a source of length %d, but the limit is 31',
-                            service_name, remote_domain, len(untrusted_source))
-                return
-            untrusted_source = untrusted_source.decode('ascii', 'strict')
-            untrusted_target = untrusted_target.decode('ascii', 'strict')
-
-            # these throw exceptions if the domain name is not valid
-            sanitize_domain_name(untrusted_source, True)
-            sanitize_domain_name(untrusted_target, True)
-            ### SANITIZE END
-            source, intended_target = untrusted_source, untrusted_target
-        except (ValueError, UnicodeError):
-            log.warning('%s: invalid data from qube %s', service_name, remote_domain)
-            return
-
-        system_info = get_system_info()
-        if check_gui:
-            domains = system_info['domains']
-            tag = 'guivm-' + remote_domain
-            for i in (source, intended_target):
-                if i not in domains or tag not in domains[i]['tags']:
-                    log.warning('%s can only be invoked by a '
-                                'domain that provides GUI to both the source '
-                                'and target domains, not %s', service_name,
-                                remote_domain)
-                    return
-
-        result = await handle_request(
-                source=source,
-                intended_target=intended_target,
-                service_and_arg=service_queried.decode('ascii', 'strict'),
-                domain_id = 'dummy_id',
-                process_ident = '0',
-                assume_yes_for_ask=True,
-                just_evaluate=True,
-                log=log,
-                policy_cache=policy_cache,
-                system_info=system_info)
-
-        writer.write(b"result=allow\n" if result == 0 else b"result=deny\n")
-        await writer.drain()
-
+        await qrexec_policy_eval(log, policy_cache, check_gui, service_name,
+                reader, writer, remote_domain, service_queried)
     finally:
         writer.close()
 
