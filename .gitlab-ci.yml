@@ -28,6 +28,8 @@ checks:pylint:
 
 checks:tests:
   extends: .qrexec_checks
+  variables:
+    PYTEST_ADDOPTS: "--color=yes"
   script:
     - xvfb-run ./run-tests
   after_script:
