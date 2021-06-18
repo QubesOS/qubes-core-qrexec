@@ -62,8 +62,8 @@ class AssumeYesForAskResolution(parser.AskResolution):
 
 class AgentAskResolution(parser.AskResolution):
     async def execute(self, caller_ident):
-        guivm = \
-            self.request.system_info['domains'][self.request.source]['guivm']
+        domains = self.request.system_info['domains']
+        guivm = domains[self.request.source]['guivm']
         if not guivm:
             log = logging.getLogger('policy')
             log.error('%s not allowed from %s: the resolution was "ask", '
@@ -73,15 +73,12 @@ class AgentAskResolution(parser.AskResolution):
             assert False, 'handle_user_response should throw'
 
         # prepare icons
-        icons = {name: self.request.system_info['domains'][name]['icon']
-            for name in self.request.system_info['domains'].keys()}
-        for dispvm_base in self.request.system_info['domains']:
-            if not (self.request.system_info['domains'][dispvm_base]
-                    ['template_for_dispvms']):
+        icons = {name: domains[name]['icon'] for name in domains.keys()}
+        for dispvm_base in domains:
+            if not domains[dispvm_base]['template_for_dispvms']:
                 continue
             dispvm_api_name = '@dispvm:' + dispvm_base
-            icons[dispvm_api_name] = \
-                self.request.system_info['domains'][dispvm_base]['icon']
+            icons[dispvm_api_name] = domains[dispvm_base]['icon']
             icons[dispvm_api_name] = \
                 icons[dispvm_api_name].replace('app', 'disp')
 
@@ -237,17 +234,18 @@ def main(args=None):
 async def handle_request(
         domain_id, source, intended_target, service_and_arg, process_ident,
         log, just_evaluate=False, assume_yes_for_ask=False,
-        allow_resolution_type=None, policy_cache=None):
+        allow_resolution_type=None, policy_cache=None, system_info=None):
     # Add source domain information, required by qrexec-client for establishing
     # connection
     caller_ident = process_ident + "," + source + "," + domain_id
     log_prefix = 'qrexec: {}: {} -> {}:'.format(
         service_and_arg, source, intended_target)
-    try:
-        system_info = utils.get_system_info()
-    except exc.QubesMgmtException as err:
-        log.error('%s error getting system info: %s', log_prefix, err)
-        return 1
+    if system_info is None:
+        try:
+            system_info = utils.get_system_info()
+        except exc.QubesMgmtException as err:
+            log.error('%s error getting system info: %s', log_prefix, err)
+            return 1
     try:
         i = service_and_arg.index('+')
         service, argument = service_and_arg[:i], service_and_arg[i:]

@@ -22,8 +22,7 @@ import asyncio
 from contextlib import suppress
 
 import pytest
-import asynctest
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 import functools
 
 import unittest
@@ -31,19 +30,36 @@ import unittest.mock
 
 from ..tools import qrexec_policy_daemon
 
+server_types = [b'Simple', b'GUI']
+import logging
+log = logging.getLogger('policy')
+log.setLevel(logging.INFO)
 
 class TestPolicyDaemon:
     @pytest.fixture
     def mock_request(self, monkeypatch):
-        mock_request = asynctest.CoroutineMock()
+        mock_request = AsyncMock()
+        mock_request.return_value = 1
         monkeypatch.setattr('qrexec.tools.qrexec_policy_daemon.handle_request',
                             mock_request)
         return mock_request
 
     @pytest.fixture
-    async def async_server(self, tmp_path, request):
-        log = unittest.mock.Mock()
+    def mock_system(self, monkeypatch):
+        mock_system = unittest.mock.MagicMock(return_value={
+            'domains': {
+                'a': {'tags': ['guivm-c', 'created-by-dom0']},
+                'b': {'tags': ['guivm-c', 'created-by-dom0']},
+                'c': {'tags': ['created-by-dom0']},
+                'dom0': {'tags': []},
+            }
+        })
+        monkeypatch.setattr('qrexec.tools.qrexec_policy_daemon.get_system_info',
+                            mock_system)
+        return mock_system
 
+    @pytest.fixture
+    async def async_server(self, tmp_path, request):
         server = await asyncio.start_unix_server(
             functools.partial(qrexec_policy_daemon.handle_client_connection,
                               log, Mock()),
@@ -53,19 +69,42 @@ class TestPolicyDaemon:
 
         server.close()
 
-    async def send_data(self, server, path, data):
+    @pytest.fixture
+    async def qrexec_server(self, tmp_path, request):
+        mock_policy = Mock()
+        eval_server = await asyncio.start_unix_server(
+            functools.partial(qrexec_policy_daemon.handle_qrexec_connection,
+                              log, mock_policy, False, b'policy.EvalSimple'),
+            path=str(tmp_path / "socket.Simple"))
+
+        gui_server = await asyncio.start_unix_server(
+            functools.partial(qrexec_policy_daemon.handle_qrexec_connection,
+                              log, mock_policy, True, b'policy.EvalGUI'),
+            path=str(tmp_path / "socket.GUI"))
+
+        yield {b'Simple': eval_server, b'GUI': gui_server}
+
+        eval_server.close()
+        gui_server.close()
+
+    async def send_data(self, server, path, data, qrexec=b''):
         reader, writer = await asyncio.open_unix_connection(
-            str(path / "socket.d"))
+            str(path / (("socket." + qrexec.decode('ascii', 'strict')) if qrexec else "socket.d")))
         writer.write(data)
+
         await writer.drain()
 
-        await reader.read()
+        writer.write_eof()
+
+        s = await reader.read()
 
         writer.close()
 
         server.close()
 
         await server.wait_closed()
+
+        return s
 
 
     @pytest.mark.asyncio
@@ -179,5 +218,219 @@ class TestPolicyDaemon:
                b'just_evaluate=no\n\n'
 
         await self.send_data(async_server, tmp_path, data)
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_simple_qrexec_request_succeeds(
+            self, mock_request, qrexec_server, tmp_path, mock_system, server_type):
+        mock_request.return_value = 0
+
+        data = b'policy.Eval%s+d c keyword adminvm\0a\0b' % server_type
+
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data,
+                                    server_type) == b'result=allow\n'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_simple_qrexec_request(
+            self, mock_request, qrexec_server, tmp_path, mock_system, server_type):
+
+        data = b'policy.Eval%s+d c keyword adminvm\0a\0b' % server_type
+
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data,
+                                    server_type) == b'result=deny\n'
+
+        mock_request.assert_called_once_with(
+            source='a', intended_target='b', service_and_arg='d',
+            domain_id='dummy_id', process_ident='0', assume_yes_for_ask=True,
+            just_evaluate=True, log=log,
+            policy_cache=unittest.mock.ANY, system_info=unittest.mock.ANY)
+        mock_request.reset_mock()
+
+    @pytest.mark.asyncio
+    async def test_not_guivm(
+            self, mock_request, qrexec_server, tmp_path, mock_system):
+        data = b'policy.EvalGUI+d b keyword adminvm\0c\0a'
+        assert await self.send_data(qrexec_server[b'GUI'], tmp_path, data, b'GUI') == b'', \
+                ('policy.EvalGUI requires the calling domain to provide GUI to '
+                'both other domains')
+        mock_request.assert_not_called()
+        data = b'policy.EvalSimple+d b keyword adminvm\0c\0a'
+        assert await self.send_data(qrexec_server[b'Simple'], tmp_path, data, b'Simple') == \
+                b'result=deny\n'
+        mock_request.assert_called_once_with(
+            domain_id='dummy_id', source='c', intended_target='a',
+            service_and_arg='d', process_ident='0', log=log,
+            assume_yes_for_ask=True, just_evaluate=True,
+            policy_cache=unittest.mock.ANY, system_info=unittest.mock.ANY)
+
+    @pytest.mark.asyncio
+    async def test_not_guivm_2(
+            self, mock_request, qrexec_server, tmp_path, mock_system):
+        data = b'policy.EvalGUI+d c keyword adminvm\0c\0a'
+        assert len(qrexec_server) == 2
+        assert await self.send_data(qrexec_server[b'GUI'], tmp_path, data, b'GUI') == b'', \
+                ('policy.EvalGUI requires the calling domain to provide GUI to '
+                'both other domains')
+        mock_request.assert_not_called()
+        data = b'policy.EvalSimple+d c keyword adminvm\0c\0a'
+        assert await self.send_data(qrexec_server[b'Simple'], tmp_path, data, b'Simple') == \
+                b'result=deny\n'
+        mock_request.assert_called_once_with(
+            domain_id='dummy_id', source='c', intended_target='a',
+            service_and_arg='d', process_ident='0', log=log,
+            assume_yes_for_ask=True, just_evaluate=True,
+            policy_cache=unittest.mock.ANY, system_info=unittest.mock.ANY)
+
+    @pytest.mark.asyncio
+    async def test_not_guivm_3(
+            self, mock_request, qrexec_server, tmp_path, mock_system):
+        data = b'policy.EvalGUI+d c keyword adminvm\0a\0c'
+        assert len(qrexec_server) == 2
+        assert await self.send_data(qrexec_server[b'GUI'], tmp_path, data, b'GUI') == b'', \
+                ('policy.EvalGUI requires the calling domain to provide GUI to '
+                'both other domains')
+        mock_request.assert_not_called()
+        data = b'policy.EvalSimple+d c keyword adminvm\0a\0c'
+        assert await self.send_data(qrexec_server[b'Simple'], tmp_path, data, b'Simple') == \
+                b'result=deny\n'
+        mock_request.assert_called_once_with(
+            domain_id='dummy_id', source='a', intended_target='c',
+            service_and_arg='d', process_ident='0', log=log,
+            assume_yes_for_ask=True, just_evaluate=True,
+            policy_cache=unittest.mock.ANY, system_info=unittest.mock.ANY)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_unfinished_request(
+            self, mock_request, qrexec_server, tmp_path, mock_system, server_type):
+
+        data = b'unfinished'
+
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data, server_type) == b''
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_too_long_qrexec_request(
+            self, mock_request, qrexec_server, tmp_path, mock_system,
+            server_type):
+        data = (b'policy.Eval%s+%s ignore ignore ignore\0a\0b' %
+                (server_type, b'a' * 65536))
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data,
+                                    server_type) == b''
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_too_long_source_qube_name(
+            self, mock_request, qrexec_server, tmp_path, mock_system, server_type):
+        data = b'policy.Eval%s+a b c d\0%s\0d' % (server_type, b'c' * 32)
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data, server_type) == b''
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_too_long_destination_qube_name(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+        data = b'policy.Eval%s+a b c d\0d\0%s' % (server_type, b'c' * 32)
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data, server_type) == b''
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_no_nul_separator(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+        data = b'policy.Eval%s+a b c d\0%s' % (server_type, b'c' * 31)
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data, server_type) == b''
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_empty_argument(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+
+        data = b'policy.Eval%s+ b c d\0e\0f' % server_type
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data, server_type) == b''
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_no_argument(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+
+        data = b'policy.Eval%s b c d\0e\0f' % server_type
+        assert await self.send_data(qrexec_server[server_type], tmp_path, data, server_type) == b''
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_qrexec_request_wrong_service_gui(
+            self, mock_request, qrexec_server, tmp_path, mock_system):
+
+        data = b'policy.EvalSimple+d c keyword adminvm\0a\0b'
+        assert await self.send_data(qrexec_server[b'Simple'], tmp_path, data, b'Simple') == b'result=deny\n'
+        assert await self.send_data(qrexec_server[b'GUI'], tmp_path, data, b'GUI') == b''
+        mock_request.assert_called_once_with(
+            domain_id='dummy_id', source='a', intended_target='b',
+            service_and_arg='d', process_ident='0', log=log,
+            assume_yes_for_ask=True, just_evaluate=True,
+            policy_cache=unittest.mock.ANY, system_info=unittest.mock.ANY)
+
+    @pytest.mark.asyncio
+    async def test_qrexec_request_wrong_service_simple(
+            self, mock_request, qrexec_server, tmp_path, mock_system):
+
+        data = b'policy.EvalGUI+d c keyword adminvm\0a\0b'
+        assert await self.send_data(qrexec_server[b'GUI'], tmp_path, data, b'GUI') == b'result=deny\n'
+        assert await self.send_data(qrexec_server[b'Simple'], tmp_path, data, b'Simple') == b''
+        mock_request.assert_called_once_with(
+            domain_id='dummy_id', source='a', intended_target='b',
+            service_and_arg='d', process_ident='0', log=log,
+            assume_yes_for_ask=True, just_evaluate=True,
+            policy_cache=unittest.mock.ANY, system_info=unittest.mock.ANY)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_bad_source_name(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+        data = b'policy.Eval%s+a b c d\0\n\0f' % server_type
+        await self.send_data(qrexec_server[server_type], tmp_path, data, server_type)
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_bad_destination_name(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+
+        data = b'policy.Eval%s+a b c d\0e\0\n' % server_type
+        await self.send_data(qrexec_server[server_type], tmp_path, data, server_type)
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_two_nul_chars(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+
+        data = b'policy.Eval%s+a b c d\0e\0\0' % server_type
+        await self.send_data(qrexec_server[server_type], tmp_path, data, server_type)
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('server_type', server_types)
+    async def test_qrexec_request_trailing_nul_char(
+            self, mock_request, qrexec_server, tmp_path, server_type):
+
+        data = b'policy.Eval%s+a b c d\0e\0e\0' % server_type
+        await self.send_data(qrexec_server[server_type], tmp_path, data, server_type)
 
         mock_request.assert_not_called()

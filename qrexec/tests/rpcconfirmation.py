@@ -316,7 +316,7 @@ class RPCConfirmationWindowTestWithTargetInvalid(unittest.TestCase):
     def assert_raises_error(self, expect, source, target):
         rpcWindow = MockRPCConfirmationWindow(source, "test.Operation", "+",
                                               mock_whitelist, target=target)
-        self.assertEquals(expect, rpcWindow.is_error_visible())
+        self.assertEqual(expect, rpcWindow.is_error_visible())
 
 
 @unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')

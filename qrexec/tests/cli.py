@@ -22,7 +22,6 @@
 from unittest import mock
 from pathlib import PosixPath
 
-import asynctest
 import pytest
 
 from ..exc import AccessDenied, ExecutionFailed
@@ -135,7 +134,7 @@ def execute():
     """
 
     with mock.patch('qrexec.policy.parser.AllowResolution.execute',
-                    asynctest.CoroutineMock()) as mock_execute:
+                    mock.AsyncMock()) as mock_execute:
         yield mock_execute
 
 
@@ -146,7 +145,7 @@ def agent_service():
     """
 
     with mock.patch('qrexec.tools.qrexec_policy_exec.call_socket_service',
-                    asynctest.CoroutineMock()) as mock_call_socket_service:
+                    mock.AsyncMock()) as mock_call_socket_service:
         yield mock_call_socket_service
 
 
