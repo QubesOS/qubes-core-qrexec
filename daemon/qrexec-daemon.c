@@ -853,6 +853,9 @@ static void handle_execute_service(
             return;
     }
 
+    for (i = 3; i < MAX_FDS; i++)
+        close(i);
+
     result = connect_daemon_socket(remote_domain_id, remote_domain_name,
                                    target_domain, service_name, request_id);
     if (result >= 0) {
@@ -861,8 +864,6 @@ static void handle_execute_service(
 
     LOG(ERROR, "couldn't invoke qrexec-policy-daemon, using qrexec-policy-exec");
 
-    for (i = 3; i < MAX_FDS; i++)
-        close(i);
     sigemptyset(&sigmask);
     sigprocmask(SIG_SETMASK, &sigmask, NULL);
     signal(SIGCHLD, SIG_DFL);
