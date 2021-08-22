@@ -377,7 +377,11 @@ static void init(void)
     if (handle_handshake(ctrl_vchan) < 0)
         exit(1);
     old_umask = umask(0);
-    trigger_fd = get_server_socket(agent_trigger_path);
+    if ((trigger_fd = get_server_socket(agent_trigger_path)) >= FD_SETSIZE) {
+        fprintf(stderr, "TRIGGER_FD too large (got %d, FD_SETSIZE is %d)\n",
+                trigger_fd, FD_SETSIZE);
+        exit(1);
+    }
     umask(old_umask);
     register_exec_func(do_exec);
 
@@ -813,6 +817,12 @@ static int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
 
     for (i = 0; i < MAX_FDS; i++) {
         if (connection_info[i].pid != 0 && connection_info[i].fd != -1) {
+            if (connection_info[i].fd >= FD_SETSIZE) {
+                fprintf(stderr,
+                        "connection_info[%d].fd (%d) not less than FD_SETSIZE (%d)\n",
+                        i, connection_info[i].fd, FD_SETSIZE);
+                abort();
+            }
             FD_SET(connection_info[i].fd, rdset);
             if (connection_info[i].fd > max)
                 max = connection_info[i].fd;

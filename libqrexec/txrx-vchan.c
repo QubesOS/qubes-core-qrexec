@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <libvchan.h>
+#include <assert.h>
 
 #include "libqrexec-utils.h"
 
@@ -36,6 +37,7 @@ int pselect_vchan(libvchan_t *ctrl, int nfds, fd_set *rdset, fd_set *wrset,
     int ret;
 
     vchan_fd = libvchan_fd_for_select(ctrl);
+    assert(vchan_fd < FD_SETSIZE);
     FD_SET(vchan_fd, rdset);
     if (vchan_fd + 1 > nfds)
         nfds = vchan_fd + 1;

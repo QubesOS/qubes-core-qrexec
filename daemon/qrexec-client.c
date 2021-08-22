@@ -460,6 +460,10 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
         if (timeout) {
             fd_set rdset;
             int fd = libvchan_fd_for_select(conn);
+            if (fd >= FD_SETSIZE) {
+                fprintf(stderr, "vchan fd not less than FD_SETSIZE\n");
+                exit(1);
+            }
 
             /* calculate how much time left until connection timeout expire */
             if (gettimeofday(&now_tv, NULL) == -1) {
@@ -655,6 +659,7 @@ int main(int argc, char **argv)
             if (wait_connection_end) {
                 /* wait for EOF */
                 fd_set read_fd;
+                assert(wait_connection_end < FD_SETSIZE);
                 FD_ZERO(&read_fd);
                 FD_SET(wait_connection_end, &read_fd);
                 select(wait_connection_end+1, &read_fd, NULL, NULL, 0);

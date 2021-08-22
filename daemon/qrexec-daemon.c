@@ -1036,6 +1036,8 @@ static int fill_fdsets_for_select(fd_set * read_fdset, fd_set * write_fdset)
 
     FD_ZERO(read_fdset);
     FD_ZERO(write_fdset);
+    assert(max_client_fd < FD_SETSIZE);
+    assert(qrexec_daemon_unix_socket_fd < FD_SETSIZE);
     for (i = 0; i <= max_client_fd; i++) {
         if (clients[i].state != CLIENT_INVALID) {
             FD_SET(i, read_fdset);
