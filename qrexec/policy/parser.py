@@ -531,12 +531,16 @@ class AllowResolution(AbstractResolution):
                   '{request.source}'.format(
                        user=(self.user or 'DEFAULT'), request=self.request)
 
-        if target.startswith('@dispvm:'):
-            target = self.spawn_dispvm()
-            dispvm = True
-        else:
-            self.ensure_target_running()
-            dispvm = False
+        try:
+            if target.startswith('@dispvm:'):
+                target = self.spawn_dispvm()
+                dispvm = True
+            else:
+                self.ensure_target_running()
+                dispvm = False
+        except QubesMgmtException as err:
+            raise ExecutionFailed(
+                    'Failed to start the target: {}'.format(exc)) from err
 
         qrexec_opts = ['-d', target, '-c', caller_ident, '-E']
         if dispvm:

@@ -1448,7 +1448,7 @@ class TC_40_evaluate(unittest.TestCase):
             rule, request, user=None, target='test-vm2')
         mock_qubesd_call.side_effect = \
             exc.QubesMgmtException('QubesVMError')
-        with self.assertRaises(exc.QubesMgmtException):
+        with self.assertRaises(exc.ExecutionFailed):
             await resolution.execute('some-ident')
         self.assertEqual(mock_qubesd_call.mock_calls,
             [unittest.mock.call('test-vm2', 'admin.vm.Start')])
