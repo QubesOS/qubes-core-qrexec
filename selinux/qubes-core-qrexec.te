@@ -1,0 +1,47 @@
+policy_module(qubes-core-qrexec, 0.0.1)
+
+require {
+	type staff_t, init_t, initrc_t, sysadm_t, xauth_exec_t, local_login_t, tmpfs_t, qubes_var_run_t;
+	class passwd rootok;
+}
+
+### BEGIN UGLY HACK ###
+# There is no good way to use a custom label for a login program such as qrexec.
+# There are various bad ways, but they either don't always work or require
+# editing system files.  local_login_t is the best option available for the
+# qrexec agent, so use it.  Use aliases (defined here) so that this can easily
+# be fixed later.
+define(`qubes_qrexec_agent_t', `local_login_t')
+### END UGLY HACK ###
+
+# The attribute `qubes_qrexec_domain` determines which confined domains that are
+# allowed to use qrexec.
+attribute qubes_qrexec_domain;
+stream_connect_pattern(qubes_qrexec_domain, qubes_var_run_t, qubes_qrexec_socket_t, qubes_qrexec_agent_t)
+dev_rw_xen(qubes_qrexec_domain)
+allow qubes_qrexec_domain qubes_qrexec_socket_t:sock_file rw_sock_file_perms;
+
+# staff_t and sysadm_t can use qrexec.  Unprivileged user domains (such as user_t)
+# cannot.
+ipp_qubes_qrexec(staff_t)
+ipp_qubes_qrexec(sysadm_t)
+
+# init scripts can use qrexec
+ipp_qubes_qrexec(init_t)
+ipp_qubes_qrexec(initrc_t)
+
+type qubes_qrexec_agent_exec_t;
+type qubes_qrexec_socket_t;
+init_daemon_domain(qubes_qrexec_agent_t, qubes_qrexec_agent_exec_t)
+init_ranged_daemon_domain(qubes_qrexec_agent_t, qubes_qrexec_agent_exec_t, s0 - mcs_systemhigh)
+allow qubes_qrexec_agent_t tmpfs_t:dir create;
+allow { qubes_qrexec_agent_t init_t } self:passwd rootok;
+allow qubes_qrexec_agent_t self:netlink_selinux_socket { bind create };
+files_pid_file(qubes_qrexec_socket_t)
+su_exec(qubes_qrexec_agent_t)
+dev_rw_xen(qubes_qrexec_agent_t)
+allow qubes_qrexec_agent_t xauth_exec_t:file execute;
+type_transition qubes_qrexec_agent_t qubes_var_run_t:sock_file qubes_qrexec_socket_t "qrexec-agent";
+manage_sock_files_pattern(qubes_qrexec_agent_t, qubes_var_run_t, qubes_qrexec_socket_t)
+write_sock_files_pattern(qubes_qrexec_agent_t, qubes_var_run_t, qubes_var_run_t)
+allow domain qubes_qrexec_agent_t:unix_stream_socket { rw_inherited_sock_file_perms ioctl };

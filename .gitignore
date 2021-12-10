@@ -24,3 +24,5 @@ build/
 *.gcov
 *~
 \#*#
+/selinux/*.pp
+/selinux/tmp/

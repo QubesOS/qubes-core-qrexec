@@ -1,0 +1,19 @@
+## <summary>
+##	Use qrexec to communicate with other qubes.  This can have potentially
+##	unbounded side-effects, depending on the qrexec policy and what services
+##	other qubes are running.  Furthermore, depending on how qrexec is
+##	implemented, this may grant extensive additional permissions, up to and
+##	including the ability to escalate to root.  This permission must never be
+##	granted to untrusted domains.
+## </summary>
+## <param name="domain">
+## <summary>
+##	Domain allowed access
+## </summary>
+## </param>
+interface(`ipp_qubes_qrexec',`
+	gen_require(`
+		attribute qubes_qrexec_domain;
+	')
+	typeattribute $1 qubes_qrexec_domain;
+')

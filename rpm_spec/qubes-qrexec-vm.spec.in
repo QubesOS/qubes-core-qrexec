@@ -48,6 +48,20 @@ Obsoletes:  qubes-core-agent-qrexec < 4.1.0-1
 
 Source0: qubes-core-qrexec-%{version}.tar.gz
 
+Requires: (%{name}-selinux if selinux-policy)
+
+%package selinux
+BuildRequires: selinux-policy
+BuildRequires: selinux-policy-devel
+%{?selinux_requires}
+Requires(post): qubes-core-agent-selinux
+Summary: SELinux policies for qrexec
+License: GPLv2+
+
+%description selinux
+The SELinux policies for qrexec.  You need this package if you want to have
+SELinux enforcing in a qube.
+
 %description
 The Qubes qrexec files for installation on a qube.
 
@@ -56,11 +70,11 @@ The Qubes qrexec files for installation on a qube.
 
 %build
 %{?set_build_flags}
-make all-vm
+make all-vm all-vm-selinux
 #make -C doc PYTHON=%{__python3} SPHINXBUILD=sphinx-build-%{python3_version} man
 
 %install
-make install-vm \
+make install-vm install-vm-selinux \
     DESTDIR=$RPM_BUILD_ROOT \
     UNITDIR=%{_unitdir} \
     PYTHON_SITEPATH=%{python3_sitelib} \
@@ -79,6 +93,18 @@ rm -f %{name}-%{version}
 
 %preun
 %systemd_preun qubes-qrexec-agent.service
+
+%post selinux
+%selinux_modules_install %{_datadir}/selinux/packages/qubes-core-qrexec.pp || :
+
+%postun selinux
+if [ "$1" -eq 0 ]; then
+    %selinux_modules_uninstall %{_datadir}/selinux/packages/qubes-core-qrexec.pp
+fi || :
+
+%posttrans selinux
+%selinux_relabel_post
+exit 0
 
 %posttrans
 # when upgrading from R4.0, %%postun of qubes-core-agent-qrexec will revert
@@ -104,6 +130,10 @@ fi
 /usr/lib/qubes/qrexec-client-vm
 /usr/lib/qubes/qrexec_client_vm
 /lib/systemd/system/qubes-qrexec-agent.service
+
+%files selinux
+%{_datadir}/selinux/devel/include/contrib/ipp-qubes-core-qrexec.if
+%{_datadir}/selinux/packages/qubes-core-qrexec.pp
 
 %changelog
 @CHANGELOG@

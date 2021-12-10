@@ -69,6 +69,8 @@ install-dom0: all-dom0
 
 all-vm:
 	+$(MAKE) all -C agent
+all-vm-selinux:
+	+$(MAKE) -f /usr/share/selinux/devel/Makefile -C selinux qubes-core-qrexec.pp
 .PHONY: all-vm
 
 install-vm: all-vm
@@ -76,6 +78,9 @@ install-vm: all-vm
 	install -d $(DESTDIR)/$(SYSLIBDIR)/systemd/system -m 755
 	install -t $(DESTDIR)/$(SYSLIBDIR)/systemd/system -m 644 systemd/qubes-qrexec-agent.service
 	install -m 0644 -D qubes-rpc-config/README $(DESTDIR)/etc/qubes/rpc-config/README
+install-vm-selinux:
+	install -m 0644 -D -t $(DESTDIR)/usr/share/selinux/packages selinux/qubes-core-qrexec.pp
+	install -m 0644 -D selinux/qubes-core-qrexec.if $(DESTDIR)/usr/share/selinux/devel/include/contrib/ipp-qubes-core-qrexec.if
 #	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 #	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc/*
 .PHONY: install-vm
