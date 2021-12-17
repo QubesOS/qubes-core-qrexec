@@ -1,3 +1,13 @@
+qubes-core-qrexec (4.1.16-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Add assertions that FD_SETSIZE is not exceeded
+
+  [ Marek Marczykowski-Górecki ]
+  * policy: fix reporting failed target start
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 17 Dec 2021 04:56:52 +0100
+
 qubes-core-qrexec (4.1.15-1) unstable; urgency=medium
 
   * Fix FD leak causing DispVMs not being cleaned up properly
