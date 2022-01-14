@@ -432,7 +432,7 @@ static int allocate_vchan_port(int connect_domain)
             return VCHAN_BASE_DATA_PORT+i;
         }
     }
-    return -1;
+    return 0;
 }
 
 static void handle_new_client()
