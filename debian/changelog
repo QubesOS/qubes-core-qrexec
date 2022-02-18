@@ -1,3 +1,14 @@
+qubes-core-qrexec (4.1.17-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Check the return value of snprintf
+
+  [ Marek Marczykowski-Górecki ]
+  * Fix error return value in allocate_vchan_port
+  * policy: fix notification on refused autostart
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 18 Feb 2022 05:21:30 +0100
+
 qubes-core-qrexec (4.1.16-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
