@@ -852,7 +852,9 @@ class Allow(ActionType):
         if not self.autostart and not self.allow_no_autostart(
                 target, request.system_info):
             raise AccessDenied(
-                'target {} is denied because it would require autostart')
+                'target {} is denied because it would require autostart'
+                .format(target),
+                notify=self.notify)
 
         return request.allow_resolution_type(self.rule, request,
             user=self.user, target=target)
