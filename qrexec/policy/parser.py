@@ -1051,12 +1051,19 @@ class Rule:
             PolicySyntaxError: when syntax error is found
         '''
         try:
-            source, target, action, *params = line.split()
+            source, target, *action_and_params = line.split()
         except ValueError as err:
             raise PolicySyntaxError(
                 filepath, lineno, 'wrong number of fields') from err
 
-        params = tuple(itertools.chain(*(p.split(',') for p in params)))
+        action_and_params = tuple(itertools.chain(
+                    *(p.split(',') for p in action_and_params)))
+
+        try:
+            action, *params = action_and_params
+        except ValueError as err:
+            raise PolicySyntaxError(
+                filepath, lineno, 'wrong number of fields') from err
 
         return cls(service, argument, source, target, action, params,
             policy=policy, filepath=filepath, lineno=lineno)

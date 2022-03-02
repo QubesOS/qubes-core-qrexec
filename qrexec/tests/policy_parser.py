@@ -733,6 +733,19 @@ class TC_11_Rule_service(unittest.TestCase):
         self.assertIsNone(line.action.user)
         self.assertEqual(line.action.default_target, '@adminvm')
 
+    def test_025_line_simple_compat(self):
+        line = parser.Rule.from_line_service(None, 'test.Service', '+argument',
+            '@anyvm @default ask,default_target=test-vm1',
+            filepath='filename', lineno=12)
+        self.assertEqual(line.filepath, 'filename')
+        self.assertEqual(line.lineno, 12)
+        self.assertIsInstance(line.action, parser.Action.ask.value)
+        self.assertEqual(line.source, '@anyvm')
+        self.assertEqual(line.target, '@default')
+        self.assertIsNone(line.action.target)
+        self.assertIsNone(line.action.user)
+        self.assertEqual(line.action.default_target, 'test-vm1')
+
     def test_030_line_invalid(self):
         invalid_lines = [
             '@dispvm @default allow',  # @dispvm can't be a source
