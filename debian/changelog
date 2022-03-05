@@ -1,3 +1,9 @@
+qubes-core-qrexec (4.1.18-1) unstable; urgency=medium
+
+  * Fix parsing legacy policy files
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 05 Mar 2022 05:47:18 +0100
+
 qubes-core-qrexec (4.1.17-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
