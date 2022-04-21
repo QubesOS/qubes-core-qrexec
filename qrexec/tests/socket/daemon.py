@@ -34,27 +34,27 @@ import psutil
 from . import qrexec
 from . import util
 
-ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                         '..', '..', '..'))
+ROOT_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
+)
 
 
-@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
-                 'socket tests not set up')
+@unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
 class TestDaemon(unittest.TestCase):
     daemon = None
     domain = 42
-    domain_name = 'domain_name'
+    domain_name = "domain_name"
 
     # Stub qrexec-policy-exec program.
     # Strictly speaking, the program should also run qrexec-client in case the
     # call is allowed, but we will simulate that elsewhere.
-    POLICY_PROGRAM = '''\
+    POLICY_PROGRAM = """\
 #!/bin/sh
 
 echo "$@" > {tempdir}/qrexec-policy-params
 sleep $(cat {tempdir}/qrexec-policy-sleep || echo 0)
 exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
-'''
+"""
 
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
@@ -66,25 +66,25 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         super().tearDown()
 
     def start_daemon(self):
-        policy_program_path = os.path.join(self.tempdir, 'qrexec-policy-exec')
-        with open(policy_program_path, 'w') as f:
+        policy_program_path = os.path.join(self.tempdir, "qrexec-policy-exec")
+        with open(policy_program_path, "w") as f:
             f.write(self.POLICY_PROGRAM.format(tempdir=self.tempdir))
         os.chmod(policy_program_path, 0o700)
 
         env = os.environ.copy()
-        env['LD_LIBRARY_PATH'] = os.path.join(ROOT_PATH, 'libqrexec')
-        env['VCHAN_DOMAIN'] = '0'
-        env['VCHAN_SOCKET_DIR'] = self.tempdir
+        env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
+        env["VCHAN_DOMAIN"] = "0"
+        env["VCHAN_SOCKET_DIR"] = self.tempdir
         cmd = [
-            os.path.join(ROOT_PATH, 'daemon', 'qrexec-daemon'),
-            '--socket-dir=' + self.tempdir,
-            '--policy-program=' + policy_program_path,
-            '--direct',
+            os.path.join(ROOT_PATH, "daemon", "qrexec-daemon"),
+            "--socket-dir=" + self.tempdir,
+            "--policy-program=" + policy_program_path,
+            "--direct",
             str(self.domain),
             self.domain_name,
         ]
-        if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-fD'] + cmd
+        if os.environ.get("USE_STRACE"):
+            cmd = ["strace", "-fD"] + cmd
         self.daemon = subprocess.Popen(
             cmd,
             env=env,
@@ -103,20 +103,23 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         psutil.wait_procs(children)
 
     def get_policy_program_params(self):
-        with open(os.path.join(self.tempdir, 'qrexec-policy-params')) as f:
+        with open(os.path.join(self.tempdir, "qrexec-policy-params")) as f:
             return f.read().split()
 
     def wait_for_policy_program_call(self):
         util.wait_until(
             lambda: os.path.exists(
-                os.path.join(self.tempdir, 'qrexec-policy-params')),
-            'qrexec-policy-exec not called'
+                os.path.join(self.tempdir, "qrexec-policy-params")
+            ),
+            "qrexec-policy-exec not called",
         )
 
     def set_policy_params(self, sleep, exitcode):
-        with open(os.path.join(self.tempdir, 'qrexec-policy-sleep'), 'w') as f:
+        with open(os.path.join(self.tempdir, "qrexec-policy-sleep"), "w") as f:
             f.write(str(sleep))
-        with open(os.path.join(self.tempdir, 'qrexec-policy-exitcode'), 'w') as f:
+        with open(
+            os.path.join(self.tempdir, "qrexec-policy-exitcode"), "w"
+        ) as f:
             f.write(str(exitcode))
 
     def start_daemon_with_agent(self):
@@ -126,14 +129,14 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         return agent
 
     def connect_agent(self):
-        agent = qrexec.vchan_server(
-            self.tempdir, self.domain, 0, 512)
+        agent = qrexec.vchan_server(self.tempdir, self.domain, 0, 512)
         self.addCleanup(agent.close)
         return agent
 
     def connect_client(self):
         client = qrexec.socket_client(
-            os.path.join(self.tempdir, 'qrexec.{}'.format(self.domain)))
+            os.path.join(self.tempdir, "qrexec.{}".format(self.domain))
+        )
         self.addCleanup(client.close)
         return client
 
@@ -145,42 +148,43 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         agent = self.start_daemon_with_agent()
         agent.handshake()
 
-        target_domain_name = 'target_domain'
-        ident = 'SOCKET42'
+        target_domain_name = "target_domain"
+        ident = "SOCKET42"
 
         message_type, data = self.trigger_service(
-            agent, target_domain_name, 'qubes.ForbiddenServiceName', ident)
+            agent, target_domain_name, "qubes.ForbiddenServiceName", ident
+        )
         self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
-        self.assertEqual(data, struct.pack('<32s', ident.encode()))
+        self.assertEqual(data, struct.pack("<32s", ident.encode()))
 
-    def send_trigger_service(self,
-                             agent,
-                             target_domain_name: str,
-                             service_name: str,
-                             ident: str):
+    def send_trigger_service(
+        self, agent, target_domain_name: str, service_name: str, ident: str
+    ):
         agent.send_message(
             qrexec.MSG_TRIGGER_SERVICE3,
-            struct.pack('<64s32s',
-                        target_domain_name.encode(), ident.encode()) +
-            service_name.encode() + b'\0'
+            struct.pack("<64s32s", target_domain_name.encode(), ident.encode())
+            + service_name.encode()
+            + b"\0",
         )
 
-    def trigger_service(self,
-                        agent,
-                        target_domain_name: str,
-                        service_name: str,
-                        ident: str) -> Tuple[int, bytes]:
+    def trigger_service(
+        self, agent, target_domain_name: str, service_name: str, ident: str
+    ) -> Tuple[int, bytes]:
         self.send_trigger_service(
-            agent, target_domain_name, service_name, ident)
+            agent, target_domain_name, service_name, ident
+        )
         message_type, data = agent.recv_message()
-        self.assertListEqual(self.get_policy_program_params(), [
-            '--',
-            str(self.domain),
-            self.domain_name,
-            target_domain_name,
-            service_name,
-            ident
-        ])
+        self.assertListEqual(
+            self.get_policy_program_params(),
+            [
+                "--",
+                str(self.domain),
+                self.domain_name,
+                target_domain_name,
+                service_name,
+                ident,
+            ],
+        )
 
         return message_type, data
 
@@ -199,8 +203,10 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
 
         util.wait_until(
             lambda: not os.path.exists(
-                os.path.join(self.tempdir, 'qrexec.{}'.format(self.domain))),
-            'socket deleted')
+                os.path.join(self.tempdir, "qrexec.{}".format(self.domain))
+            ),
+            "socket deleted",
+        )
 
         agent = self.connect_agent()
         agent.accept()
@@ -218,8 +224,10 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
 
         util.wait_until(
             lambda: not os.path.exists(
-                os.path.join(self.tempdir, 'qrexec.{}'.format(self.domain))),
-            'socket deleted')
+                os.path.join(self.tempdir, "qrexec.{}".format(self.domain))
+            ),
+            "socket deleted",
+        )
 
         self.stop_daemon()
 
@@ -227,30 +235,31 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         agent = self.start_daemon_with_agent()
         agent.handshake()
 
-        cmd = 'user:echo Hello world'
+        cmd = "user:echo Hello world"
         port = self.client_exec(0, cmd, qrexec.MSG_JUST_EXEC)
 
         message_type, data = agent.recv_message()
         self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
-        self.assertEqual(data,
-                         struct.pack('<LL', 0, port) +
-                         cmd.encode() + b'\0')
+        self.assertEqual(
+            data, struct.pack("<LL", 0, port) + cmd.encode() + b"\0"
+        )
 
-    def client_exec(self,
-                    domain: int,
-                    cmd: str = 'user:echo Hello world',
-                    message_type: int = qrexec.MSG_JUST_EXEC):
+    def client_exec(
+        self,
+        domain: int,
+        cmd: str = "user:echo Hello world",
+        message_type: int = qrexec.MSG_JUST_EXEC,
+    ):
         client = self.connect_client()
         client.handshake()
 
         client.send_message(
-            message_type,
-            struct.pack('<LL', domain, 0) +
-            cmd.encode() + b'\0')
+            message_type, struct.pack("<LL", domain, 0) + cmd.encode() + b"\0"
+        )
 
         message_type, data = client.recv_message()
         self.assertEqual(message_type, qrexec.MSG_JUST_EXEC)
-        domain, port = struct.unpack('<LL', data)
+        domain, port = struct.unpack("<LL", data)
         self.assertEqual(domain, self.domain)
 
         return port
@@ -274,8 +283,9 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         domain2 = self.domain + 2
         port = self.client_exec(domain1)
         self.assertEqual(port, 514)
-        agent.send_message(qrexec.MSG_CONNECTION_TERMINATED,
-                           struct.pack('<LL', domain1, port))
+        agent.send_message(
+            qrexec.MSG_CONNECTION_TERMINATED, struct.pack("<LL", domain1, port)
+        )
 
         # TODO: race condition here
         time.sleep(0.1)
@@ -288,15 +298,16 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         agent.handshake()
 
         target_domain = self.domain + 1
-        target_domain_name = 'target_domain'
+        target_domain_name = "target_domain"
         target_port = 513
-        ident = 'SOCKET11'
+        ident = "SOCKET11"
 
         self.set_policy_params(1, 0)
 
-        self.send_trigger_service(agent,
+        self.send_trigger_service(
+            agent,
             target_domain_name,
-            'qubes.Service',
+            "qubes.Service",
             ident,
         )
 
@@ -305,12 +316,16 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         client = self.connect_client()
         client.handshake()
 
-        data = (struct.pack('<LL', target_domain, target_port) +
-                ident.encode() + b'\0')
+        data = (
+            struct.pack("<LL", target_domain, target_port)
+            + ident.encode()
+            + b"\0"
+        )
 
         client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
-        self.assertEqual(agent.recv_message(),
-                         (qrexec.MSG_SERVICE_CONNECT, data))
+        self.assertEqual(
+            agent.recv_message(), (qrexec.MSG_SERVICE_CONNECT, data)
+        )
 
     def test_client_service_connect_unexpected(self):
         agent = self.start_daemon_with_agent()
@@ -321,10 +336,13 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
 
         target_domain = self.domain + 1
         target_port = 513
-        ident = 'SOCKET11'
+        ident = "SOCKET11"
 
-        data = (struct.pack('<LL', target_domain, target_port) +
-                ident.encode() + b'\0')
+        data = (
+            struct.pack("<LL", target_domain, target_port)
+            + ident.encode()
+            + b"\0"
+        )
 
         client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
         # expect the connection to be closed immediately
@@ -338,15 +356,16 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         agent.handshake()
 
         target_domain = self.domain + 1
-        target_domain_name = 'target_domain'
+        target_domain_name = "target_domain"
         target_port = 513
-        ident = 'SOCKET11'
+        ident = "SOCKET11"
 
         self.set_policy_params(1, 0)
 
-        self.send_trigger_service(agent,
+        self.send_trigger_service(
+            agent,
             target_domain_name,
-            'qubes.Service',
+            "qubes.Service",
             ident,
         )
 
@@ -355,18 +374,25 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         client = self.connect_client()
         client.handshake()
 
-        data = (struct.pack('<LL', target_domain, target_port) +
-                ident.encode() + b'\0')
+        data = (
+            struct.pack("<LL", target_domain, target_port)
+            + ident.encode()
+            + b"\0"
+        )
 
         client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
-        self.assertEqual(agent.recv_message(),
-                         (qrexec.MSG_SERVICE_CONNECT, data))
+        self.assertEqual(
+            agent.recv_message(), (qrexec.MSG_SERVICE_CONNECT, data)
+        )
 
         client = self.connect_client()
         client.handshake()
 
-        data = (struct.pack('<LL', target_domain, target_port) +
-                ident.encode() + b'\0')
+        data = (
+            struct.pack("<LL", target_domain, target_port)
+            + ident.encode()
+            + b"\0"
+        )
 
         client.send_message(qrexec.MSG_SERVICE_CONNECT, data)
         # expect the connection to be closed immediately
@@ -376,15 +402,14 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         self.assertEqual(agent.recv_all_messages(), [])
 
 
-@unittest.skipIf(os.environ.get('SKIP_SOCKET_TESTS'),
-                 'socket tests not set up')
+@unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
 class TestClient(unittest.TestCase):
     client = None
 
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
-        os.mkdir(os.path.join(self.tempdir, 'rpc'))
-        os.mkdir(os.path.join(self.tempdir, 'rpc-config'))
+        os.mkdir(os.path.join(self.tempdir, "rpc"))
+        os.mkdir(os.path.join(self.tempdir, "rpc-config"))
         self.addCleanup(shutil.rmtree, self.tempdir)
 
     def make_executable_service(self, *args):
@@ -392,23 +417,25 @@ class TestClient(unittest.TestCase):
 
     def start_client(self, args):
         env = os.environ.copy()
-        env['LD_LIBRARY_PATH'] = os.path.join(ROOT_PATH, 'libqrexec')
-        env['VCHAN_DOMAIN'] = '0'
-        env['VCHAN_SOCKET_DIR'] = self.tempdir
-        env['QREXEC_SERVICE_PATH'] = ':'.join([
-            os.path.join(self.tempdir, 'local-rpc'),
-            os.path.join(self.tempdir, 'rpc'),
-        ])
-        env['QREXEC_MULTIPLEXER_PATH'] = os.path.join(
-            ROOT_PATH, 'lib', 'qubes-rpc-multiplexer')
-        env['QUBES_RPC_CONFIG_PATH'] = \
-            os.path.join(self.tempdir, 'rpc-config')
+        env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
+        env["VCHAN_DOMAIN"] = "0"
+        env["VCHAN_SOCKET_DIR"] = self.tempdir
+        env["QREXEC_SERVICE_PATH"] = ":".join(
+            [
+                os.path.join(self.tempdir, "local-rpc"),
+                os.path.join(self.tempdir, "rpc"),
+            ]
+        )
+        env["QREXEC_MULTIPLEXER_PATH"] = os.path.join(
+            ROOT_PATH, "lib", "qubes-rpc-multiplexer"
+        )
+        env["QUBES_RPC_CONFIG_PATH"] = os.path.join(self.tempdir, "rpc-config")
         cmd = [
-            os.path.join(ROOT_PATH, 'daemon', 'qrexec-client'),
-            '--socket-dir=' + self.tempdir,
+            os.path.join(ROOT_PATH, "daemon", "qrexec-client"),
+            "--socket-dir=" + self.tempdir,
         ] + args
-        if os.environ.get('USE_STRACE'):
-            cmd = ['strace', '-fD'] + cmd
+        if os.environ.get("USE_STRACE"):
+            cmd = ["strace", "-fD"] + cmd
         self.client = subprocess.Popen(
             cmd,
             env=env,
@@ -424,7 +451,8 @@ class TestClient(unittest.TestCase):
 
     def connect_daemon(self, domain_name):
         daemon = qrexec.socket_server(
-            os.path.join(self.tempdir, 'qrexec.{}'.format(domain_name)))
+            os.path.join(self.tempdir, "qrexec.{}".format(domain_name))
+        )
         self.addCleanup(daemon.close)
         return daemon
 
@@ -439,71 +467,79 @@ class TestClient(unittest.TestCase):
         return source
 
     def test_run_vm_command_from_dom0(self):
-        cmd = 'user:command'
-        target_domain_name = 'target_domain'
+        cmd = "user:command"
+        target_domain_name = "target_domain"
         target_domain = 42
         target_port = 513
 
         target_daemon = self.connect_daemon(target_domain_name)
-        self.start_client(['-d', target_domain_name, cmd])
+        self.start_client(["-d", target_domain_name, cmd])
         target_daemon.accept()
         target_daemon.handshake()
 
         # negotiate_connection_params
         self.assertEqual(
             target_daemon.recv_message(),
-            (qrexec.MSG_EXEC_CMDLINE,
-             struct.pack('<LL', 0, 0) + cmd.encode() + b'\0'))
+            (
+                qrexec.MSG_EXEC_CMDLINE,
+                struct.pack("<LL", 0, 0) + cmd.encode() + b"\0",
+            ),
+        )
         target_daemon.send_message(
             qrexec.MSG_EXEC_CMDLINE,
-            struct.pack('<LL', target_domain, target_port))
+            struct.pack("<LL", target_domain, target_port),
+        )
 
         target = self.connect_target(target_domain, target_port)
         target.handshake()
 
         # select_loop
-        target.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
-        target.send_message(qrexec.MSG_DATA_STDOUT, b'')
-        self.assertEqual(self.client.stdout.read(), b'stdout data\n')
-        target.send_message(qrexec.MSG_DATA_EXIT_CODE,
-                                   struct.pack('<L', 42))
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"")
+        self.assertEqual(self.client.stdout.read(), b"stdout data\n")
+        target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42))
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
 
     def test_run_vm_command_from_dom0_with_local_command(self):
-        cmd = 'user:command'
+        cmd = "user:command"
         local_cmd = "while read x; do echo input: $x; done; exit 44"
-        target_domain_name = 'target_domain'
+        target_domain_name = "target_domain"
         target_domain = 42
         target_port = 513
 
         target_daemon = self.connect_daemon(target_domain_name)
-        self.start_client(['-d', target_domain_name, '-l', local_cmd, cmd])
+        self.start_client(["-d", target_domain_name, "-l", local_cmd, cmd])
         target_daemon.accept()
         target_daemon.handshake()
 
         # negotiate_connection_params
         self.assertEqual(
             target_daemon.recv_message(),
-            (qrexec.MSG_EXEC_CMDLINE,
-             struct.pack('<LL', 0, 0) + cmd.encode() + b'\0'))
+            (
+                qrexec.MSG_EXEC_CMDLINE,
+                struct.pack("<LL", 0, 0) + cmd.encode() + b"\0",
+            ),
+        )
         target_daemon.send_message(
             qrexec.MSG_EXEC_CMDLINE,
-            struct.pack('<LL', target_domain, target_port))
+            struct.pack("<LL", target_domain, target_port),
+        )
 
         target = self.connect_target(target_domain, target_port)
         target.handshake()
 
         # select_loop
-        target.send_message(qrexec.MSG_DATA_STDOUT, b'stdout data\n')
-        self.assertEqual(target.recv_message(), (
-            qrexec.MSG_DATA_STDIN, b'input: stdout data\n'))
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
+        self.assertEqual(
+            target.recv_message(),
+            (qrexec.MSG_DATA_STDIN, b"input: stdout data\n"),
+        )
 
-        target.send_message(qrexec.MSG_DATA_STDOUT, b'')
-        self.assertEqual(target.recv_message(), (
-            qrexec.MSG_DATA_STDIN, b''))
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"")
+        self.assertEqual(target.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
 
-        target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 42))
+        target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42))
 
         self.client.wait()
 
@@ -511,23 +547,26 @@ class TestClient(unittest.TestCase):
         self.assertEqual(self.client.returncode, 42)
 
     def test_run_vm_command_and_connect_vm(self):
-        cmd = 'user:command'
-        request_id = 'SOCKET11'
-        src_domain_name = 'src_domain'
+        cmd = "user:command"
+        request_id = "SOCKET11"
+        src_domain_name = "src_domain"
         src_domain = 43
-        target_domain_name = 'target_domain'
+        target_domain_name = "target_domain"
         target_domain = 42
         target_port = 513
 
         target_daemon = self.connect_daemon(target_domain_name)
         src_daemon = self.connect_daemon(src_domain_name)
 
-        self.start_client([
-            '-d', target_domain_name,
-            '-c', '{},{},{}'.format(
-                request_id, src_domain_name, src_domain),
-            cmd,
-        ])
+        self.start_client(
+            [
+                "-d",
+                target_domain_name,
+                "-c",
+                "{},{},{}".format(request_id, src_domain_name, src_domain),
+                cmd,
+            ]
+        )
 
         target_daemon.accept()
         target_daemon.handshake()
@@ -535,313 +574,398 @@ class TestClient(unittest.TestCase):
         # negotiate_connection_params
         self.assertEqual(
             target_daemon.recv_message(),
-            (qrexec.MSG_EXEC_CMDLINE,
-             struct.pack('<LL', src_domain, 0) + cmd.encode() + b'\0'))
+            (
+                qrexec.MSG_EXEC_CMDLINE,
+                struct.pack("<LL", src_domain, 0) + cmd.encode() + b"\0",
+            ),
+        )
         target_daemon.send_message(
             qrexec.MSG_EXEC_CMDLINE,
-            struct.pack('<LL', target_domain, target_port))
+            struct.pack("<LL", target_domain, target_port),
+        )
 
         # send_service_connect
         src_daemon.accept()
         src_daemon.handshake()
         self.assertEqual(
             src_daemon.recv_message(),
-            (qrexec.MSG_SERVICE_CONNECT,
-             struct.pack('<LL32s', target_domain, target_port,
-                         request_id.encode())))
+            (
+                qrexec.MSG_SERVICE_CONNECT,
+                struct.pack(
+                    "<LL32s", target_domain, target_port, request_id.encode()
+                ),
+            ),
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def connect_service_request(self, cmd):
-        request_id = 'SOCKET11'
-        src_domain_name = 'src_domain'
+        request_id = "SOCKET11"
+        src_domain_name = "src_domain"
         src_domain = 43
         src_port = 42
 
         src_daemon = self.connect_daemon(src_domain_name)
         source = self.connect_source(src_domain, src_port)
 
-        self.start_client([
-            '-d', 'dom0',
-            '-c', '{},{},{}'.format(
-                request_id, src_domain_name, src_domain),
-            cmd,
-        ])
+        self.start_client(
+            [
+                "-d",
+                "dom0",
+                "-c",
+                "{},{},{}".format(request_id, src_domain_name, src_domain),
+                cmd,
+            ]
+        )
 
         # negotiate_connection_params
         src_daemon.accept()
         src_daemon.handshake()
         self.assertEqual(
             src_daemon.recv_message(),
-            (qrexec.MSG_SERVICE_CONNECT,
-             struct.pack('<LL32s', 0, 0, request_id.encode())))
+            (
+                qrexec.MSG_SERVICE_CONNECT,
+                struct.pack("<LL32s", 0, 0, request_id.encode()),
+            ),
+        )
         src_daemon.send_message(
-            qrexec.MSG_SERVICE_CONNECT,
-            struct.pack('<LL', src_domain, src_port))
+            qrexec.MSG_SERVICE_CONNECT, struct.pack("<LL", src_domain, src_port)
+        )
 
         source.accept()
         source.handshake()
         return source
 
     def test_run_dom0_command_and_connect_vm(self):
-        cmd = 'echo Hello world'
+        cmd = "echo Hello world"
         source = self.connect_service_request(cmd)
-        self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b'Hello world\n'),
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
-        ])
+        self.assertEqual(
+            source.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"Hello world\n"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_service_exec(self):
-        util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
         #!/bin/sh
         read input
         echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
-        ''')
+        """,
+        )
 
-        cmd = 'QUBESRPC qubes.Service+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
-        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
-        source.send_message(qrexec.MSG_DATA_STDIN, b'')
-        self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: src_domain, '
-                                     b'input: stdin data\n'),
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
-        ])
+        source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
+        source.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self.assertEqual(
+            source.recv_all_messages(),
+            [
+                (
+                    qrexec.MSG_DATA_STDOUT,
+                    b"arg: arg, remote domain: src_domain, "
+                    b"input: stdin data\n",
+                ),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_service_failed(self):
         # qubes.Service does not exist
-        cmd = 'QUBESRPC qubes.Service+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
-        self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, struct.pack('<L', 127)),
-        ])
+        self.assertEqual(
+            source.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 127)),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 127)
 
     def test_run_dom0_service_wait_for_session(self):
-        log = os.path.join(self.tempdir, 'wait-for-session.log')
-        util.make_executable_service(self.tempdir, 'rpc', 'qubes.WaitForSession', '''\
+        log = os.path.join(self.tempdir, "wait-for-session.log")
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.WaitForSession",
+            """\
 #!/bin/sh
 echo "wait for session: remote domain: $QREXEC_REMOTE_DOMAIN" >{}
-'''.format(log))
-        util.make_executable_service(self.tempdir, 'rpc', 'qubes.Service', '''\
+""".format(
+                log
+            ),
+        )
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
         #!/bin/sh
         read input
         cat {}
         echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
-'''.format(log))
-        with open(os.path.join(self.tempdir, 'rpc-config', 'qubes.Service+arg'),
-                  'w') as f:
-            f.write('wait-for-session=1')
+""".format(
+                log
+            ),
+        )
+        with open(
+            os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
+        ) as f:
+            f.write("wait-for-session=1")
 
-        cmd = 'QUBESRPC qubes.Service+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
-        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
-        source.send_message(qrexec.MSG_DATA_STDIN, b'')
-        self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b'wait for session: remote domain: src_domain\n'),
-            (qrexec.MSG_DATA_STDOUT, b'arg: arg, remote domain: src_domain, '
-                                     b'input: stdin data\n'),
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
-        ])
+        source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
+        source.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self.assertEqual(
+            source.recv_all_messages(),
+            [
+                (
+                    qrexec.MSG_DATA_STDOUT,
+                    b"wait for session: remote domain: src_domain\n",
+                ),
+                (
+                    qrexec.MSG_DATA_STDOUT,
+                    b"arg: arg, remote domain: src_domain, "
+                    b"input: stdin data\n",
+                ),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_service_socket(self):
-        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg"
+        )
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
-        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         server.accept()
 
-        expected = b'qubes.SocketService+arg src_domain name src_domain\0'
+        expected = b"qubes.SocketService+arg src_domain name src_domain\0"
         self.assertEqual(server.recvall(len(expected)), expected)
 
-        message = b'stdin data'
+        message = b"stdin data"
         source.send_message(qrexec.MSG_DATA_STDIN, message)
-        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+        source.send_message(qrexec.MSG_DATA_STDIN, b"")
         self.assertEqual(server.recvall(len(message)), message)
 
-        server.sendall(b'stdout data')
+        server.sendall(b"stdout data")
         server.close()
 
-        self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b'stdout data'),
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
-        ])
+        self.assertEqual(
+            source.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_service_socket_no_read(self):
         """Socket based service that don't read its input stream"""
 
-        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg"
+        )
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
-        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         server.accept()
-        server.sendall(b'stdout data')
+        server.sendall(b"stdout data")
         server.close()
 
-        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data')
-        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+        source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data")
+        source.send_message(qrexec.MSG_DATA_STDIN, b"")
 
-        self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b'stdout data'),
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
-        ])
+        self.assertEqual(
+            source.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_service_socket_close(self):
         """Socket service closes connection"""
 
-        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg"
+        )
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
-        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         server.accept()
-        server.sendall(b'stdout data')
+        server.sendall(b"stdout data")
         server.close()
 
-        self.assertEqual(source.recv_all_messages(), [
-            (qrexec.MSG_DATA_STDOUT, b'stdout data'),
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0'),
-        ])
+        self.assertEqual(
+            source.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_service_socket_shutdown_rd(self):
         """Service does shutdown(SHUT_RD)"""
 
-        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg"
+        )
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
-        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         server.accept()
-        header = cmd[len('QUBESRPC '):].encode() + b'\0'
+        header = cmd[len("QUBESRPC ") :].encode() + b"\0"
         self.assertEqual(server.recvall(len(header)), header)
 
-        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
-        self.assertEqual(server.recvall(len(b'stdin data\n')),
-                         b'stdin data\n')
+        source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
+        self.assertEqual(server.recvall(len(b"stdin data\n")), b"stdin data\n")
         server.conn.shutdown(socket.SHUT_RD)
 
-        server.sendall(b'stdout data\n')
-        self.assertEqual(source.recv_message(),
-                         (qrexec.MSG_DATA_STDOUT, b'stdout data\n'))
+        server.sendall(b"stdout data\n")
+        self.assertEqual(
+            source.recv_message(), (qrexec.MSG_DATA_STDOUT, b"stdout data\n")
+        )
 
         server.conn.shutdown(socket.SHUT_WR)
 
         messages = source.recv_all_messages()
-        self.assertListEqual(util.sort_messages(messages), [
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
-        ])
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_run_dom0_service_socket_shutdown_wr(self):
         """Service does shutdown(SHUT_WR)"""
 
-        socket_path = os.path.join(self.tempdir, 'rpc', 'qubes.SocketService+arg')
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg"
+        )
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
-        cmd = 'QUBESRPC qubes.SocketService+arg src_domain name src_domain'
+        cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         server.accept()
-        header = cmd[len('QUBESRPC '):].encode() + b'\0'
+        header = cmd[len("QUBESRPC ") :].encode() + b"\0"
         self.assertEqual(server.recvall(len(header)), header)
 
-        server.sendall(b'stdout data\n')
-        self.assertEqual(source.recv_message(),
-                         (qrexec.MSG_DATA_STDOUT, b'stdout data\n'))
+        server.sendall(b"stdout data\n")
+        self.assertEqual(
+            source.recv_message(), (qrexec.MSG_DATA_STDOUT, b"stdout data\n")
+        )
 
         server.conn.shutdown(socket.SHUT_WR)
-        self.assertEqual(source.recv_message(),
-                         (qrexec.MSG_DATA_STDOUT, b''))
+        self.assertEqual(source.recv_message(), (qrexec.MSG_DATA_STDOUT, b""))
 
-        source.send_message(qrexec.MSG_DATA_STDIN, b'stdin data\n')
-        self.assertEqual(server.recvall(len(b'stdin data\n')),
-                         b'stdin data\n')
+        source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
+        self.assertEqual(server.recvall(len(b"stdin data\n")), b"stdin data\n")
 
         server.conn.shutdown(socket.SHUT_RD)
         messages = source.recv_all_messages()
-        self.assertListEqual(util.sort_messages(messages), [
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
-        ])
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [(qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0")],
+        )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
     def test_close_stdin_early(self):
         # Make sure that we cover the error on writing stdin into living
         # process.
-        source = self.connect_service_request('''
+        source = self.connect_service_request(
+            """
 read
 exec <&-
 echo closed stdin
 sleep 1
-''')
-        source.send_message(qrexec.MSG_DATA_STDIN, b'data 1\n')
-        self.assertEqual(source.recv_message(),
-                         (qrexec.MSG_DATA_STDOUT, b'closed stdin\n'))
-        source.send_message(qrexec.MSG_DATA_STDIN, b'data 2\n')
-        source.send_message(qrexec.MSG_DATA_STDIN, b'')
+"""
+        )
+        source.send_message(qrexec.MSG_DATA_STDIN, b"data 1\n")
+        self.assertEqual(
+            source.recv_message(), (qrexec.MSG_DATA_STDOUT, b"closed stdin\n")
+        )
+        source.send_message(qrexec.MSG_DATA_STDIN, b"data 2\n")
+        source.send_message(qrexec.MSG_DATA_STDIN, b"")
 
         messages = source.recv_all_messages()
-        self.assertListEqual(util.sort_messages(messages), [
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
-        ])
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
 
     def test_buffer_stdin(self):
         # Test to trigger WRITE_STDIN_BUFFERED.
 
         # Values carefully selected to block stdin pipe but not block vchan.
         data_size = 256 * 1024
-        data = bytes(itertools.islice(
-            itertools.cycle(b'abcdefghijklmnopqrstuvwxyz'),
-            data_size))
+        data = bytes(
+            itertools.islice(
+                itertools.cycle(b"abcdefghijklmnopqrstuvwxyz"), data_size
+            )
+        )
         msg_size = 32 * 1024
 
-        fifo = os.path.join(self.tempdir, 'fifo')
+        fifo = os.path.join(self.tempdir, "fifo")
         os.mkfifo(fifo)
-        target = self.connect_service_request('read <{}; cat'.format(fifo))
+        target = self.connect_service_request("read <{}; cat".format(fifo))
 
         for i in range(0, data_size, msg_size):
-            msg = data[i:i+msg_size]
+            msg = data[i : i + msg_size]
             target.send_message(qrexec.MSG_DATA_STDIN, msg)
-        target.send_message(qrexec.MSG_DATA_STDIN, b'')
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
 
         # Signal the process to start reading.
-        with open(fifo, 'a') as f:
-            f.write('end\n')
+        with open(fifo, "a") as f:
+            f.write("end\n")
             f.flush()
 
-        received_data = b''
+        received_data = b""
         while len(received_data) < data_size:
             message_type, message = target.recv_message()
             self.assertEqual(message_type, qrexec.MSG_DATA_STDOUT)
@@ -851,7 +975,10 @@ sleep 1
         self.assertEqual(received_data, data)
 
         messages = target.recv_all_messages()
-        self.assertListEqual(util.sort_messages(messages), [
-            (qrexec.MSG_DATA_STDOUT, b''),
-            (qrexec.MSG_DATA_EXIT_CODE, b'\0\0\0\0')
-        ])
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )

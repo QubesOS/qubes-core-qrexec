@@ -31,8 +31,9 @@ class TestPolicyCache:
     @pytest.fixture
     def mock_parser(self, monkeypatch):
         mock_parser = unittest.mock.Mock()
-        monkeypatch.setattr('qrexec.policy.utils.parser.FilePolicy',
-                            mock_parser)
+        monkeypatch.setattr(
+            "qrexec.policy.utils.parser.FilePolicy", mock_parser
+        )
         return mock_parser
 
     def test_00_policy_init(self, tmp_path, mock_parser):
@@ -117,4 +118,3 @@ class TestPolicyCache:
         call = unittest.mock.call(policy_path=tmp_path)
 
         assert mock_parser.mock_calls == [call, call]
-

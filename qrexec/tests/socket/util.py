@@ -25,15 +25,15 @@ def wait_until(func, message, n_tries=10, delay=0.1):
         if func():
             return
         time.sleep(delay)
-    raise Exception('Timed out waiting: ' + message)
+    raise Exception("Timed out waiting: " + message)
 
 
 def sort_messages(messages):
-    '''
+    """
     Sort a list of messages (message_type, data) by message type.
     Useful because the order of messages from multiple streams is not
     deterministic wrt stdout/stderr.
-    '''
+    """
     # Python sort is stable, so it will not reorder messages with the same
     # type.
     return sorted(messages, key=lambda m: m[0])
@@ -41,6 +41,6 @@ def sort_messages(messages):
 
 def make_executable_service(tempdir, dir_name, service_name, content):
     service_path = os.path.join(tempdir, dir_name, service_name)
-    with open(service_path, 'w') as f:
+    with open(service_path, "w") as f:
         f.write(content)
     os.chmod(service_path, 0o700)

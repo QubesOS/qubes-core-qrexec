@@ -21,7 +21,7 @@
 
 # pylint: skip-file
 
-'''qubes-policy-restore -- CLI tool for restoring policy from backup'''
+"""qubes-policy-restore -- CLI tool for restoring policy from backup"""
 
 import argparse
 import pathlib
@@ -35,47 +35,59 @@ argparser = argparse.ArgumentParser()
 # - just replace everything
 # - only files that do not exist in dom0
 # -
-argparser.add_argument('--dest', metavar='DIRECTORY',
+argparser.add_argument(
+    "--dest",
+    metavar="DIRECTORY",
     type=pathlib.Path,
-    help='directory with live policy (default: %(default)s)')
-argparser.add_argument('path', metavar='DIRECTORY',
+    help="directory with live policy (default: %(default)s)",
+)
+argparser.add_argument(
+    "path",
+    metavar="DIRECTORY",
     type=pathlib.Path,
-    help='directory with policy files in it (and maybe include/ subdirectory)')
+    help="directory with policy files in it (and maybe include/ subdirectory)",
+)
 argparser.set_defaults(dest=POLICYPATH)
+
 
 def main(args=None):
     # pylint: disable=missing-docstring
     args = argparser.parse_args(args)
 
     try:
-        (args.dest / 'include').mkdir(parents=True, exist_ok=True)
+        (args.dest / "include").mkdir(parents=True, exist_ok=True)
     except OSError as e:
         sys.stderr.write(
-            'cannot create directory {} [{}]\n'.format(e.filename, e.strerror))
+            "cannot create directory {} [{}]\n".format(e.filename, e.strerror)
+        )
         return 1
 
-    includepath = args.dest / 'include'
+    includepath = args.dest / "include"
     if not includepath.exists():
         includepath.mkdir()
     elif not includepath.is_dir() or includepath.is_symlink():
-        sys.stderr.write('{} is not a directory, aborting\n'.format(includepath))
+        sys.stderr.write(
+            "{} is not a directory, aborting\n".format(includepath)
+        )
 
     for srcfile, path in parser.toposort(args.path):
         policypath = args.dest / path
         if policypath.exists():
             # TODO allow overwrite (-f switch?)
-            sys.stderr.write('not overwriting {}\n'.format(policypath))
+            sys.stderr.write("not overwriting {}\n".format(policypath))
             continue
 
-        with policypath.open('w') as dstfile:
+        with policypath.open("w") as dstfile:
             with srcfile:
                 dstfile.write(srcfile.read())
 
         # TODO
+
+
 #       policy = api.policy
 #       if filename.startswith('include/'):
 #           policy = policy.include
 #       policy.Replace()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

@@ -16,7 +16,7 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
 
-'''
+"""
 A client and server for socket-based QubesRPC (currently used for
 qrexec-policy-agent).
 
@@ -24,7 +24,7 @@ The request (intended to be dom0 -> VM) is JSON-encoded, response is plain
 ASCII text.
 
 Currently disregards the target specification part of the request.
-'''
+"""
 
 import os
 import os.path
@@ -33,6 +33,7 @@ import json
 
 from . import RPC_PATH
 from .client import call_async
+
 
 class SocketService:
     def __init__(self, socket_path):
@@ -46,20 +47,21 @@ class SocketService:
     async def start(self):
         if os.path.exists(self._socket_path):
             os.unlink(self._socket_path)
-        return await asyncio.start_unix_server(self._client_connected,
-                                               path=self._socket_path)
+        return await asyncio.start_unix_server(
+            self._client_connected, path=self._socket_path
+        )
 
     async def _client_connected(self, reader, writer):
         try:
             data = await reader.read()
-            data = data.decode('ascii')
-            assert '\0' in data, data
-            header, json_data = data.split('\0', 1)
+            data = data.decode("ascii")
+            assert "\0" in data, data
+            header, json_data = data.split("\0", 1)
 
             # Note that we process only the first two parts (service and
             # source_domain) and disregard the second two parts (target
             # specification) that appear when we're running in dom0.
-            header_parts = header.split(' ')
+            header_parts = header.split(" ")
             assert len(header_parts) >= 2, header
             service = header_parts[0]
             source_domain = header_parts[1]
@@ -68,7 +70,7 @@ class SocketService:
 
             response = await self.handle_request(params, service, source_domain)
 
-            writer.write(response.encode('ascii'))
+            writer.write(response.encode("ascii"))
             await writer.drain()
         finally:
             writer.close()
@@ -79,36 +81,37 @@ class SocketService:
 
 
 def call_socket_service(
-        remote_domain, service, source_domain, params,
-        rpc_path=RPC_PATH):
-    '''
+    remote_domain, service, source_domain, params, rpc_path=RPC_PATH
+):
+    """
     Call a socket service, either over qrexec or locally.
 
     The request is JSON-encoded, response is plain ASCII text.
-    '''
+    """
 
     if remote_domain == source_domain:
         return call_socket_service_local(
-            service, source_domain, params, rpc_path)
-    return call_socket_service_remote(
-        remote_domain, service, params)
+            service, source_domain, params, rpc_path
+        )
+    return call_socket_service_remote(remote_domain, service, params)
 
 
-async def call_socket_service_local(service, source_domain, params,
-                                    rpc_path=RPC_PATH):
-    if source_domain == 'dom0':
-        header = '{} dom0 name dom0\0'.format(service).encode('ascii')
+async def call_socket_service_local(
+    service, source_domain, params, rpc_path=RPC_PATH
+):
+    if source_domain == "dom0":
+        header = "{} dom0 name dom0\0".format(service).encode("ascii")
     else:
-        header = '{} {}\0'.format(service, source_domain).encode('ascii')
+        header = "{} {}\0".format(service, source_domain).encode("ascii")
 
     path = os.path.join(rpc_path, service)
     reader, writer = await asyncio.open_unix_connection(path)
     writer.write(header)
-    writer.write(json.dumps(params).encode('ascii'))
+    writer.write(json.dumps(params).encode("ascii"))
     writer.write_eof()
     await writer.drain()
     response = await reader.read()
-    return response.decode('ascii')
+    return response.decode("ascii")
 
 
 async def call_socket_service_remote(remote_domain, service, params):

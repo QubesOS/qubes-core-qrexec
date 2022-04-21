@@ -34,11 +34,13 @@ from ..server import SocketService, call_socket_service_local
 
 class TestService(SocketService):
     async def handle_request(self, params, service, source_domain):
-        return json.dumps({
-            'params': params,
-            'service': service,
-            'source_domain': source_domain
-        })
+        return json.dumps(
+            {
+                "params": params,
+                "service": service,
+                "source_domain": source_domain,
+            }
+        )
 
 
 @pytest.fixture
@@ -52,7 +54,7 @@ def temp_dir():
 
 @pytest.fixture
 async def server(temp_dir):
-    socket_path = os.path.join(temp_dir, 'Service')
+    socket_path = os.path.join(temp_dir, "Service")
 
     service = TestService(socket_path)
     server = await service.start()
@@ -69,14 +71,14 @@ async def server(temp_dir):
 async def test_server(server):
     for i in range(2):
         reader, writer = await asyncio.open_unix_connection(server)
-        writer.write(b'Service source\0' + json.dumps({'request': i}).encode())
+        writer.write(b"Service source\0" + json.dumps({"request": i}).encode())
         writer.write_eof()
         await writer.drain()
         response = await reader.read()
         assert json.loads(response) == {
-            'params': {'request': i},
-            'service': 'Service',
-            'source_domain': 'source',
+            "params": {"request": i},
+            "service": "Service",
+            "source_domain": "source",
         }
 
 
@@ -84,10 +86,10 @@ async def test_server(server):
 async def test_call_socket_service_local(temp_dir, server):
     for i in range(2):
         response = await call_socket_service_local(
-            'Service', 'source',
-            {'request': i}, rpc_path=temp_dir)
+            "Service", "source", {"request": i}, rpc_path=temp_dir
+        )
         assert json.loads(response) == {
-            'params': {'request': i},
-            'service': 'Service',
-            'source_domain': 'source',
+            "params": {"request": i},
+            "service": "Service",
+            "source_domain": "source",
         }

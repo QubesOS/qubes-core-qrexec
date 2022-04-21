@@ -17,7 +17,7 @@
 # with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 
-'''
+"""
 Admin client in Python
 
 >>> from qrexec.policy.admin_client import PolicyClient
@@ -31,7 +31,7 @@ Admin client in Python
 ... mail mail-vault allow
 ... @anyvm @anyvm deny
 ... \'\'\')
-'''
+"""
 
 from typing import List, Tuple
 
@@ -40,31 +40,31 @@ from ..client import call
 
 class PolicyClient:
     def policy_list(self) -> List[str]:
-        return self.call('policy.List').rstrip('\n').split('\n')
+        return self.call("policy.List").rstrip("\n").split("\n")
 
     def policy_include_list(self) -> List[str]:
-        return self.call('policy.include.List').rstrip('\n').split('\n')
+        return self.call("policy.include.List").rstrip("\n").split("\n")
 
     def policy_get(self, name: str) -> Tuple[str, str]:
-        token, content = self.call('policy.Get', name).split('\n', 1)
+        token, content = self.call("policy.Get", name).split("\n", 1)
         return content, token
 
     def policy_include_get(self, name: str) -> Tuple[str, str]:
-        token, content = self.call('policy.include.Get', name).split('\n', 1)
+        token, content = self.call("policy.include.Get", name).split("\n", 1)
         return content, token
 
-    def policy_replace(self, name: str, content: str, token='any'):
-        self.call('policy.Replace', name, token + '\n' + content)
+    def policy_replace(self, name: str, content: str, token="any"):
+        self.call("policy.Replace", name, token + "\n" + content)
 
-    def policy_include_replace(self, name: str, content: str, token='any'):
-        self.call('policy.Replace', name, token + '\n' + content)
+    def policy_include_replace(self, name: str, content: str, token="any"):
+        self.call("policy.Replace", name, token + "\n" + content)
 
-    def policy_remove(self, name: str, token='any'):
-        self.call('policy.Remove', name, token)
+    def policy_remove(self, name: str, token="any"):
+        self.call("policy.Remove", name, token)
 
-    def policy_include_remove(self, name: str, token='any'):
-        self.call('policy.Remove', name, token)
+    def policy_include_remove(self, name: str, token="any"):
+        self.call("policy.Remove", name, token)
 
     @staticmethod
-    def call(service_name, arg=None, payload=''):
-        return call('dom0', service_name, arg, input=payload)
+    def call(service_name, arg=None, payload=""):
+        return call("dom0", service_name, arg, input=payload)

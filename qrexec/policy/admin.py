@@ -30,15 +30,15 @@ from .. import RPCNAME_ALLOWED_CHARSET
 
 
 class PolicyAdminException(Exception):
-    '''
+    """
     An exception with message to the user.
-    '''
+    """
 
 
 class PolicyAdminTokenException(Exception):
-    '''
+    """
     A token check exception, indicating that a file is in unexpected state.
-    '''
+    """
 
 
 def method(service_name, *, no_arg=False, no_payload=False):
@@ -47,14 +47,15 @@ def method(service_name, *, no_arg=False, no_payload=False):
         func.api_no_arg = no_arg
         func.api_no_payload = no_payload
         return func
+
     return decorator
 
 
-RENAME_PREFIX = '!'
+RENAME_PREFIX = "!"
 
 
 class PolicyAdmin:
-    '''
+    """
     A class that implements Qubes RPC interface for policy administration.
 
     All changes (Replace / Remove) are be validated to check if they will not
@@ -67,40 +68,42 @@ class PolicyAdmin:
     first line of payload, or one of special values: "new" when the file is not
     supposed to be there, "any" when the client doesn't want a token to be
     checked.
-    '''
+    """
 
     # pylint: disable=no-self-use
 
     def __init__(self, policy_path):
         self.policy_path = policy_path
-        self.include_path = policy_path / 'include'
+        self.include_path = policy_path / "include"
 
-    def handle_request(self, service_name: str, arg: str, payload: bytes) \
-        -> Optional[bytes]:
-        '''
+    def handle_request(
+        self, service_name: str, arg: str, payload: bytes
+    ) -> Optional[bytes]:
+        """
         Handle a QubesRPC request with the right parameters.
 
         Throws PolicyAdminException in case of user error.
-        '''
+        """
 
         assert all(char in RPCNAME_ALLOWED_CHARSET for char in arg)
 
         func = self._find_method(service_name)
         if not func:
             raise PolicyAdminException(
-                'unrecognized method: {}'.format(service_name))
+                "unrecognized method: {}".format(service_name)
+            )
 
         args = []
 
         if func.api_no_arg:
-            if arg != '':
-                raise PolicyAdminException('Unexpected argument')
+            if arg != "":
+                raise PolicyAdminException("Unexpected argument")
         else:
             args.append(arg)
 
         if func.api_no_payload:
-            if payload != b'':
-                raise PolicyAdminException('Unexpected payload')
+            if payload != b"":
+                raise PolicyAdminException("Unexpected payload")
         else:
             args.append(payload)
 
@@ -110,7 +113,7 @@ class PolicyAdmin:
     def _find_method(self, service_name):
         for attr in dir(self):
             func = getattr(self, attr)
-            if callable(func) and hasattr(func, 'api_service_name'):
+            if callable(func) and hasattr(func, "api_service_name"):
                 if func.api_service_name == service_name:
                     return func
 
@@ -118,9 +121,9 @@ class PolicyAdmin:
 
     @contextlib.contextmanager
     def _lock(self):
-        '''
+        """
         Acquire an exclusive lock to policy directory.
-        '''
+        """
 
         lock_fd = os.open(str(self.policy_path), os.O_DIRECTORY)
         try:
@@ -131,13 +134,13 @@ class PolicyAdmin:
 
     # List
 
-    @method('policy.List', no_arg=True, no_payload=True)
+    @method("policy.List", no_arg=True, no_payload=True)
     def policy_list(self):
-        return self._common_list(self.policy_path, '.policy')
+        return self._common_list(self.policy_path, ".policy")
 
-    @method('policy.include.List', no_arg=True, no_payload=True)
+    @method("policy.include.List", no_arg=True, no_payload=True)
     def policy_include_list(self):
-        return self._common_list(self.include_path, '')
+        return self._common_list(self.include_path, "")
 
     def _common_list(self, dir_path: Path, suffix: str) -> bytes:
         names = []
@@ -145,54 +148,55 @@ class PolicyAdmin:
             if file_path.is_file():
                 name = file_path.name
                 if suffix and name.endswith(suffix):
-                    name = name[:-len(suffix)]
+                    name = name[: -len(suffix)]
                     names.append(name)
                 elif not suffix:
                     names.append(name)
 
         names.sort()
-        return ''.join(name + '\n' for name in names).encode('ascii')
+        return "".join(name + "\n" for name in names).encode("ascii")
 
     # Get
 
-    @method('policy.Get', no_payload=True)
+    @method("policy.Get", no_payload=True)
     def policy_get(self, arg):
-        path = self._get_path(arg, self.policy_path, '.policy')
+        path = self._get_path(arg, self.policy_path, ".policy")
         return self._common_get(path)
 
-    @method('policy.include.Get', no_payload=True)
+    @method("policy.include.Get", no_payload=True)
     def policy_include_get(self, arg):
-        path = self._get_path(arg, self.include_path, '')
+        path = self._get_path(arg, self.include_path, "")
         return self._common_get(path)
 
     def _common_get(self, path: Path) -> bytes:
         if not path.is_file():
-            raise PolicyAdminException('Not found: {}'.format(path))
+            raise PolicyAdminException("Not found: {}".format(path))
 
         data = path.read_bytes()
         token = compute_token(data)
-        return token + b'\n' + data
+        return token + b"\n" + data
 
     # Replace
 
-    @method('policy.Replace')
+    @method("policy.Replace")
     def policy_replace(self, arg, payload):
-        path = self._get_path(arg, self.policy_path, '.policy')
+        path = self._get_path(arg, self.policy_path, ".policy")
         return self._common_replace(path, payload)
 
-    @method('policy.include.Replace')
+    @method("policy.include.Replace")
     def policy_include_replace(self, arg, payload):
-        path = self._get_path(arg, self.include_path, '')
+        path = self._get_path(arg, self.include_path, "")
         return self._common_replace(path, payload)
 
     def _common_replace(self, path: Path, payload: bytes) -> bytes:
-        if b'\n' not in payload:
+        if b"\n" not in payload:
             raise PolicyAdminException(
-                'Payload needs to include first line with token')
-        token, data = payload.split(b'\n', 1)
+                "Payload needs to include first line with token"
+            )
+        token, data = payload.split(b"\n", 1)
         self._check_token(token, path)
 
-        data_string = data.decode('utf-8')
+        data_string = data.decode("utf-8")
         self._validate(path, data_string)
 
         temp_path = path.with_name(RENAME_PREFIX + path.name)
@@ -201,21 +205,21 @@ class PolicyAdmin:
 
     # Remove
 
-    @method('policy.Remove')
+    @method("policy.Remove")
     def policy_remove(self, arg, payload):
-        path = self._get_path(arg, self.policy_path, '.policy')
+        path = self._get_path(arg, self.policy_path, ".policy")
         return self._common_remove(path, payload)
 
-    @method('policy.include.Remove')
+    @method("policy.include.Remove")
     def policy_include_remove(self, arg, payload):
-        path = self._get_path(arg, self.include_path, '')
+        path = self._get_path(arg, self.include_path, "")
         return self._common_remove(path, payload)
 
     def _common_remove(self, path: Path, payload: str) -> None:
         self._check_token(payload, path)
 
         if not path.is_file():
-            raise PolicyAdminException('Not found: {}'.format(path))
+            raise PolicyAdminException("Not found: {}".format(path))
 
         self._validate(path, None)
 
@@ -227,41 +231,45 @@ class PolicyAdmin:
         path = dir_path / (arg + suffix)
         path = path.resolve()
         if path.parent != dir_path:
-            raise PolicyAdminException('Expecting a path inside {}'.format(
-                dir_path))
+            raise PolicyAdminException(
+                "Expecting a path inside {}".format(dir_path)
+            )
 
         return path
 
     def _validate(self, path: Path, content: Optional[str]):
         try:
             ValidateParser(
-                policy_path=self.policy_path,
-                overrides={path: content})
+                policy_path=self.policy_path, overrides={path: content}
+            )
         except PolicySyntaxError as exc:
             raise PolicyAdminException(
-                'Policy change validation failed: {}'.format(exc)) from exc
+                "Policy change validation failed: {}".format(exc)
+            ) from exc
 
     def _check_token(self, token: bytes, path: Path):
-        if token == b'any':
+        if token == b"any":
             return
 
-        if token == b'new':
+        if token == b"new":
             if path.exists():
                 raise PolicyAdminTokenException(
-                    "File exists but token is 'new'")
+                    "File exists but token is 'new'"
+                )
             return
 
-        if not token.startswith(b'sha256:'):
-            raise PolicyAdminException('Unrecognized token')
+        if not token.startswith(b"sha256:"):
+            raise PolicyAdminException("Unrecognized token")
 
         if not path.exists():
             raise PolicyAdminTokenException(
-                "File doesn't exist, but token isn't 'new'")
+                "File doesn't exist, but token isn't 'new'"
+            )
 
         current_token = compute_token(path.read_bytes())
         if current_token != token:
-            raise PolicyAdminTokenException('Token mismatch')
+            raise PolicyAdminTokenException("Token mismatch")
 
 
 def compute_token(data: bytes) -> bytes:
-    return b'sha256:' + hashlib.sha256(data).hexdigest().encode('ascii')
+    return b"sha256:" + hashlib.sha256(data).hexdigest().encode("ascii")

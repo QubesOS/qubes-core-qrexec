@@ -20,7 +20,7 @@
 
 # pylint: disable=too-many-lines
 
-'''Qrexec policy parser and evaluator'''
+"""Qrexec policy parser and evaluator"""
 
 import abc
 import collections
@@ -46,12 +46,17 @@ from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
 from .. import exc
 from .. import utils
 from ..exc import (
-    AccessDenied, PolicySyntaxError, QubesMgmtException, ExecutionFailed)
+    AccessDenied,
+    PolicySyntaxError,
+    QubesMgmtException,
+    ExecutionFailed,
+)
 
-FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + '_.-')
+FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + "_.-")
+
 
 def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
-    '''Check if files should be considered by policy.
+    """Check if files should be considered by policy.
 
     The file name should contain only allowed characters (latin lowercase,
     digits, underscore, full stop and dash). It should not start with the dot.
@@ -65,22 +70,27 @@ def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
         list of pathlib.Path: sorted list of paths, without ignored ones
     Raises:
         qrexec.exc.AccessDenied: for invalid path which is not ignored
-    '''
-    filepaths = [path for path in filepaths
-        if path.is_file() and path.suffix == POLICYSUFFIX
-            and not path.name.startswith('.')]
+    """
+    filepaths = [
+        path
+        for path in filepaths
+        if path.is_file()
+        and path.suffix == POLICYSUFFIX
+        and not path.name.startswith(".")
+    ]
 
     # check for invalid filenames first, then return all or nothing
     for path in filepaths:
         if not set(path.name).issubset(FILENAME_ALLOWED_CHARSET):
-            raise exc.AccessDenied('invalid filename: {}'.format(path))
+            raise exc.AccessDenied("invalid filename: {}".format(path))
 
     filepaths.sort()
 
     return filepaths
 
-def parse_service_and_argument(rpcname, *, no_arg='+'):
-    '''Parse service and argument string.
+
+def parse_service_and_argument(rpcname, *, no_arg="+"):
+    """Parse service and argument string.
 
     Parse ``SERVICE+ARGUMENT``. Argument may be empty (single ``+`` at the end)
     or omitted (no ``+`` at all). If no argument is given, `no_arg` is returned
@@ -88,25 +98,28 @@ def parse_service_and_argument(rpcname, *, no_arg='+'):
 
     A `Path` from :py:mod:`pathlib` is also accepted, in which case the filename
     is parsed.
-    '''
+    """
     if isinstance(rpcname, pathlib.PurePath):
         rpcname = rpcname.name
 
-    if '+' in rpcname:
-        service, argument = rpcname.split('+', 1)
-        argument = '+' + argument
+    if "+" in rpcname:
+        service, argument = rpcname.split("+", 1)
+        argument = "+" + argument
     else:
         service, argument = rpcname, no_arg
     return service, argument
 
-def get_invalid_characters(s, allowed=RPCNAME_ALLOWED_CHARSET, disallowed=''):
-    '''Return characters contained in *disallowed* and/or not int *allowed*'''
+
+def get_invalid_characters(s, allowed=RPCNAME_ALLOWED_CHARSET, disallowed=""):
+    """Return characters contained in *disallowed* and/or not int *allowed*"""
     # pylint: disable=invalid-name
-    return tuple(sorted(set(c for c in s
-        if c not in allowed.difference(disallowed))))
+    return tuple(
+        sorted(set(c for c in s if c not in allowed.difference(disallowed)))
+    )
+
 
 def validate_service_and_argument(service, argument, *, filepath, lineno):
-    '''Check service name and argument
+    """Check service name and argument
 
     This is intended as policy syntax checker to discard obviously invalid
     service names and arguments. There are some cases for which this function
@@ -124,35 +137,47 @@ def validate_service_and_argument(service, argument, *, filepath, lineno):
 
     Raises:
         qrexec.exc.PolicySyntaxError: for a number of forbidden cases
-    '''
+    """
 
-    if service == '*':
+    if service == "*":
         service = None
 
     if service is not None:
-        invalid_chars = get_invalid_characters(service, disallowed='+')
+        invalid_chars = get_invalid_characters(service, disallowed="+")
         if invalid_chars:
-            raise PolicySyntaxError(filepath, lineno,
-                'service {!r} contains invalid characters: {!r}'.format(
-                    service, invalid_chars))
+            raise PolicySyntaxError(
+                filepath,
+                lineno,
+                "service {!r} contains invalid characters: {!r}".format(
+                    service, invalid_chars
+                ),
+            )
 
-    if argument == '*':
+    if argument == "*":
         argument = None
 
     if argument is not None:
         invalid_chars = get_invalid_characters(argument)
         if invalid_chars:
-            raise PolicySyntaxError(filepath, lineno,
-                'argument {!r} contains invalid characters: {!r}'.format(
-                    argument, invalid_chars))
+            raise PolicySyntaxError(
+                filepath,
+                lineno,
+                "argument {!r} contains invalid characters: {!r}".format(
+                    argument, invalid_chars
+                ),
+            )
 
-        if not argument.startswith('+'):
-            raise PolicySyntaxError(filepath, lineno,
-                'argument {!r} does not start with +'.format(argument))
+        if not argument.startswith("+"):
+            raise PolicySyntaxError(
+                filepath,
+                lineno,
+                "argument {!r} does not start with +".format(argument),
+            )
 
         if service is None:
-            raise PolicySyntaxError(filepath, lineno,
-                'only * argument allowed for * service')
+            raise PolicySyntaxError(
+                filepath, lineno, "only * argument allowed for * service"
+            )
 
     return service, argument
 
@@ -161,17 +186,19 @@ class VMTokenMeta(abc.ABCMeta):
     # pylint: disable=missing-docstring
     exacts = collections.OrderedDict()
     prefixes = collections.OrderedDict()
+
     def __init__(cls, name, bases, dict_):
         super().__init__(name, bases, dict_)
 
-        assert not ('EXACT' in dict_ and 'PREFIX' in dict_)
-        if 'EXACT' in dict_:
-            cls.exacts[dict_['EXACT']] = cls
-        if 'PREFIX' in dict_:
-            cls.prefixes[dict_['PREFIX']] = cls
+        assert not ("EXACT" in dict_ and "PREFIX" in dict_)
+        if "EXACT" in dict_:
+            cls.exacts[dict_["EXACT"]] = cls
+        if "PREFIX" in dict_:
+            cls.prefixes[dict_["PREFIX"]] = cls
+
 
 class VMToken(str, metaclass=VMTokenMeta):
-    '''A domain specification
+    """A domain specification
 
     Wherever policy evaluation needs to represent a VM or a ``@something``
     token, instances of this class (and subclasses) are used. Each ``@token``
@@ -189,17 +216,18 @@ class VMToken(str, metaclass=VMTokenMeta):
 
     All tokens are also instances of :py:class:`str` and can be compared to
     other strings.
-    '''
+    """
+
     def __new__(cls, token, *, filepath=None, lineno=None):
         orig_token = token
 
         # first, adjust some aliases
-        if token == 'dom0':
+        if token == "dom0":
             # TODO: log a warning in Qubes 4.1
-            token = '@adminvm'
+            token = "@adminvm"
 
         # if user specified just qube name, use it directly
-        if not (token.startswith('@') or token == '*'):
+        if not (token.startswith("@") or token == "*"):
             return super().__new__(cls, token)
 
         # token starts with @, we search for right subclass
@@ -216,19 +244,25 @@ class VMToken(str, metaclass=VMTokenMeta):
             if not issubclass(token_cls, cls):
                 continue
             if token.startswith(prefix):
-                value = token[len(prefix):]
+                value = token[len(prefix) :]
                 if not value:
-                    raise PolicySyntaxError(filepath, lineno,
-                        'invalid empty {} token: {!r}'.format(prefix, token))
-                if value.startswith('@'):
+                    raise PolicySyntaxError(
+                        filepath,
+                        lineno,
+                        "invalid empty {} token: {!r}".format(prefix, token),
+                    )
+                if value.startswith("@"):
                     # we are either part of a longer prefix (@dispvm:@tag: etc),
                     # or the token is invalid, in which case this will fallthru
                     continue
                 return super().__new__(token_cls, token)
 
         # the loop didn't find any valid prefix, so this is not a valid token
-        raise PolicySyntaxError(filepath, lineno,
-            'invalid {} token: {!r}'.format(cls.__name__.lower(), orig_token))
+        raise PolicySyntaxError(
+            filepath,
+            lineno,
+            "invalid {} token: {!r}".format(cls.__name__.lower(), orig_token),
+        )
 
     def __init__(self, token, *, filepath=None, lineno=None):
         # pylint: disable=unused-argument
@@ -236,57 +270,60 @@ class VMToken(str, metaclass=VMTokenMeta):
         self.filepath = filepath
         self.lineno = lineno
         try:
-            self.value = self[len(self.PREFIX):]
-            assert self.value[0] != '@'
+            self.value = self[len(self.PREFIX) :]
+            assert self.value[0] != "@"
         except AttributeError:
-            #self.value = self
+            # self.value = self
             pass
 
-#   def __repr__(self):
-#       return '<{} value={!r} filepath={} lineno={}>'.format(
-#           type(self).__name__, str(self), self.filepath, self.lineno)
+    #   def __repr__(self):
+    #       return '<{} value={!r} filepath={} lineno={}>'.format(
+    #           type(self).__name__, str(self), self.filepath, self.lineno)
 
     # This replaces is_match() and is_match_single().
     def match(self, other, *, system_info, source=None):
-        '''Check if this token matches opposite token'''
+        """Check if this token matches opposite token"""
         # pylint: disable=unused-argument
         return self == other
 
     def is_special_value(self):
-        '''Check if the token specification is special (keyword) value
-        '''
-        return self.startswith('@') or self == '*'
+        """Check if the token specification is special (keyword) value"""
+        return self.startswith("@") or self == "*"
 
     @property
     def type(self):
-        '''Type of the token
+        """Type of the token
 
         ``'keyword'`` for special values, ``'name'`` for qube name
-        '''
-        return 'keyword' if self.is_special_value() else 'name'
+        """
+        return "keyword" if self.is_special_value() else "name"
 
     @property
     def text(self):
-        '''Text of the token, without possibly '@' prefix '''
-        return self.lstrip('@')
+        """Text of the token, without possibly '@' prefix"""
+        return self.lstrip("@")
+
 
 class Source(VMToken):
     # pylint: disable=missing-docstring
     pass
 
+
 class _BaseTarget(VMToken):
     # pylint: disable=missing-docstring
     def expand(self, *, system_info):
-        '''An iterator over all valid domain names that this token would match
+        """An iterator over all valid domain names that this token would match
 
         This is used as part of :py:meth:`Policy.collect_targets_for_ask()`.
-        '''
-        if self in system_info['domains']:
+        """
+        if self in system_info["domains"]:
             yield IntendedTarget(self)
+
 
 class Target(_BaseTarget):
     # pylint: disable=missing-docstring
     pass
+
 
 class Redirect(_BaseTarget):
     # pylint: disable=missing-docstring
@@ -295,11 +332,12 @@ class Redirect(_BaseTarget):
             return value
         return super().__new__(cls, value, filepath=filepath, lineno=lineno)
 
+
 # this method (with overloads in subclasses) was verify_target_value
 class IntendedTarget(VMToken):
     # pylint: disable=missing-docstring
     def verify(self, *, system_info):
-        '''Check if given value names valid target
+        """Check if given value names valid target
 
         This function check if given value is not only syntactically correct,
         but also if names valid service call target (existing domain, or valid
@@ -314,133 +352,172 @@ class IntendedTarget(VMToken):
 
         Raises:
             qrexec.exc.AccessDenied: for failed verification
-        '''
+        """
         # for subclass it has to be overloaded
         # pylint: disable=unidiomatic-typecheck
         if type(self) != IntendedTarget:
             raise NotImplementedError()
 
-        if self not in system_info['domains']:
+        if self not in system_info["domains"]:
             logging.warning(
-                'qrexec: target %r does not exist, using @default instead',
-                str(self))
-            return DefaultVM('@default',
-                filepath=self.filepath, lineno=self.lineno)
+                "qrexec: target %r does not exist, using @default instead",
+                str(self),
+            )
+            return DefaultVM(
+                "@default", filepath=self.filepath, lineno=self.lineno
+            )
 
         return self
 
+
 # And the tokens. Inheritance defines, where the token can be used.
+
 
 class WildcardVM(Source, Target):
     # any, including AdminVM
 
     # pylint: disable=missing-docstring,unused-argument
-    EXACT = '*'
+    EXACT = "*"
+
     def match(self, other, *, system_info, source=None):
         return True
 
     def expand(self, *, system_info):
-        for name, domain in system_info['domains'].items():
+        for name, domain in system_info["domains"].items():
             yield IntendedTarget(name)
-            if domain['template_for_dispvms']:
-                yield DispVMTemplate('@dispvm:' + name)
-        yield DispVM('@dispvm')
+            if domain["template_for_dispvms"]:
+                yield DispVMTemplate("@dispvm:" + name)
+        yield DispVM("@dispvm")
+
 
 class AdminVM(Source, Target, Redirect, IntendedTarget):
     # no Source, for calls originating from AdminVM policy is not evaluated
     # pylint: disable=missing-docstring,unused-argument
-    EXACT = '@adminvm'
+    EXACT = "@adminvm"
+
     def expand(self, *, system_info):
         yield self
+
     def verify(self, *, system_info):
         return self
+
 
 class AnyVM(Source, Target):
     # pylint: disable=missing-docstring,unused-argument
-    EXACT = '@anyvm'
+    EXACT = "@anyvm"
+
     def match(self, other, *, system_info, source=None):
-        return other != '@adminvm'
+        return other != "@adminvm"
+
     def expand(self, *, system_info):
-        for name, domain in system_info['domains'].items():
-            if domain['type'] != 'AdminVM':
+        for name, domain in system_info["domains"].items():
+            if domain["type"] != "AdminVM":
                 yield IntendedTarget(name)
-            if domain['template_for_dispvms']:
-                yield DispVMTemplate('@dispvm:' + name)
-        yield DispVM('@dispvm')
+            if domain["template_for_dispvms"]:
+                yield DispVMTemplate("@dispvm:" + name)
+        yield DispVM("@dispvm")
+
 
 class DefaultVM(Target, IntendedTarget):
     # pylint: disable=missing-docstring,unused-argument
-    EXACT = '@default'
+    EXACT = "@default"
+
     def expand(self, *, system_info):
         yield from ()
+
     def verify(self, *, system_info):
         return self
 
+
 class TypeVM(Source, Target):
     # pylint: disable=missing-docstring,unused-argument
-    PREFIX = '@type:'
+    PREFIX = "@type:"
+
     def match(self, other, *, system_info, source=None):
-        return (other in system_info['domains']
-            and self.value == system_info['domains'][other]['type'])
+        return (
+            other in system_info["domains"]
+            and self.value == system_info["domains"][other]["type"]
+        )
+
     def expand(self, *, system_info):
-        for name, domain in system_info['domains'].items():
-            if domain['type'] == self.value:
+        for name, domain in system_info["domains"].items():
+            if domain["type"] == self.value:
                 yield IntendedTarget(name)
+
 
 class TagVM(Source, Target):
     # pylint: disable=missing-docstring,unused-argument
-    PREFIX = '@tag:'
+    PREFIX = "@tag:"
+
     def match(self, other, *, system_info, source=None):
-        return (other in system_info['domains']
-            and self.value in system_info['domains'][other]['tags'])
+        return (
+            other in system_info["domains"]
+            and self.value in system_info["domains"][other]["tags"]
+        )
+
     def expand(self, *, system_info):
-        for name, domain in system_info['domains'].items():
-            if self.value in domain['tags']:
+        for name, domain in system_info["domains"].items():
+            if self.value in domain["tags"]:
                 yield IntendedTarget(name)
+
 
 class DispVM(Target, Redirect, IntendedTarget):
     # pylint: disable=missing-docstring,unused-argument
-    EXACT = '@dispvm'
+    EXACT = "@dispvm"
+
     def match(self, other, *, system_info, source=None):
         return self == other
+
     def expand(self, *, system_info):
         yield self
+
     def verify(self, *, system_info):
         return self
 
     @staticmethod
     def get_dispvm_template(source, *, system_info):
-        '''Given source, get appropriate template for DispVM. Maybe None.'''
-        if (source not in system_info['domains']
-                or system_info['domains'][source]['default_dispvm'] is None):
+        """Given source, get appropriate template for DispVM. Maybe None."""
+        if (
+            source not in system_info["domains"]
+            or system_info["domains"][source]["default_dispvm"] is None
+        ):
             return None
         return DispVMTemplate(
-            '@dispvm:' + system_info['domains'][source]['default_dispvm'])
+            "@dispvm:" + system_info["domains"][source]["default_dispvm"]
+        )
+
 
 class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
     # pylint: disable=missing-docstring,unused-argument
-    PREFIX = '@dispvm:'
+    PREFIX = "@dispvm:"
+
     def match(self, other, *, system_info, source=None):
         if isinstance(other, DispVM):
-            return self == other.get_dispvm_template(source,
-                system_info=system_info)
+            return self == other.get_dispvm_template(
+                source, system_info=system_info
+            )
         return self == other
 
     def expand(self, *, system_info):
-        if system_info['domains'][self.value]['template_for_dispvms']:
+        if system_info["domains"][self.value]["template_for_dispvms"]:
             yield self
         # else: log a warning?
 
     def verify(self, *, system_info):
-        if (self.value not in system_info['domains']
-        or not system_info['domains'][self.value]['template_for_dispvms']):
+        if (
+            self.value not in system_info["domains"]
+            or not system_info["domains"][self.value]["template_for_dispvms"]
+        ):
             raise AccessDenied(
-                'not a template for dispvm: {}'.format(self.value))
+                "not a template for dispvm: {}".format(self.value)
+            )
         return self
+
 
 class DispVMTag(Source, Target):
     # pylint: disable=missing-docstring,unused-argument
-    PREFIX = '@dispvm:@tag:'
+    PREFIX = "@dispvm:@tag:"
+
     def match(self, other, *, system_info, source=None):
         if isinstance(other, DispVM):
             other = other.get_dispvm_template(source, system_info=system_info)
@@ -450,26 +527,28 @@ class DispVMTag(Source, Target):
             # 2) other.get_dispvm_template() may have been None
             return False
 
-        domain = system_info['domains'][other.value]
-        if not domain['template_for_dispvms']:
+        domain = system_info["domains"][other.value]
+        if not domain["template_for_dispvms"]:
             return False
-        if not self.value in domain['tags']:
+        if not self.value in domain["tags"]:
             return False
 
         return True
 
     def expand(self, *, system_info):
-        for name, domain in system_info['domains'].items():
-            if self.value in domain['tags'] and domain['template_for_dispvms']:
-                yield DispVMTemplate('@dispvm:' + name)
+        for name, domain in system_info["domains"].items():
+            if self.value in domain["tags"] and domain["template_for_dispvms"]:
+                yield DispVMTemplate("@dispvm:" + name)
+
 
 #
 # resolutions
 #
 
+
 class AbstractResolution(metaclass=abc.ABCMeta):
-    '''Object representing positive policy evaluation result -
-    either ask or allow action '''
+    """Object representing positive policy evaluation result -
+    either ask or allow action"""
 
     def __init__(self, rule, request, *, user):
 
@@ -484,18 +563,20 @@ class AbstractResolution(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     async def execute(self, caller_ident):
-        '''
+        """
         Execute the action. For allow, this runs the qrexec. For ask, it asks
         user and then (depending on verdict) runs the call.
 
         Args:
             caller_ident (str): Service caller ident
                 (``process_ident,source_name, source_id``)
-        '''
+        """
         raise NotImplementedError()
 
+
 class AllowResolution(AbstractResolution):
-    '''Resolution returned for :py:class:`Rule` with :py:class:`Allow`.'''
+    """Resolution returned for :py:class:`Rule` with :py:class:`Allow`."""
+
     def __init__(self, *args, target, **kwds):
         super().__init__(*args, **kwds)
         #: target domain the service should be connected to
@@ -503,36 +584,41 @@ class AllowResolution(AbstractResolution):
 
     @classmethod
     def from_ask_resolution(cls, ask_resolution, *, target):
-        '''This happens after user manually approved the call'''
-        if target.startswith('@dispvm:'):
+        """This happens after user manually approved the call"""
+        if target.startswith("@dispvm:"):
             target = DispVMTemplate(target)
         return cls(
             ask_resolution.rule,
             ask_resolution.request,
             user=ask_resolution.user,
-            target=target)
+            target=target,
+        )
 
     async def execute(self, caller_ident):
-        '''Execute the allowed action'''
+        """Execute the allowed action"""
         assert self.target is not None
 
         # XXX remove when #951 gets fixed
         if self.request.source == self.target:
-            raise AccessDenied('loopback qrexec connection not supported')
+            raise AccessDenied("loopback qrexec connection not supported")
 
         target = self.target
 
-        if target in ('dom0', '@adminvm'):
-            cmd = ('QUBESRPC {request.service}{request.argument} '
-                   '{request.source} {request.target.type} {request.target.text}').\
-                format(request=self.request)
+        if target in ("dom0", "@adminvm"):
+            cmd = (
+                "QUBESRPC {request.service}{request.argument} "
+                "{request.source} {request.target.type} {request.target.text}"
+            ).format(request=self.request)
         else:
-            cmd = '{user}:QUBESRPC {request.service}{request.argument} ' \
-                  '{request.source}'.format(
-                       user=(self.user or 'DEFAULT'), request=self.request)
+            cmd = (
+                "{user}:QUBESRPC {request.service}{request.argument} "
+                "{request.source}".format(
+                    user=(self.user or "DEFAULT"), request=self.request
+                )
+            )
 
         try:
-            if target.startswith('@dispvm:'):
+            if target.startswith("@dispvm:"):
                 target = self.spawn_dispvm()
                 dispvm = True
             else:
@@ -540,11 +626,12 @@ class AllowResolution(AbstractResolution):
                 dispvm = False
         except QubesMgmtException as err:
             raise ExecutionFailed(
-                    'Failed to start the target: {}'.format(exc)) from err
+                "Failed to start the target: {}".format(exc)
+            ) from err
 
-        qrexec_opts = ['-d', target, '-c', caller_ident, '-E']
+        qrexec_opts = ["-d", target, "-c", caller_ident, "-E"]
         if dispvm:
-            qrexec_opts.append('-W')
+            qrexec_opts.append("-W")
         try:
             command = [QREXEC_CLIENT] + qrexec_opts + [cmd]
             process = await asyncio.create_subprocess_exec(*command)
@@ -553,43 +640,43 @@ class AllowResolution(AbstractResolution):
             if dispvm:
                 self.cleanup_dispvm(target)
         if process.returncode != 0:
-            raise ExecutionFailed('qrexec-client failed: {}'.format(command))
+            raise ExecutionFailed("qrexec-client failed: {}".format(command))
 
     def spawn_dispvm(self):
-        '''
+        """
         Create and start Disposable VM based on AppVM specified in
         :py:attr:`target`.
 
         Returns:
             str: name of new Disposable VM
-        '''
+        """
         assert isinstance(self.target, DispVMTemplate)
         base_appvm = self.target.value
-        dispvm_name = utils.qubesd_call(base_appvm, 'admin.vm.CreateDisposable')
-        dispvm_name = dispvm_name.decode('ascii')
-        utils.qubesd_call(dispvm_name, 'admin.vm.Start')
+        dispvm_name = utils.qubesd_call(base_appvm, "admin.vm.CreateDisposable")
+        dispvm_name = dispvm_name.decode("ascii")
+        utils.qubesd_call(dispvm_name, "admin.vm.Start")
         return IntendedTarget(dispvm_name)
 
     def ensure_target_running(self):
-        '''
+        """
         Start domain if not running already
 
         Returns:
             None
-        '''
-        if self.target == '@adminvm':
+        """
+        if self.target == "@adminvm":
             return
         try:
-            utils.qubesd_call(self.target, 'admin.vm.Start')
+            utils.qubesd_call(self.target, "admin.vm.Start")
         except QubesMgmtException as err:
-            if err.exc_type == 'QubesVMNotHaltedError':
+            if err.exc_type == "QubesVMNotHaltedError":
                 pass
             else:
                 raise
 
     @staticmethod
     def cleanup_dispvm(dispvm):
-        '''
+        """
         Kill and remove Disposable VM
 
         Args:
@@ -597,11 +684,12 @@ class AllowResolution(AbstractResolution):
 
         Returns:
             None
-        '''
-        utils.qubesd_call(dispvm, 'admin.vm.Kill')
+        """
+        utils.qubesd_call(dispvm, "admin.vm.Kill")
+
 
 class AskResolution(AbstractResolution):
-    '''Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
+    """Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
 
     This base class is a dummy implementation which behaves as if user always
     denied the call. The programmer is expected to inherit from this class and
@@ -613,7 +701,8 @@ class AskResolution(AbstractResolution):
     raising :py:class:`qrexec.exc.AccessDenied` is also enough.
 
     The child class should be supplied as part of :py:class:`Request`.
-    '''
+    """
+
     def __init__(self, *args, targets_for_ask, default_target, **kwds):
         super().__init__(*args, **kwds)
         assert default_target is None or default_target in targets_for_ask
@@ -625,7 +714,7 @@ class AskResolution(AbstractResolution):
         self.default_target = default_target
 
     def handle_user_response(self, response, target):
-        '''
+        """
         Handle user response for the 'ask' action. Children class'
         :py:meth:`execute` is supposed to call this method to report the
         user's verdict.
@@ -639,44 +728,48 @@ class AskResolution(AbstractResolution):
 
         Raises:
             qrexec.exc.AccessDenied: for negative answer
-        '''
+        """
         # pylint: disable=redefined-variable-type
         if not response:
-            raise AccessDenied('denied by the user {}:{}'.format(
-                self.rule.filepath, self.rule.lineno),
-                notify=self.notify)
+            raise AccessDenied(
+                "denied by the user {}:{}".format(
+                    self.rule.filepath, self.rule.lineno
+                ),
+                notify=self.notify,
+            )
 
         if target not in self.targets_for_ask:
-            raise AccessDenied(
-                'target {} is not a valid choice'.format(target))
+            raise AccessDenied("target {} is not a valid choice".format(target))
 
-        return self.request.allow_resolution_type.from_ask_resolution(self,
-            target=target)
+        return self.request.allow_resolution_type.from_ask_resolution(
+            self, target=target
+        )
 
     def handle_invalid_response(self):
-        '''
+        """
         Handle invalid response for the 'ask' action. Throws AccessDenied.
-        '''
+        """
         # pylint: disable=no-self-use
-        raise AccessDenied('invalid response')
+        raise AccessDenied("invalid response")
 
     async def execute(self, caller_ident):
-        '''Ask the user for permission.
+        """Ask the user for permission.
 
         This method should be overloaded in children classes. This
         implementation always denies the request.
 
         Raises:
             qrexec.exc.AccessDenied: always
-        '''
-        raise AccessDenied('denied for non-interactive ask')
+        """
+        raise AccessDenied("denied for non-interactive ask")
+
 
 #
 # request
 #
-#pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes
 class Request:
-    '''Qrexec request
+    """Qrexec request
 
     A request object keeps what is searched for in the policy. It keeps the
     principal quadruple: service, argument, source and target that are
@@ -693,15 +786,23 @@ class Request:
             :py:func:`qrexec.utils.system_info()`
         allow_resolution_type (type): a child of :py:class:`AllowResolution`
         ask_resolution_type (type): a child of :py:class:`AskResolution`
-    '''
+    """
 
-    def __init__(self, service, argument, source, target, *, system_info,
-            allow_resolution_type=AllowResolution,
-            ask_resolution_type=AskResolution):
+    def __init__(
+        self,
+        service,
+        argument,
+        source,
+        target,
+        *,
+        system_info,
+        allow_resolution_type=AllowResolution,
+        ask_resolution_type=AskResolution
+    ):
 
-        if target == '':
-            target = '@default'
-        assert argument and argument[0] == '+'
+        if target == "":
+            target = "@default"
+        assert argument and argument[0] == "+"
 
         #: the service that is being requested
         self.service = service
@@ -719,12 +820,14 @@ class Request:
         #: factory for ask resolution
         self.ask_resolution_type = ask_resolution_type
 
+
 #
 # actions
 #
 
+
 class ActionType(metaclass=abc.ABCMeta):
-    '''Base class for actions
+    """Base class for actions
 
     Children of this class are types of objects representing action in policy
     rule (:py:attr:`Rule.action`). Not to be confused with
@@ -733,7 +836,8 @@ class ActionType(metaclass=abc.ABCMeta):
 
     Keyword arguments to __init__ are taken from parsing params in the rule, so
     this defines, what params are valid for which action.
-    '''
+    """
+
     def __init__(self, rule):
         #: the rule that holds this action
         self.rule = rule
@@ -741,7 +845,7 @@ class ActionType(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def evaluate(self, request):
-        '''Evaluate the request.
+        """Evaluate the request.
 
         Depending on action and possibly user's decision either return
         a resolution or raise exception.
@@ -754,11 +858,11 @@ class ActionType(metaclass=abc.ABCMeta):
 
         Raises:
             qrexec.exc.AccessDenied: for denied requests
-        '''
+        """
         raise NotImplementedError()
 
     def actual_target(self, intended_target):
-        '''If action has redirect, it is it. Otherwise, the rule's own target
+        """If action has redirect, it is it. Otherwise, the rule's own target
 
         Args:
             intended_target (IntendedTarget): :py:attr:`Request.target`
@@ -766,20 +870,20 @@ class ActionType(metaclass=abc.ABCMeta):
         Returns:
             IntendedTarget: either :py:attr:`target`, if not None, or
                 *intended_target*
-        '''
+        """
         return IntendedTarget(self.target or intended_target)
 
     @staticmethod
     def allow_no_autostart(target, system_info):
-        '''
+        """
         Should we allow this target when autostart is disabled
-        '''
-        if target == '@adminvm':
+        """
+        if target == "@adminvm":
             return True
-        if target.startswith('@dispvm'):
+        if target.startswith("@dispvm"):
             return False
-        assert target in system_info['domains']
-        return system_info['domains'][target]['power_state'] == 'Running'
+        assert target in system_info["domains"]
+        return system_info["domains"][target]["power_state"] == "Running"
 
 
 class Deny(ActionType):
@@ -789,121 +893,153 @@ class Deny(ActionType):
         self.notify = True if notify is None else notify
 
     def __repr__(self):
-        return '<{}>'.format(type(self).__name__)
+        return "<{}>".format(type(self).__name__)
 
     def evaluate(self, request):
-        '''
+        """
         Raises:
             qrexec.exc.AccessDenied:
-        '''
-        raise AccessDenied('denied by policy {}:{}'.format(
-            self.rule.filepath, self.rule.lineno),
-            notify=self.notify)
+        """
+        raise AccessDenied(
+            "denied by policy {}:{}".format(
+                self.rule.filepath, self.rule.lineno
+            ),
+            notify=self.notify,
+        )
 
     def actual_target(self, intended_target):
-        '''''' # not documented in HTML
+        """"""  # not documented in HTML
         # pylint: disable=empty-docstring
-        raise AccessDenied('programmer error')
+        raise AccessDenied("programmer error")
 
 
 class Allow(ActionType):
     # pylint: disable=missing-docstring
-    def __init__(self, *args, target=None, user=None, notify=None, autostart=None, **kwds):
+    def __init__(
+        self, *args, target=None, user=None, notify=None, autostart=None, **kwds
+    ):
         super().__init__(*args, **kwds)
-        self.target = Redirect(target,
-            filepath=self.rule.filepath, lineno=self.rule.lineno)
+        self.target = Redirect(
+            target, filepath=self.rule.filepath, lineno=self.rule.lineno
+        )
         self.user = user
         self.notify = False if notify is None else notify
         self.autostart = True if autostart is None else autostart
 
     def __repr__(self):
-        return '<{} target={!r} user={!r}>'.format(
-            type(self).__name__, self.target, self.user)
+        return "<{} target={!r} user={!r}>".format(
+            type(self).__name__, self.target, self.user
+        )
 
     def evaluate(self, request):
-        '''
+        """
         Returns:
             AllowResolution: for successful requests
 
         Raises:
             qrexec.exc.AccessDenied: for invalid requests
-        '''
+        """
         assert self.rule.is_match(request)
 
         target = self.actual_target(request.target).verify(
-            system_info=request.system_info)
-        if target == '@default':
+            system_info=request.system_info
+        )
+        if target == "@default":
             raise AccessDenied(
-                'policy define \'allow\' action at {}:{} but no target is '
-                'specified by caller or policy'.format(
-                    self.rule.filepath, self.rule.lineno))
-        if target == '@dispvm':
+                "policy define 'allow' action at {}:{} but no target is "
+                "specified by caller or policy".format(
+                    self.rule.filepath, self.rule.lineno
+                )
+            )
+        if target == "@dispvm":
             target = target.get_dispvm_template(  # pylint: disable=no-member
-                request.source, system_info=request.system_info)
+                request.source, system_info=request.system_info
+            )
             if target is None:
                 raise AccessDenied(
-                    'policy define \'allow\' action to @dispvm at {}:{} '
-                    'but no DispVM base is set for this VM'.format(
-                        self.rule.filepath, self.rule.lineno))
+                    "policy define 'allow' action to @dispvm at {}:{} "
+                    "but no DispVM base is set for this VM".format(
+                        self.rule.filepath, self.rule.lineno
+                    )
+                )
         # expand default AdminVM
-        elif target == '@adminvm':
-            target = 'dom0'
+        elif target == "@adminvm":
+            target = "dom0"
 
         if not self.autostart and not self.allow_no_autostart(
-                target, request.system_info):
+            target, request.system_info
+        ):
             raise AccessDenied(
-                'target {} is denied because it would require autostart'
-                .format(target),
-                notify=self.notify)
+                "target {} is denied because it would require autostart".format(
+                    target
+                ),
+                notify=self.notify,
+            )
 
-        return request.allow_resolution_type(self.rule, request,
-            user=self.user, target=target)
+        return request.allow_resolution_type(
+            self.rule, request, user=self.user, target=target
+        )
 
 
 class Ask(ActionType):
     # pylint: disable=missing-docstring
-    def __init__(self, *args, target=None, default_target=None, user=None,
-                 notify=None, autostart=None, **kwds):
+    def __init__(
+        self,
+        *args,
+        target=None,
+        default_target=None,
+        user=None,
+        notify=None,
+        autostart=None,
+        **kwds
+    ):
         super().__init__(*args, **kwds)
-        self.target = Redirect(target,
-            filepath=self.rule.filepath, lineno=self.rule.lineno)
-        self.default_target = Redirect(default_target,
-            filepath=self.rule.filepath, lineno=self.rule.lineno)
+        self.target = Redirect(
+            target, filepath=self.rule.filepath, lineno=self.rule.lineno
+        )
+        self.default_target = Redirect(
+            default_target, filepath=self.rule.filepath, lineno=self.rule.lineno
+        )
         self.user = user
         self.notify = False if notify is None else notify
         self.autostart = True if autostart is None else autostart
 
     def __repr__(self):
-        return '<{} target={!r} default_target={!r} user={!r}>'.format(
-            type(self).__name__, self.target, self.default_target, self.user)
+        return "<{} target={!r} default_target={!r} user={!r}>".format(
+            type(self).__name__, self.target, self.default_target, self.user
+        )
 
     def evaluate(self, request):
-        '''
+        """
         Returns:
             AskResolution
 
         Raises:
             qrexec.exc.AccessDenied: for invalid requests
-        '''
+        """
         assert self.rule.is_match(request)
 
         if self.target is not None:
             targets_for_ask = [self.target]
         else:
-            targets_for_ask = list(self.rule.policy.collect_targets_for_ask(
-                request))
+            targets_for_ask = list(
+                self.rule.policy.collect_targets_for_ask(request)
+            )
 
         if not self.autostart:
             targets_for_ask = [
-                target for target in targets_for_ask
+                target
+                for target in targets_for_ask
                 if self.allow_no_autostart(target, request.system_info)
             ]
 
         if not targets_for_ask:
             raise AccessDenied(
-                'policy define \'ask\' action at {}:{} but no target is '
-                'available to choose from'.format(
-                    self.rule.filepath, self.rule.lineno))
+                "policy define 'ask' action at {}:{} but no target is "
+                "available to choose from".format(
+                    self.rule.filepath, self.rule.lineno
+                )
+            )
 
         default_target = self.default_target
         if default_target is not None:
@@ -913,34 +1049,53 @@ class Ask(ActionType):
                 # constructed as Redirect(), but in fact it can be any subclass
                 # pylint: disable=no-member
                 default_target = default_target.get_dispvm_template(
-                    request.source,
-                    system_info=request.system_info)
+                    request.source, system_info=request.system_info
+                )
             # expand default AdminVM
             elif isinstance(default_target, AdminVM):
-                default_target = 'dom0'
+                default_target = "dom0"
 
-        return request.ask_resolution_type(self.rule, request,
-            user=self.user, targets_for_ask=targets_for_ask,
-            default_target=default_target)
+        return request.ask_resolution_type(
+            self.rule,
+            request,
+            user=self.user,
+            targets_for_ask=targets_for_ask,
+            default_target=default_target,
+        )
+
 
 @enum.unique
 class Action(enum.Enum):
-    '''Action as defined by policy'''
+    """Action as defined by policy"""
+
     # pylint: disable=invalid-name
     allow = Allow
     deny = Deny
     ask = Ask
 
+
 class Rule:
-    '''A single line of policy file
+    """A single line of policy file
 
     Avoid instantiating manually, use either :py:meth:`from_line()` or
     :py:meth:`from_line_service()`.
-    '''
+    """
+
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, service, argument, source, target, action, params,
-            *, policy, filepath, lineno):
+    def __init__(
+        self,
+        service,
+        argument,
+        source,
+        target,
+        action,
+        params,
+        *,
+        policy,
+        filepath,
+        lineno
+    ):
         # pylint: disable=too-many-arguments
 
         #: the parser that this rule belongs to
@@ -951,7 +1106,8 @@ class Rule:
         self.lineno = lineno
 
         service, argument = validate_service_and_argument(
-            service, argument, filepath=filepath, lineno=lineno)
+            service, argument, filepath=filepath, lineno=lineno
+        )
 
         #: the qrexec service
         self.service = service
@@ -965,55 +1121,79 @@ class Rule:
         try:
             actiontype = Action[action].value
         except KeyError as err:
-            raise PolicySyntaxError(filepath, lineno,
-                'invalid action: {}'.format(action)) from err
+            raise PolicySyntaxError(
+                filepath, lineno, "invalid action: {}".format(action)
+            ) from err
 
         kwds = {}
         for param in params:
             try:
-                key, value = param.split('=', maxsplit=1)
+                key, value = param.split("=", maxsplit=1)
             except ValueError as err:
-                raise PolicySyntaxError(filepath, lineno,
-                    'invalid action parameter syntax: {!r}'.format(param)) from err
+                raise PolicySyntaxError(
+                    filepath,
+                    lineno,
+                    "invalid action parameter syntax: {!r}".format(param),
+                ) from err
             if key in kwds:
-                raise PolicySyntaxError(filepath, lineno,
-                    'parameter given twice: {!r}'.format(key))
+                raise PolicySyntaxError(
+                    filepath, lineno, "parameter given twice: {!r}".format(key)
+                )
             kwds[key] = value
 
         # boolean parameters
-        for key in ['notify', 'autostart']:
+        for key in ["notify", "autostart"]:
             if key in kwds:
-                if kwds[key] not in ['yes', 'no']:
+                if kwds[key] not in ["yes", "no"]:
                     raise PolicySyntaxError(
-                        filepath, lineno,
+                        filepath,
+                        lineno,
                         "{!r} is {!r}, but can be only 'yes' or 'no'".format(
-                            key, kwds[key]))
-                kwds[key] = (kwds[key] == 'yes')
+                            key, kwds[key]
+                        ),
+                    )
+                kwds[key] = kwds[key] == "yes"
 
         try:
             #: policy action
             self.action = actiontype(rule=self, **kwds)
         except TypeError as err:
-            raise PolicySyntaxError(filepath, lineno,
-                'invalid parameters for action {}: {}'.format(
-                    actiontype.__name__, params)) from err
+            raise PolicySyntaxError(
+                filepath,
+                lineno,
+                "invalid parameters for action {}: {}".format(
+                    actiontype.__name__, params
+                ),
+            ) from err
 
         # verify special cases
-        if (isinstance(self.target, DefaultVM)
-        and isinstance(self.action, Allow)
-        and self.action.target is None):
-            raise PolicySyntaxError(filepath, lineno,
-                'allow action for @default rule must specify target= option')
+        if (
+            isinstance(self.target, DefaultVM)
+            and isinstance(self.action, Allow)
+            and self.action.target is None
+        ):
+            raise PolicySyntaxError(
+                filepath,
+                lineno,
+                "allow action for @default rule must specify target= option",
+            )
 
     def __repr__(self):
-        return ('<{} service={!r} argument={!r}'
-                ' source={!r} target={!r} action={!r}>'.format(
-                    type(self).__name__, self.service, self.argument,
-                    self.source, self.target, self.action))
+        return (
+            "<{} service={!r} argument={!r}"
+            " source={!r} target={!r} action={!r}>".format(
+                type(self).__name__,
+                self.service,
+                self.argument,
+                self.source,
+                self.target,
+                self.action,
+            )
+        )
 
     @classmethod
     def from_line(cls, policy, line, *, filepath, lineno):
-        '''
+        """
         Load a single line of qrexec policy and check its syntax.
         Do not verify existence of named objects.
 
@@ -1026,20 +1206,32 @@ class Rule:
 
         Raises:
             PolicySyntaxError: when syntax error is found
-        '''
+        """
 
         try:
             service, argument, source, target, action, *params = line.split()
         except ValueError as err:
-            raise PolicySyntaxError(filepath, lineno, 'wrong number of fields') from err
+            raise PolicySyntaxError(
+                filepath, lineno, "wrong number of fields"
+            ) from err
 
-        return cls(service, argument, source, target, action, params,
-            policy=policy, filepath=filepath, lineno=lineno)
+        return cls(
+            service,
+            argument,
+            source,
+            target,
+            action,
+            params,
+            policy=policy,
+            filepath=filepath,
+            lineno=lineno,
+        )
 
     @classmethod
-    def from_line_service(cls, policy, service, argument, line, *,
-            filepath, lineno):
-        '''Load a single line in old format.
+    def from_line_service(
+        cls, policy, service, argument, line, *, filepath, lineno
+    ):
+        """Load a single line in old format.
 
         Args:
             service: the service for which this line applies
@@ -1050,45 +1242,52 @@ class Rule:
 
         Raises:
             PolicySyntaxError: when syntax error is found
-        '''
+        """
         try:
             source, target, *action_and_params = line.split()
         except ValueError as err:
             raise PolicySyntaxError(
-                filepath, lineno, 'wrong number of fields') from err
+                filepath, lineno, "wrong number of fields"
+            ) from err
 
-        action_and_params = tuple(itertools.chain(
-                    *(p.split(',') for p in action_and_params)))
+        action_and_params = tuple(
+            itertools.chain(*(p.split(",") for p in action_and_params))
+        )
 
         try:
             action, *params = action_and_params
         except ValueError as err:
             raise PolicySyntaxError(
-                filepath, lineno, 'wrong number of fields') from err
+                filepath, lineno, "wrong number of fields"
+            ) from err
 
-        return cls(service, argument, source, target, action, params,
-            policy=policy, filepath=filepath, lineno=lineno)
+        return cls(
+            service,
+            argument,
+            source,
+            target,
+            action,
+            params,
+            policy=policy,
+            filepath=filepath,
+            lineno=lineno,
+        )
 
     def is_match(self, request):
-        '''Check if given (service, argument source, target) matches this line.
+        """Check if given request matches this line.
 
-        :param system_info: information about the system - available VMs,
-            their types, labels, tags etc. as returned by
-            :py:func:`app_to_system_info`
-        :param service: name of the service
-        :param argument: the argument
-        :param source: name of the source VM
-        :param target: name of the target VM, or None if not specified
-        :param system_info: the context
+        :param request: request to check against
         :return: True or False
-        '''
+        """
 
-        return (self.is_match_but_target(request)
-            and self.target.match(request.target, source=request.source,
-                system_info=request.system_info))
+        return self.is_match_but_target(request) and self.target.match(
+            request.target,
+            source=request.source,
+            system_info=request.system_info,
+        )
 
     def is_match_but_target(self, request):
-        '''Check if given (service, argument source) matches this line.
+        """Check if given (service, argument source) matches this line.
 
         Target is ignored. This is used for :py:meth:`collect_targets_for_ask`.
 
@@ -1101,16 +1300,19 @@ class Rule:
         :param target: name of the target VM, or None if not specified
         :param system_info: the context
         :return: True or False
-        '''
+        """
 
-        return ((self.service is None or self.service == request.service)
+        return (
+            (self.service is None or self.service == request.service)
             and (self.argument is None or self.argument == request.argument)
-            and self.source.match(request.source,
-                    system_info=request.system_info))
+            and self.source.match(
+                request.source, system_info=request.system_info
+            )
+        )
 
 
 class AbstractParser(metaclass=abc.ABCMeta):
-    '''A minimal, pluggable, validating policy parser'''
+    """A minimal, pluggable, validating policy parser"""
 
     #: default rule type
     rule_type = Rule
@@ -1122,168 +1324,211 @@ class AbstractParser(metaclass=abc.ABCMeta):
                 filepath = pathlib.Path(file.name)
             except AttributeError:
                 if isinstance(file, io.IOBase):
-                    filepath = '<buffer>'
+                    filepath = "<buffer>"
         return file, filepath
 
     def load_policy_file(self, file, filepath):
-        '''Parse a policy file'''
+        """Parse a policy file"""
         file, filepath = self._fix_filepath(file, filepath)
 
         for lineno, line in enumerate(file, start=1):
             line = line.strip()
 
             # skip empty lines and comments
-            if not line or line[0] == '#':
+            if not line or line[0] == "#":
                 self.handle_comment(line, filepath=filepath, lineno=lineno)
                 continue
 
-            if line.startswith('!'):
+            if line.startswith("!"):
                 directive, *params = line.split()
 
-                if directive == '!include':
+                if directive == "!include":
                     try:
-                        included_path, = params
+                        (included_path,) = params
                     except ValueError as err:
-                        raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params') from err
-                    self.handle_include(pathlib.PurePosixPath(included_path),
-                        filepath=filepath, lineno=lineno)
+                        raise PolicySyntaxError(
+                            filepath, lineno, "invalid number of params"
+                        ) from err
+                    self.handle_include(
+                        pathlib.PurePosixPath(included_path),
+                        filepath=filepath,
+                        lineno=lineno,
+                    )
                     continue
-                if directive == '!include-dir':
+                if directive == "!include-dir":
                     try:
-                        included_path, = params
+                        (included_path,) = params
                     except ValueError as err:
-                        raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params') from err
+                        raise PolicySyntaxError(
+                            filepath, lineno, "invalid number of params"
+                        ) from err
                     self.handle_include_dir(
                         pathlib.PurePosixPath(included_path),
-                        filepath=filepath, lineno=lineno)
+                        filepath=filepath,
+                        lineno=lineno,
+                    )
                     continue
-                if directive == '!include-service':
+                if directive == "!include-service":
                     try:
                         service, argument, included_path = params
                     except ValueError as err:
-                        raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params') from err
-                    self.handle_include_service(service, argument,
+                        raise PolicySyntaxError(
+                            filepath, lineno, "invalid number of params"
+                        ) from err
+                    self.handle_include_service(
+                        service,
+                        argument,
                         pathlib.PurePosixPath(included_path),
-                        filepath=filepath, lineno=lineno)
+                        filepath=filepath,
+                        lineno=lineno,
+                    )
                     continue
 
-                if directive == '!compat-4.0':
+                if directive == "!compat-4.0":
                     if params:
-                        raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params')
+                        raise PolicySyntaxError(
+                            filepath, lineno, "invalid number of params"
+                        )
                     logging.warning(
-                        'warning: !compat-4.0 directive in file %s line %s'
-                        ' is transitional and will be deprecated',
-                        filepath, lineno)
+                        "warning: !compat-4.0 directive in file %s line %s"
+                        " is transitional and will be deprecated",
+                        filepath,
+                        lineno,
+                    )
                     self.handle_compat40(filepath=filepath, lineno=lineno)
                     continue
 
-                raise PolicySyntaxError(filepath, lineno, 'invalid directive')
+                raise PolicySyntaxError(filepath, lineno, "invalid directive")
 
             # this can raise PolicySyntaxError on its own
-            self.handle_rule(self.rule_type.from_line(self, line,
-                filepath=filepath, lineno=lineno),
-                filepath=filepath, lineno=lineno)
+            self.handle_rule(
+                self.rule_type.from_line(
+                    self, line, filepath=filepath, lineno=lineno
+                ),
+                filepath=filepath,
+                lineno=lineno,
+            )
 
         return self
 
     def load_policy_file_service(self, service, argument, file, filepath):
-        '''Parse a policy file from ``!include-service``'''
+        """Parse a policy file from ``!include-service``"""
         file, filepath = self._fix_filepath(file, filepath)
 
         for lineno, line in enumerate(file, start=1):
             line = line.strip()
 
             # skip empty lines and comments
-            if not line or line[0] == '#':
+            if not line or line[0] == "#":
                 continue
 
             # compatibility substitutions, some may be unspecified and may be
             # removed in a future version
-            line = line.replace('$include:', '!include ')
-            line = line.replace('$', '@')
-            line = line.replace(',', ' ')
+            line = line.replace("$include:", "!include ")
+            line = line.replace("$", "@")
+            line = line.replace(",", " ")
 
-            if line.startswith('!'):
+            if line.startswith("!"):
                 directive, *params = line.split()
 
-                if directive == '!include':
+                if directive == "!include":
                     try:
-                        included_path, = params
+                        (included_path,) = params
                     except ValueError as err:
-                        raise PolicySyntaxError(filepath, lineno,
-                            'invalid number of params') from err
-                    self.handle_include_service(service, argument,
+                        raise PolicySyntaxError(
+                            filepath, lineno, "invalid number of params"
+                        ) from err
+                    self.handle_include_service(
+                        service,
+                        argument,
                         pathlib.PurePosixPath(included_path),
-                        filepath=filepath, lineno=lineno)
+                        filepath=filepath,
+                        lineno=lineno,
+                    )
                     continue
 
-                raise PolicySyntaxError(filepath, lineno, 'invalid directive')
+                raise PolicySyntaxError(filepath, lineno, "invalid directive")
 
             # this can raise PolicySyntaxError on its own
-            self.handle_rule(self.rule_type.from_line_service(self,
-                    service, argument, line, filepath=filepath, lineno=lineno),
-                filepath=filepath, lineno=lineno)
+            self.handle_rule(
+                self.rule_type.from_line_service(
+                    self,
+                    service,
+                    argument,
+                    line,
+                    filepath=filepath,
+                    lineno=lineno,
+                ),
+                filepath=filepath,
+                lineno=lineno,
+            )
 
         return self
 
     @abc.abstractmethod
-    def handle_include(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
-        '''Handle ``!include`` line when encountered in
+    def handle_include(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ):
+        """Handle ``!include`` line when encountered in
         :meth:`policy_load_file`.
 
         This method is to be provided by subclass.
-        '''
+        """
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
-        '''Handle ``!include-dir`` line when encountered in
+    def handle_include_dir(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ):
+        """Handle ``!include-dir`` line when encountered in
         :meth:`policy_load_file`.
 
         This method is to be provided by subclass.
-        '''
+        """
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def handle_include_service(self, service, argument,
-            included_path: pathlib.PurePosixPath, *, filepath, lineno):
-        '''Handle ``!include-service`` line when encountered in
+    def handle_include_service(
+        self,
+        service,
+        argument,
+        included_path: pathlib.PurePosixPath,
+        *,
+        filepath,
+        lineno
+    ):
+        """Handle ``!include-service`` line when encountered in
         :meth:`policy_load_file`.
 
         This method is to be provided by subclass.
-        '''
+        """
         raise NotImplementedError()
 
     @abc.abstractmethod
     def handle_rule(self, rule, *, filepath, lineno):
-        '''Handle a line with a rule.
+        """Handle a line with a rule.
 
         This method is to be provided by subclass.
-        '''
+        """
         raise NotImplementedError()
 
     @abc.abstractmethod
     def handle_compat40(self, *, filepath, lineno):
-        '''Handle ``!compat-4.0`` line when encountered in :meth:`policy_load_file`.
+        """Handle ``!compat-4.0`` line when encountered in :meth:`policy_load_file`.
 
         This method is to be provided by subclass.
-        '''
+        """
         raise NotImplementedError()
 
     def handle_comment(self, line, *, filepath, lineno):
-        '''Handle a line with a comment
+        """Handle a line with a comment
 
-        This method may be overloaded in subclass. By default it does nothing.
-        '''
+        This method may be overloaded in subclass. By default, it does nothing.
+        """
+
 
 class AbstractPolicy(AbstractParser):
-    '''This class is a parser that accumulates the rules to form policy.'''
+    """This class is a parser that accumulates the rules to form policy."""
 
     def __init__(self, *args, **kwds):
         super().__init__(*args, **kwds)
@@ -1295,32 +1540,32 @@ class AbstractPolicy(AbstractParser):
         self.rules.append(rule)
 
     def evaluate(self, request):
-        '''Evaluate policy
+        """Evaluate policy
 
         Returns:
             AbstractResolution: For allow or ask resolutions.
 
         Raises:
             AccessDenied: when action should be denied unconditionally
-        '''
+        """
 
         rule = self.find_matching_rule(request)
         return rule.action.evaluate(request)
 
     def find_matching_rule(self, request):
-        '''Find the first rule matching given request'''
+        """Find the first rule matching given request"""
 
         for rule in self.rules:
             if rule.is_match(request):
                 return rule
-        raise AccessDenied('no matching rule found')
+        raise AccessDenied("no matching rule found")
 
     def collect_targets_for_ask(self, request):
-        '''Collect targets the user can choose from in 'ask' action
+        """Collect targets the user can choose from in 'ask' action
 
         Word 'targets' is used intentionally instead of 'domains', because it
         can also contains @dispvm like keywords.
-        '''
+        """
         targets = set()
 
         # iterate over rules in reversed order to easier handle 'deny'
@@ -1329,9 +1574,11 @@ class AbstractPolicy(AbstractParser):
             if rule.is_match_but_target(request):
                 # getattr() is for Deny, which doesn't have this attribute
                 rule_target = (
-                    getattr(rule.action, 'target', None) or rule.target)
+                    getattr(rule.action, "target", None) or rule.target
+                )
                 expansion = set(
-                    rule_target.expand(system_info=request.system_info))
+                    rule_target.expand(system_info=request.system_info)
+                )
 
                 if isinstance(rule.action, Action.deny.value):
                     targets.difference_update(expansion)
@@ -1339,17 +1586,18 @@ class AbstractPolicy(AbstractParser):
                     targets.update(expansion)
 
         # expand default DispVM
-        if '@dispvm' in targets:
-            targets.remove('@dispvm')
-            dispvm = DispVM('@dispvm').get_dispvm_template(request.source,
-                system_info=request.system_info)
+        if "@dispvm" in targets:
+            targets.remove("@dispvm")
+            dispvm = DispVM("@dispvm").get_dispvm_template(
+                request.source, system_info=request.system_info
+            )
             if dispvm is not None:
                 targets.add(dispvm)
 
         # expand other keywords
-        if '@adminvm' in targets:
-            targets.remove('@adminvm')
-            targets.add('dom0')
+        if "@adminvm" in targets:
+            targets.remove("@adminvm")
+            targets.add("dom0")
 
         # XXX remove when #951 gets fixed
         if request.source in targets:
@@ -1359,97 +1607,117 @@ class AbstractPolicy(AbstractParser):
 
 
 class AbstractFileLoader(AbstractParser):
-    '''Parser that loads next files on ``!include[-service]`` directives
+    """Parser that loads next files on ``!include[-service]`` directives
 
     This class uses regular files as accessed by :py:class:`pathlib.Path`, but
     it is possible to overload those functions and use file-like objects.
-    '''
+    """
 
-    def resolve_path(self, included_path: pathlib.PurePosixPath
-            ) -> pathlib.Path:
-        '''Resolve path from ``!include*`` to :py:class:`pathlib.Path`'''
+    def resolve_path(
+        self, included_path: pathlib.PurePosixPath
+    ) -> pathlib.Path:
+        """Resolve path from ``!include*`` to :py:class:`pathlib.Path`"""
         raise NotImplementedError()
 
-    def resolve_filepath(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno) -> Tuple[TextIO, pathlib.PurePath]:
-        '''Resolve ``!include[-service]`` to open file and filepath
+    def resolve_filepath(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ) -> Tuple[TextIO, pathlib.PurePath]:
+        """Resolve ``!include[-service]`` to open file and filepath
 
         The callee is responsible for closing the file descriptor.
 
         Raises:
             qrexec.exc.PolicySyntaxError: when the path does not point to a file
-        '''
+        """
         included_path = self.resolve_path(included_path)
         if not included_path.is_file():
-            raise exc.PolicySyntaxError(filepath, lineno,
-                'not a file: {}'.format(included_path))
+            raise exc.PolicySyntaxError(
+                filepath, lineno, "not a file: {}".format(included_path)
+            )
         # pylint: disable=consider-using-with
         return open(str(included_path)), included_path
 
-    def handle_include(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
-        file, included_path = self.resolve_filepath(included_path,
-            filepath=filepath, lineno=lineno)
+    def handle_include(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ):
+        file, included_path = self.resolve_filepath(
+            included_path, filepath=filepath, lineno=lineno
+        )
         with file:
             self.load_policy_file(file, pathlib.PurePosixPath(included_path))
 
-    def handle_include_service(self, service, argument,
-            included_path: pathlib.PurePosixPath, *, filepath, lineno):
+    def handle_include_service(
+        self,
+        service,
+        argument,
+        included_path: pathlib.PurePosixPath,
+        *,
+        filepath,
+        lineno
+    ):
         service, argument = validate_service_and_argument(
-            service, argument, filepath=filepath, lineno=lineno)
-        file, included_path = self.resolve_filepath(included_path,
-            filepath=filepath, lineno=lineno)
+            service, argument, filepath=filepath, lineno=lineno
+        )
+        file, included_path = self.resolve_filepath(
+            included_path, filepath=filepath, lineno=lineno
+        )
         with file:
             self.load_policy_file_service(
-                service, argument, file, pathlib.PurePosixPath(included_path))
+                service, argument, file, pathlib.PurePosixPath(included_path)
+            )
 
 
 class AbstractDirectoryLoader(AbstractFileLoader):
-    '''Parser that loads next files on ``!include-dir`` directives'''
+    """Parser that loads next files on ``!include-dir`` directives"""
 
-    def resolve_dirpath(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno) -> pathlib.Path:
-        '''Resolve ``!include-dir`` to directory path
+    def resolve_dirpath(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ) -> pathlib.Path:
+        """Resolve ``!include-dir`` to directory path
 
         Returns:
             pathlib.Path:
         Raises:
             qrexec.exc.PolicySyntaxError: when the path does not point to
                 a directory
-        '''
+        """
         included_path = self.resolve_path(included_path)
         if not included_path.is_dir():
-            raise exc.PolicySyntaxError(filepath, lineno,
-                'not a directory: {}'.format(included_path))
+            raise exc.PolicySyntaxError(
+                filepath, lineno, "not a directory: {}".format(included_path)
+            )
         return included_path
 
-    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
-        included_path = self.resolve_dirpath(included_path,
-            filepath=filepath, lineno=lineno)
+    def handle_include_dir(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ):
+        included_path = self.resolve_dirpath(
+            included_path, filepath=filepath, lineno=lineno
+        )
         self.load_policy_dir(included_path)
 
     def load_policy_dir(self, dirpath):
-        '''Load all files in the directory (``!include-dir``)
+        """Load all files in the directory (``!include-dir``)
 
         Args:
             dirpath (pathlib.Path): the directory to load
 
         Raises:
             OSError: for problems in opening files or directories
-        '''
+        """
         for path in filter_filepaths(dirpath.iterdir()):
             with path.open() as file:
                 self.load_policy_file(file, path)
 
 
 class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
-    '''This class is used when policy is stored as regular files in a directory.
+    """This class is used when policy is stored as regular files in a directory.
 
     Args:
         policy_path (pathlib.Path): Load this directory. Paths given to
             ``!include`` etc. directives are interpreted relative to this path.
-    '''
+    """
+
     def __init__(self, *, policy_path=POLICYPATH, **kwds):
         super().__init__(**kwds)
         self.policy_path = pathlib.Path(policy_path)
@@ -1458,13 +1726,15 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
             self.load_policy_dir(self.policy_path)
         except OSError as err:
             raise AccessDenied(
-                'failed to load {} file: {!s}'.format(err.filename, err)) from err
+                "failed to load {} file: {!s}".format(err.filename, err)
+            ) from err
 
     def resolve_path(self, included_path):
         return (self.policy_path / included_path).resolve()
 
+
 class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
-    '''Full policy loaded from files.
+    """Full policy loaded from files.
 
     Usage:
 
@@ -1474,10 +1744,10 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
     ...     system_info=qrexec.utils.get_system_info())
     >>> resolution = policy.evaluate(request)
     >>> await resolution.execute('process-ident')  # asynchroneous method
-    '''
+    """
 
     def handle_compat40(self, *, filepath, lineno):
-        ''''''
+        """"""
         # late import for circular
         from .parser_compat import Compat40Loader
 
@@ -1486,16 +1756,16 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
 
 
 class ValidateParser(FilePolicy):
-    '''
+    """
     A parser that validates the policy directory along with proposed changes.
 
     Pass files to be overriden in the ``overrides`` dictionary, with either
     new content, or None if the file is to be deleted.
-    '''
+    """
 
-    def __init__(self, *args,
-                 overrides: Dict[pathlib.Path, Optional[str]],
-                 **kwds):
+    def __init__(
+        self, *args, overrides: Dict[pathlib.Path, Optional[str]], **kwds
+    ):
         self.overrides = overrides
         super().__init__(*args, **kwds)
 
@@ -1508,28 +1778,33 @@ class ValidateParser(FilePolicy):
             if path.parent == dirpath and content is not None:
                 self.load_policy_file(io.StringIO(content), path)
 
-    def resolve_filepath(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno) -> Tuple[TextIO, pathlib.PurePath]:
+    def resolve_filepath(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ) -> Tuple[TextIO, pathlib.PurePath]:
         path = self.resolve_path(included_path)
         if path in self.overrides:
             if self.overrides[path] is None:
                 raise exc.PolicySyntaxError(
-                    filepath, lineno,
-                    'including a file that will be removed: {}'.format(path))
+                    filepath,
+                    lineno,
+                    "including a file that will be removed: {}".format(path),
+                )
             return io.StringIO(self.overrides[path]), path
-        return super().resolve_filepath(included_path,
-                                        filepath=filepath, lineno=lineno)
+        return super().resolve_filepath(
+            included_path, filepath=filepath, lineno=lineno
+        )
 
     def handle_rule(self, rule, *, filepath, lineno):
         pass
 
 
 class ToposortMixIn:
-    '''A helper for topological sorting the policy files'''
+    """A helper for topological sorting the policy files"""
 
     @enum.unique
     class State(enum.Enum):
-        '''State of topological sort algorithm'''
+        """State of topological sort algorithm"""
+
         ON_PATH, IN_ORDER = object(), object()
 
     def __init__(self, **kwds):
@@ -1555,13 +1830,13 @@ class ToposortMixIn:
         return str(path)
 
     def toposort(self):
-        '''Yield (file, filename) in order suitable for mass-uploading.
+        """Yield (file, filename) in order suitable for mass-uploading.
 
         A file does not include anything from any file that follows in the
         sequence.
 
         *file* is an open()'d file for reading.
-        '''
+        """
         if not self.order:
             self.queue = set(self.included_paths.keys())
             self.queue.update(itertools.chain(self.included_paths.values()))
@@ -1572,13 +1847,16 @@ class ToposortMixIn:
             yield self.resolve_filepath(path, filepath=None, lineno=None)
 
     def dfs(self, node):
-        '''Perform one batch of topological sort'''
+        """Perform one batch of topological sort"""
         self.state[node] = self.State.ON_PATH
 
         for nextnode in self.included_paths[node]:
             if self.state[nextnode] == self.State.ON_PATH:
-                raise ValueError('circular include; {} → {}'.format(
-                    node.filepath, nextnode.filepath))
+                raise ValueError(
+                    "circular include; {} → {}".format(
+                        node.filepath, nextnode.filepath
+                    )
+                )
             if self.state[nextnode] == self.State.IN_ORDER:
                 continue
 
@@ -1589,43 +1867,60 @@ class ToposortMixIn:
         self.state[node] = self.State.IN_ORDER
 
     def save_included_path(self, included_path, *, filepath, lineno):
-        '''Store the vertex in the dependency graph.
+        """Store the vertex in the dependency graph.
 
         Only paths inside :py:attr:`policy_path` and ``include`` directory
         (as supported by Policy API) are considered.
-        '''
+        """
 
         key = self._path_to_key(included_path)
 
-        if '/' in key and (
-                not key.startswith('include/')
-                or key.count('/') > 1):
+        if "/" in key and (
+            not key.startswith("include/") or key.count("/") > 1
+        ):
             # TODO make this an error, since we shouldn't accept this anyway
-            logging.warning('ignoring path %r included in %s on line %d; '
-                'expect problems with import order',
-                included_path, filepath, lineno)
+            logging.warning(
+                "ignoring path %r included in %s on line %d; "
+                "expect problems with import order",
+                included_path,
+                filepath,
+                lineno,
+            )
             return
 
         self.included_paths[key].add(included_path)
 
-    def handle_include(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
+    def handle_include(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ):
         # pylint: disable=missing-docstring
         logging.debug(
-            'Toposorter.handle_include(included_path=%r, filepath=%r)',
-            included_path, filepath)
+            "Toposorter.handle_include(included_path=%r, filepath=%r)",
+            included_path,
+            filepath,
+        )
         self.save_included_path(included_path, filepath=filepath, lineno=lineno)
         super().handle_include(included_path, filepath=filepath, lineno=lineno)
 
-    def handle_include_service(self, service, argument,
-            included_path: pathlib.PurePosixPath, *, filepath, lineno):
+    def handle_include_service(
+        self,
+        service,
+        argument,
+        included_path: pathlib.PurePosixPath,
+        *,
+        filepath,
+        lineno
+    ):
         # pylint: disable=missing-docstring
         logging.debug(
-            'Toposorter.handle_include_service(included_path=%r, filepath=%r)',
-            included_path, filepath)
+            "Toposorter.handle_include_service(included_path=%r, filepath=%r)",
+            included_path,
+            filepath,
+        )
         self.save_included_path(included_path, filepath=filepath, lineno=lineno)
-        super().handle_include_service(service, argument, included_path,
-            filepath=filepath, lineno=lineno)
+        super().handle_include_service(
+            service, argument, included_path, filepath=filepath, lineno=lineno
+        )
 
     def load_policy_file(self, file, filepath):
         # pylint: disable=missing-docstring,expression-not-assigned
@@ -1633,59 +1928,69 @@ class ToposortMixIn:
         self.included_paths[self._path_to_key(filepath)]
         super().load_policy_file(file, filepath)
 
+
 class TestLoader(AbstractFileLoader):
-    '''An in-memory loader used for tests
+    """An in-memory loader used for tests
 
     Args:
         policy (dict or str): policy dictionary. The keys are filenames to be
             included. It should contain ``'__main__'`` key which is loaded. If
             the argument is :py:class:`str`, it behaves as it was dict's
             ``'__main__'``.
-    '''
+    """
+
     def __init__(self, *args, policy, **kwds):
         super().__init__(*args, **kwds)
         self.policy = policy
 
     def resolve_filepath(self, included_path, *, filepath, lineno):
-        '''
+        """
         Raises:
             qrexec.exc.PolicySyntaxError: when wrong path is included
-        '''
+        """
         included_path = str(included_path)
         try:
             file = io.StringIO(self.policy[included_path])
         except KeyError as err:
-            raise exc.PolicySyntaxError(filepath, lineno,
-                'no such policy file: {!r}'.format(included_path)) from err
-        return file, pathlib.PurePosixPath(included_path + '[in-memory]')
+            raise exc.PolicySyntaxError(
+                filepath,
+                lineno,
+                "no such policy file: {!r}".format(included_path),
+            ) from err
+        return file, pathlib.PurePosixPath(included_path + "[in-memory]")
 
-    def handle_include_dir(self, included_path: pathlib.PurePosixPath, *,
-            filepath, lineno):
+    def handle_include_dir(
+        self, included_path: pathlib.PurePosixPath, *, filepath, lineno
+    ):
         raise NotImplementedError(
-            '!include-dir is unsupported in {}'.format(type(self).__name__))
+            "!include-dir is unsupported in {}".format(type(self).__name__)
+        )
+
 
 class TestPolicy(ToposortMixIn, TestLoader, AbstractPolicy):
-    '''Test policy, used for tests. It can be used to test most of the code
+    """Test policy, used for tests. It can be used to test most of the code
     paths used in policy parsing.
 
     >>> testpolicy = TestPolicy(policy={
     ...     '__main__': '!include policy2'
     ...     'policy2': '* * @anyvm @anyvm allow'})
-    '''
+    """
+
     def __init__(self, *, policy, policy_compat=None, **kwds):
         if not isinstance(policy, collections.abc.Mapping):
-            policy = {'__main__': policy}
+            policy = {"__main__": policy}
         super().__init__(policy=policy, **kwds)
         if policy_compat is None:
             policy_compat = {}
         self.policy_compat = policy_compat
-        file, filepath = self.resolve_filepath('__main__',
-            filepath=None, lineno=None)
+        file, filepath = self.resolve_filepath(
+            "__main__", filepath=None, lineno=None
+        )
         with file:
             self.load_policy_file(file, filepath)
 
     def handle_compat40(self, *, filepath, lineno):
-        ''''''
+        """"""
         # late import for circular
         from .parser_compat import TestCompat40Loader
 
