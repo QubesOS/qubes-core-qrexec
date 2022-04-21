@@ -926,6 +926,7 @@ class Ask(ActionType):
 @enum.unique
 class Action(enum.Enum):
     '''Action as defined by policy'''
+    # pylint: disable=invalid-name
     allow = Allow
     deny = Deny
     ask = Ask
@@ -1382,6 +1383,7 @@ class AbstractFileLoader(AbstractParser):
         if not included_path.is_file():
             raise exc.PolicySyntaxError(filepath, lineno,
                 'not a file: {}'.format(included_path))
+        # pylint: disable=consider-using-with
         return open(str(included_path)), included_path
 
     def handle_include(self, included_path: pathlib.PurePosixPath, *,
