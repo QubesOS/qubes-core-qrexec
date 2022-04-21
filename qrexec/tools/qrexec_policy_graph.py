@@ -76,6 +76,7 @@ def main(args=None):
 
     output = sys.stdout
     if args.output:
+        # pylint: disable=consider-using-with
         output = open(args.output, 'w')
 
     if args.system_info:
