@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
-'''This module is transitional and may go away any time.
+"""This module is transitional and may go away any time.
 
 .. autofunction:: walk_compat_files
 
@@ -30,7 +30,7 @@
 .. autoclass:: TestCompat40Loader
    :members:
    :member-order: bysource
-'''
+"""
 
 import abc
 import collections
@@ -42,144 +42,178 @@ from .. import POLICYPATH_OLD
 from ..exc import PolicySyntaxError
 from . import parser
 
-IGNORED_SUFFIXES = ('.rpmsave', '.rpmnew', '.swp')
+IGNORED_SUFFIXES = (".rpmsave", ".rpmnew", ".swp")
+
 
 @functools.total_ordering
 class _NoArgumentLastKey:
     def __init__(self, arg):
         self.arg = arg
+
     def __eq__(self, other):
         return self.arg == other.arg
+
     def __lt__(self, other):
-        if self.arg == '*':
+        if self.arg == "*":
             return False
-        if other.arg == '*':
+        if other.arg == "*":
             return True
         return self.arg < other.arg
+
 
 def _sorted_compat_files(filepaths):
     services = collections.defaultdict(dict)
 
     for filepath in filepaths:
-        service, argument = parser.parse_service_and_argument(filepath,
-            no_arg='*')
+        service, argument = parser.parse_service_and_argument(
+            filepath, no_arg="*"
+        )
         services[service][argument] = filepath
 
     for service in sorted(services):
         for argument in sorted(services[service], key=_NoArgumentLastKey):
             yield service, argument, services[service][argument]
 
+
 def _list_compat_files(legacy_path):
     for filepath in legacy_path.iterdir():
         if not filepath.is_file():
-            logging.info('ignoring %s (not a file)', filepath)
+            logging.info("ignoring %s (not a file)", filepath)
             continue
 
         if filepath.suffix in IGNORED_SUFFIXES:
-            logging.info('ignoring %s (ignored suffix)')
+            logging.info("ignoring %s (ignored suffix)")
             continue
 
-        if filepath.name.startswith('.'):
-            logging.info('ignoring %s (dotfile)')
+        if filepath.name.startswith("."):
+            logging.info("ignoring %s (dotfile)")
             continue
 
         invalid_chars = parser.get_invalid_characters(filepath.name)
         if invalid_chars:
-            logging.info('ignoring %s (invalid characters: %r)',
-                filepath, invalid_chars)
+            logging.info(
+                "ignoring %s (invalid characters: %r)", filepath, invalid_chars
+            )
             continue
 
         yield filepath
 
+
 def walk_compat_files(legacy_path=POLICYPATH_OLD):
-    '''Walks files in correct order for generating compat policy.
+    """Walks files in correct order for generating compat policy.
 
     Args:
         legacy_path (pathlib.Path): base path for legacy policy
 
     Yields:
         (service, argument, filepath)
-    '''
+    """
     yield from _sorted_compat_files(_list_compat_files(legacy_path))
 
+
 class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
-    '''Abstract parser for compat policy. Needs :py:func:`walk_includes`.
+    """Abstract parser for compat policy. Needs :py:func:`walk_includes`.
 
     Args:
         master (qrexec.policy.parser.AbstractPolicyParser):
             the parser that will handle all the syntax parsed from the legacy
             policy
-    '''
+    """
+
     def __init__(self, *, master, **kwds):
         super().__init__(**kwds)
         self.master = master
 
     @abc.abstractmethod
     def walk_includes(self):
-        '''An iterator that walks over all files to be included via
+        """An iterator that walks over all files to be included via
         ``!compat-4.0`` statement.
 
         Yields:
             (service, argument, filepath)
-        '''
+        """
         raise NotImplementedError()
 
     def execute(self, *, filepath, lineno):
-        '''Insert the policy into :py:attr:`master` parser.'''
+        """Insert the policy into :py:attr:`master` parser."""
         for service, argument, path in self.walk_includes():
-            self.handle_include_service(service, argument, path,
-                filepath=filepath, lineno=lineno)
+            self.handle_include_service(
+                service, argument, path, filepath=filepath, lineno=lineno
+            )
 
             # After each file describing particular argument we add deny lines,
             # which were implicit. After non-specific we don't do that so the
             # default policy will not be shadowed.
-            if argument != '*':
-                self.handle_rule(self.rule_type.from_line_service(self,
-                    service, argument, '@anyvm @anyvm deny',
-                    filepath=path, lineno=None), filepath=path, lineno=None)
-                self.handle_rule(self.rule_type.from_line_service(self,
-                    service, argument, '@anyvm @adminvm deny',
-                    filepath=path, lineno=None), filepath=path, lineno=None)
+            if argument != "*":
+                self.handle_rule(
+                    self.rule_type.from_line_service(
+                        self,
+                        service,
+                        argument,
+                        "@anyvm @anyvm deny",
+                        filepath=path,
+                        lineno=None,
+                    ),
+                    filepath=path,
+                    lineno=None,
+                )
+                self.handle_rule(
+                    self.rule_type.from_line_service(
+                        self,
+                        service,
+                        argument,
+                        "@anyvm @adminvm deny",
+                        filepath=path,
+                        lineno=None,
+                    ),
+                    filepath=path,
+                    lineno=None,
+                )
 
     def handle_rule(self, rule, *, filepath, lineno):
-        ''''''
+        """"""
         return self.master.handle_rule(rule, filepath=filepath, lineno=lineno)
 
     def collect_targets_for_ask(self, request):
         return self.master.collect_targets_for_ask(request)
 
     def load_policy_file(self, file, filepath):
-        ''''''
-        raise RuntimeError('this method should not be called')
+        """"""
+        raise RuntimeError("this method should not be called")
 
     def handle_compat40(self, *, filepath, lineno):
-        ''''''
-        raise PolicySyntaxError(filepath, lineno,
-            '!compat-4.0 is not recursive')
+        """"""
+        raise PolicySyntaxError(
+            filepath, lineno, "!compat-4.0 is not recursive"
+        )
+
 
 class Compat40Loader(Compat40Parser):
-    '''This parser should be used as helper for executing compatibility
+    """This parser should be used as helper for executing compatibility
     statement:
 
         >>> class MyParser(qrexec.policy.parser.AbstractPolicyParser):
         ...     def handle_compat40(self, *, filepath, lineno):
         ...         subparser = Compat40Parser(master=self)
         ...         subparser.execute(filepath=filepath, lineno=lineno)
-    '''
+    """
+
     def __init__(self, *, legacy_path=POLICYPATH_OLD, **kwds):
         super().__init__(**kwds)
         self.legacy_path = pathlib.Path(legacy_path)
 
     def resolve_path(self, included_path):
-        ''''''
+        """"""
         return (self.legacy_path / included_path).resolve()
 
     def walk_includes(self):
-        ''''''
+        """"""
         yield from walk_compat_files(self.legacy_path)
 
+
 class TestCompat40Loader(Compat40Loader, parser.TestLoader):
-    '''Used for tests. See :py:class:`qrexec.policy.parser.TestPolicy`.'''
+    """Used for tests. See :py:class:`qrexec.policy.parser.TestPolicy`."""
+
     def walk_includes(self):
-        ''''''
+        """"""
         yield from _sorted_compat_files(self.policy)

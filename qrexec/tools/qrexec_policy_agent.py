@@ -20,8 +20,8 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
-''' Agent running in user session, responsible for asking the user about policy
-decisions.'''
+""" Agent running in user session, responsible for asking the user about policy
+decisions."""
 
 import itertools
 import os
@@ -32,8 +32,10 @@ import pkg_resources
 
 # pylint: disable=import-error,wrong-import-position
 import gi
-gi.require_version('Gtk', '3.0')
+
+gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio
+
 # pylint: enable=import-error
 
 # pylint: disable=wrong-import-order
@@ -44,6 +46,7 @@ from ..utils import sanitize_domain_name, sanitize_service_name
 from ..server import SocketService
 
 # pylint: enable=wrong-import-position
+
 
 class VMListModeler:
     def __init__(self, domains_info=None):
@@ -67,24 +70,25 @@ class VMListModeler:
 
     def _create_entries(self):
         for name, vm in self._domains_info.items():
-            if name.startswith('@dispvm:'):
-                vm_name = name[len('@dispvm:'):]
+            if name.startswith("@dispvm:"):
+                vm_name = name[len("@dispvm:") :]
                 dispvm = True
             else:
                 vm_name = name
                 dispvm = False
             sanitize_domain_name(vm_name, assert_sanitized=True)
 
-            icon = self._get_icon(vm.get('icon', None))
+            icon = self._get_icon(vm.get("icon", None))
 
             if dispvm:
-                display_name = 'Disposable VM ({})'.format(vm_name)
+                display_name = "Disposable VM ({})".format(vm_name)
             else:
                 display_name = vm_name
             self._entries[display_name] = {
-                                   'api_name': name,
-                                   'icon': icon,
-                                   'vm': vm}
+                "api_name": name,
+                "icon": icon,
+                "vm": vm,
+            }
 
     def _get_valid_qube_name(self, combo, entry_box, whitelist):
         name = None
@@ -92,15 +96,19 @@ class VMListModeler:
         if combo and combo.get_active_id():
             selected = combo.get_active_id()
 
-            if selected in self._entries and \
-                    self._entries[selected]['api_name'] in whitelist:
+            if (
+                selected in self._entries
+                and self._entries[selected]["api_name"] in whitelist
+            ):
                 name = selected
 
         if not name and entry_box:
             typed = entry_box.get_text()
 
-            if typed in self._entries and \
-                    self._entries[typed]['api_name'] in whitelist:
+            if (
+                typed in self._entries
+                and self._entries[typed]["api_name"] in whitelist
+            ):
                 name = typed
 
         return name
@@ -112,15 +120,17 @@ class VMListModeler:
         if name:
             entry = self._entries[name]
 
-            data = entry['api_name']
+            data = entry["api_name"]
 
             if entry_box:
                 entry_box.set_icon_from_pixbuf(
-                    Gtk.EntryIconPosition.PRIMARY, entry['icon'])
+                    Gtk.EntryIconPosition.PRIMARY, entry["icon"]
+                )
         else:
             if entry_box:
                 entry_box.set_icon_from_stock(
-                    Gtk.EntryIconPosition.PRIMARY, "gtk-find")
+                    Gtk.EntryIconPosition.PRIMARY, "gtk-find"
+                )
 
         if selection_trigger:
             selection_trigger(data)
@@ -131,22 +141,29 @@ class VMListModeler:
         if name:
             activation_trigger(entry_box)
 
-    def apply_model(self, destination_object, vm_list,
-                    selection_trigger=None, activation_trigger=None):
+    def apply_model(
+        self,
+        destination_object,
+        vm_list,
+        selection_trigger=None,
+        activation_trigger=None,
+    ):
         if isinstance(destination_object, Gtk.ComboBox):
             list_store = Gtk.ListStore(int, str, GdkPixbuf.Pixbuf, str)
 
-            for entry_no, display_name in zip(itertools.count(),
-                    sorted(self._entries)):
+            for entry_no, display_name in zip(
+                itertools.count(), sorted(self._entries)
+            ):
                 entry = self._entries[display_name]
-                if entry['api_name'] in vm_list:
-                    list_store.append([
-                        entry_no,
-                        display_name,
-                        entry['icon'],
-                        entry['api_name'],
-                    ])
-
+                if entry["api_name"] in vm_list:
+                    list_store.append(
+                        [
+                            entry_no,
+                            display_name,
+                            entry["icon"],
+                            entry["api_name"],
+                        ]
+                    )
 
             destination_object.set_model(list_store)
             destination_object.set_id_column(1)
@@ -173,12 +190,15 @@ class VMListModeler:
 
                 entry_box.set_completion(completion)
                 if activation_trigger:
-                    entry_box.connect("activate",
+                    entry_box.connect(
+                        "activate",
                         lambda entry: self._entry_activate(
                             activation_trigger,
                             destination_object,
                             entry,
-                            vm_list))
+                            vm_list,
+                        ),
+                    )
 
                 # A Combo with an entry has a text column already
                 text_column = destination_object.get_cells()[0]
@@ -191,29 +211,30 @@ class VMListModeler:
                 destination_object.add_attribute(text_column, "text", 1)
 
             changed_function = lambda combo: self._combo_change(
-                             selection_trigger,
-                             combo,
-                             entry_box,
-                             vm_list)
+                selection_trigger, combo, entry_box, vm_list
+            )
 
             destination_object.connect("changed", changed_function)
             changed_function(destination_object)
 
         else:
             raise TypeError(
-                    "Only expecting Gtk.ComboBox objects to want our model.")
+                "Only expecting Gtk.ComboBox objects to want our model."
+            )
 
     def apply_icon(self, entry, qube_name):
         if isinstance(entry, Gtk.Entry):
             if qube_name in self._entries:
                 entry.set_icon_from_pixbuf(
-                        Gtk.EntryIconPosition.PRIMARY,
-                        self._entries[qube_name]['icon'])
+                    Gtk.EntryIconPosition.PRIMARY,
+                    self._entries[qube_name]["icon"],
+                )
             else:
                 raise ValueError("The specified source qube does not exist!")
         else:
             raise TypeError(
-                    "Only expecting Gtk.Entry objects to want our icon.")
+                "Only expecting Gtk.Entry objects to want our icon."
+            )
 
 
 class GtkOneTimerHelper:
@@ -241,9 +262,11 @@ class GtkOneTimerHelper:
 
     def _timer_schedule(self):
         self._invalidate_current_timer()
-        GLib.timeout_add(int(round(self._wait_seconds * 1000)),
-                            self._timer_check_run,
-                            self._current_timer_id)
+        GLib.timeout_add(
+            int(round(self._wait_seconds * 1000)),
+            self._timer_check_run,
+            self._current_timer_id,
+        )
 
     def _timer_has_completed(self):
         return self._timer_completed
@@ -270,8 +293,9 @@ class FocusStealingHelper(GtkOneTimerHelper):
             self._invalidate_current_timer()
 
     def _window_state_event(self, window, event):
-        assert window == self._window, \
-               'Window state callback called with wrong window'
+        assert (
+            window == self._window
+        ), "Window state callback called with wrong window"
 
         changed_focus = event.changed_mask & Gdk.WindowState.FOCUSED
         window_focus = event.new_window_state & Gdk.WindowState.FOCUSED
@@ -297,37 +321,42 @@ class FocusStealingHelper(GtkOneTimerHelper):
 
 class RPCConfirmationWindow:
     # pylint: disable=too-few-public-methods,too-many-instance-attributes
-    _source_file = pkg_resources.resource_filename('qrexec',
-        os.path.join('glade', "RPCConfirmationWindow.glade"))
-    _source_id = {'window': "RPCConfirmationWindow",
-                  'ok': "okButton",
-                  'cancel': "cancelButton",
-                  'source': "sourceEntry",
-                  'rpc_label': "rpcLabel",
-                  'target': "TargetCombo",
-                  'error_bar': "ErrorBar",
-                  'error_message': "ErrorMessage",
-                  }
+    _source_file = pkg_resources.resource_filename(
+        "qrexec", os.path.join("glade", "RPCConfirmationWindow.glade")
+    )
+    _source_id = {
+        "window": "RPCConfirmationWindow",
+        "ok": "okButton",
+        "cancel": "cancelButton",
+        "source": "sourceEntry",
+        "rpc_label": "rpcLabel",
+        "target": "TargetCombo",
+        "error_bar": "ErrorBar",
+        "error_message": "ErrorMessage",
+    }
 
     def _clicked_ok(self, source):
-        assert source is not None, \
-               'Called the clicked ok callback from no source object'
+        assert (
+            source is not None
+        ), "Called the clicked ok callback from no source object"
 
         if self._can_perform_action():
             self._confirmed = True
             self._close()
 
     def _clicked_cancel(self, button):
-        assert button == self._rpc_cancel_button, \
-               'Called the clicked cancel callback through the wrong button'
+        assert (
+            button == self._rpc_cancel_button
+        ), "Called the clicked cancel callback through the wrong button"
 
         if self._can_perform_action():
             self._confirmed = False
             self._close()
 
     def _key_pressed(self, window, key):
-        assert window == self._rpc_window, \
-               'Key pressed callback called with wrong window'
+        assert (
+            window == self._rpc_window
+        ), "Key pressed callback called with wrong window"
 
         if self._can_perform_action():
             if key.keyval == Gdk.KEY_Escape:
@@ -335,7 +364,7 @@ class RPCConfirmationWindow:
                 self._close()
 
     def _update_ok_button_sensitivity(self, data):
-        valid = (data is not None)
+        valid = data is not None
 
         if valid:
             self._target_name = data
@@ -349,10 +378,12 @@ class RPCConfirmationWindow:
         self._error_bar.set_visible(True)
 
     def _close_error(self, error_bar, response):
-        assert error_bar == self._error_bar, \
-               'Closed the error bar with the wrong error bar as parameter'
-        assert response is not None, \
-            'Closed the error bar with None as a response'
+        assert (
+            error_bar == self._error_bar
+        ), "Closed the error bar with the wrong error bar as parameter"
+        assert (
+            response is not None
+        ), "Closed the error bar with None as a response"
 
         self._error_bar.set_visible(False)
 
@@ -360,7 +391,8 @@ class RPCConfirmationWindow:
         if target is not None:
             if target == source:
                 self._show_error(
-                     "Source and target domains must not be the same.")
+                    "Source and target domains must not be the same."
+                )
             else:
                 model = self._rpc_combo_box.get_model()
 
@@ -370,7 +402,8 @@ class RPCConfirmationWindow:
                         found = True
 
                         self._rpc_combo_box.set_active_iter(
-                                    model.get_iter(item.path))
+                            model.get_iter(item.path)
+                        )
 
                         break
 
@@ -387,8 +420,9 @@ class RPCConfirmationWindow:
 
         self._error_bar.connect("response", self._close_error)
 
-    def __init__(self, entries_info, source, service, argument, targets_list,
-            target=None):
+    def __init__(
+        self, entries_info, source, service, argument, targets_list, target=None
+    ):
         # pylint: disable=too-many-arguments
         sanitize_domain_name(source, assert_sanitized=True)
         sanitize_service_name(source, assert_sanitized=True)
@@ -396,34 +430,46 @@ class RPCConfirmationWindow:
         self._gtk_builder = Gtk.Builder()
         self._gtk_builder.add_from_file(self._source_file)
         self._rpc_window = self._gtk_builder.get_object(
-                                            self._source_id['window'])
+            self._source_id["window"]
+        )
         self._rpc_ok_button = self._gtk_builder.get_object(
-                                            self._source_id['ok'])
+            self._source_id["ok"]
+        )
         self._rpc_cancel_button = self._gtk_builder.get_object(
-                                            self._source_id['cancel'])
+            self._source_id["cancel"]
+        )
         self._rpc_label = self._gtk_builder.get_object(
-                                            self._source_id['rpc_label'])
+            self._source_id["rpc_label"]
+        )
         self._source_entry = self._gtk_builder.get_object(
-                                            self._source_id['source'])
+            self._source_id["source"]
+        )
         self._rpc_combo_box = self._gtk_builder.get_object(
-                                            self._source_id['target'])
+            self._source_id["target"]
+        )
         self._error_bar = self._gtk_builder.get_object(
-                                            self._source_id['error_bar'])
+            self._source_id["error_bar"]
+        )
         self._error_message = self._gtk_builder.get_object(
-                                            self._source_id['error_message'])
+            self._source_id["error_message"]
+        )
         self._target_name = None
 
         self._focus_helper = self._new_focus_stealing_helper()
 
         self._rpc_label.set_markup(
-            escape_and_format_rpc_text(service, argument))
+            escape_and_format_rpc_text(service, argument)
+        )
 
         self._entries_info = entries_info
         list_modeler = self._new_vm_list_modeler()
 
-        list_modeler.apply_model(self._rpc_combo_box, targets_list,
-                    selection_trigger=self._update_ok_button_sensitivity,
-                    activation_trigger=self._clicked_ok)
+        list_modeler.apply_model(
+            self._rpc_combo_box,
+            targets_list,
+            selection_trigger=self._update_ok_button_sensitivity,
+            activation_trigger=self._clicked_ok,
+        )
 
         self._source_entry.set_text(source)
         list_modeler.apply_icon(self._source_entry, source)
@@ -438,7 +484,7 @@ class RPCConfirmationWindow:
         self._rpc_window.close()
 
     async def _wait_for_close(self):
-        await gbulb.wait_signal(self._rpc_window, 'delete-event')
+        await gbulb.wait_signal(self._rpc_window, "delete-event")
 
     def _show(self):
         self._rpc_window.set_keep_above(True)
@@ -448,10 +494,7 @@ class RPCConfirmationWindow:
         return VMListModeler(self._entries_info)
 
     def _new_focus_stealing_helper(self):
-        return FocusStealingHelper(
-                    self._rpc_window,
-                    self._rpc_ok_button,
-                    1)
+        return FocusStealingHelper(self._rpc_window, self._rpc_ok_button, 1)
 
     async def confirm_rpc(self):
         self._show()
@@ -462,26 +505,28 @@ class RPCConfirmationWindow:
         return False
 
 
-async def confirm_rpc(entries_info, source, service, argument, targets_list,
-                      target=None):
+async def confirm_rpc(
+    entries_info, source, service, argument, targets_list, target=None
+):
     # pylint: disable=too-many-arguments
-    window = RPCConfirmationWindow(entries_info, source, service, argument,
-                                   targets_list, target)
+    window = RPCConfirmationWindow(
+        entries_info, source, service, argument, targets_list, target
+    )
 
     return await window.confirm_rpc()
 
 
-def escape_and_format_rpc_text(service, argument=''):
+def escape_and_format_rpc_text(service, argument=""):
     service = GLib.markup_escape_text(service)
     argument = GLib.markup_escape_text(argument)
 
-    domain, dot, name = service.partition('.')
+    domain, dot, name = service.partition(".")
     if dot and name:
-        result = '{}.<b>{}</b>'.format(domain, name)
+        result = "{}.<b>{}</b>".format(domain, name)
     else:
-        result = '<b>{}</b>'.format(service)
+        result = "<b>{}</b>".format(service)
 
-    if argument != '+':
+    if argument != "+":
         result += argument
 
     return result
@@ -491,69 +536,79 @@ class PolicyAgent(SocketService):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._app = Gtk.Application()
-        self._app.set_application_id('qubes.qrexec-policy-agent')
+        self._app.set_application_id("qubes.qrexec-policy-agent")
         self._app.register()
 
     async def handle_request(self, params, service, source_domain):
-        if service == 'policy.Ask':
+        if service == "policy.Ask":
             return await self.handle_ask(params)
-        if service == 'policy.Notify':
+        if service == "policy.Notify":
             return await self.handle_notify(params)
-        raise Exception('unknown service name: {}'.format(service))
+        raise Exception("unknown service name: {}".format(service))
 
     async def handle_ask(self, params):
-        source = params['source']
-        service = params['service']
-        argument = params['argument']
-        targets = params['targets']
-        default_target = params['default_target']
+        source = params["source"]
+        service = params["service"]
+        argument = params["argument"]
+        targets = params["targets"]
+        default_target = params["default_target"]
 
         entries_info = {}
-        for domain_name, icon in params['icons'].items():
-            entries_info[domain_name] = {'icon': icon}
+        for domain_name, icon in params["icons"].items():
+            entries_info[domain_name] = {"icon": icon}
 
         target = await confirm_rpc(
-            entries_info, source, service, argument,
-            targets, default_target or None)
+            entries_info,
+            source,
+            service,
+            argument,
+            targets,
+            default_target or None,
+        )
 
         if target:
-            return 'allow:{}'.format(target)
-        return 'deny'
+            return "allow:{}".format(target)
+        return "deny"
 
     async def handle_notify(self, params):
-        resolution = params['resolution']
-        service = params['service']
-        argument = params['argument']
-        source = params['source']
-        target = params['target']
+        resolution = params["resolution"]
+        service = params["service"]
+        argument = params["argument"]
+        source = params["source"]
+        target = params["target"]
 
-        assert resolution in ['allow', 'deny', 'fail'], resolution
+        assert resolution in ["allow", "deny", "fail"], resolution
 
         self.notify(resolution, service, argument, source, target)
-        return ''
+        return ""
 
     def notify(self, resolution, service, argument, source, target):
         # pylint: disable=too-many-arguments
-        if argument == '+':
+        if argument == "+":
             rpc = service
         else:
             rpc = service + argument
 
-        if resolution == 'allow':
+        if resolution == "allow":
             app_icon = None
-            summary = 'Allowed: {service}'
-            body = ('Allowed <b>{rpc}</b> '
-                    'from <b>{source}</b> to <b>{target}</b>')
-        elif resolution == 'deny':
-            app_icon = 'dialog-error'
-            summary = 'Denied: {service}'
-            body = ('Denied <b>{rpc}</b> '
-                    'from <b>{source}</b> to <b>{target}</b>')
-        elif resolution == 'fail':
-            app_icon = 'dialog-warning'
-            summary = 'Failed: {service}'
-            body = ('Failed to execute <b>{rpc}</b> '
-                    '(from <b>{source}</b> to <b>{target}</b>)')
+            summary = "Allowed: {service}"
+            body = (
+                "Allowed <b>{rpc}</b> "
+                "from <b>{source}</b> to <b>{target}</b>"
+            )
+        elif resolution == "deny":
+            app_icon = "dialog-error"
+            summary = "Denied: {service}"
+            body = (
+                "Denied <b>{rpc}</b> from <b>{source}</b> to <b>{target}</b>"
+            )
+        elif resolution == "fail":
+            app_icon = "dialog-warning"
+            summary = "Failed: {service}"
+            body = (
+                "Failed to execute <b>{rpc}</b> "
+                "(from <b>{source}</b> to <b>{target}</b>)"
+            )
         else:
             assert False, resolution
 
@@ -562,7 +617,8 @@ class PolicyAgent(SocketService):
         body = body.format(
             rpc=GLib.markup_escape_text(rpc),
             source=GLib.markup_escape_text(source),
-            target=GLib.markup_escape_text(target))
+            target=GLib.markup_escape_text(target),
+        )
 
         notification = Gio.Notification.new(summary)
         notification.set_priority(Gio.NotificationPriority.NORMAL)
@@ -577,9 +633,13 @@ class PolicyAgent(SocketService):
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    '-s', '--socket-path', metavar='DIR', type=str,
+    "-s",
+    "--socket-path",
+    metavar="DIR",
+    type=str,
     default=POLICY_AGENT_SOCKET_PATH,
-    help='path to socket')
+    help="path to socket",
+)
 
 
 def main():
@@ -595,5 +655,5 @@ def main():
     loop.run_until_complete(asyncio.wait(tasks))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

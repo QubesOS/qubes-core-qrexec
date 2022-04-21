@@ -52,7 +52,7 @@ class QrexecClient:
         self.conn.sendall(data)
 
     def recvall(self, data_len):
-        data = b''
+        data = b""
         while len(data) < data_len:
             res = self.conn.recv(data_len - len(data))
             if not res:
@@ -64,13 +64,13 @@ class QrexecClient:
         self.conn.close()
 
     def send_message(self, message_type, data):
-        header = struct.pack('<LL', message_type, len(data))
+        header = struct.pack("<LL", message_type, len(data))
         self.sendall(header)
         self.sendall(data)
 
     def recv_message(self):
         header = self.conn.recv(8)
-        message_type, data_len = struct.unpack('<LL', header)
+        message_type, data_len = struct.unpack("<LL", header)
         data = self.recvall(data_len)
         return message_type, data
 
@@ -80,18 +80,17 @@ class QrexecClient:
             header = self.recvall(8)
             if len(header) < 8:
                 break
-            message_type, data_len = struct.unpack('<LL', header)
+            message_type, data_len = struct.unpack("<LL", header)
             data = self.recvall(data_len)
             assert len(data) == data_len, (len(data), data_len)
             messages.append((message_type, data))
         return messages
 
     def handshake(self):
-        self.send_message(MSG_HELLO,
-                          struct.pack('<L', QREXEC_PROTOCOL_VERSION))
+        self.send_message(MSG_HELLO, struct.pack("<L", QREXEC_PROTOCOL_VERSION))
         message_type, data = self.recv_message()
         assert message_type == MSG_HELLO
-        ver, = struct.unpack('<L', data)
+        (ver,) = struct.unpack("<L", data)
         assert ver == QREXEC_PROTOCOL_VERSION
 
 
@@ -114,8 +113,8 @@ class QrexecServer(QrexecClient):
 
 def vchan_client(socket_dir, domain, remote_domain, port):
     vchan_socket_path = os.path.join(
-        socket_dir, 'vchan.{}.{}.{}.sock'.format(
-            domain, remote_domain, port))
+        socket_dir, "vchan.{}.{}.{}.sock".format(domain, remote_domain, port)
+    )
     return socket_client(vchan_socket_path)
 
 
@@ -127,8 +126,8 @@ def socket_client(socket_path):
 
 def vchan_server(socket_dir, domain, remote_domain, port):
     vchan_socket_path = os.path.join(
-        socket_dir, 'vchan.{}.{}.{}.sock'.format(
-            domain, remote_domain, port))
+        socket_dir, "vchan.{}.{}.{}.sock".format(domain, remote_domain, port)
+    )
     return socket_server(vchan_socket_path)
 
 

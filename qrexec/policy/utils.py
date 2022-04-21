@@ -53,20 +53,26 @@ class PolicyCache:
         loop = asyncio.get_event_loop()
 
         self.notifier = pyinotify.AsyncioNotifier(
-            self.watch_manager, loop, default_proc_fun=PolicyWatcher(self))
+            self.watch_manager, loop, default_proc_fun=PolicyWatcher(self)
+        )
 
-        if str(self.path) not in self.default_policy_paths \
-                and os.path.exists(self.path):
+        if str(self.path) not in self.default_policy_paths and os.path.exists(
+            self.path
+        ):
             self.watches.append(
                 self.watch_manager.add_watch(
-                    str(self.path), mask, rec=True, auto_add=True))
+                    str(self.path), mask, rec=True, auto_add=True
+                )
+            )
 
         for path in self.default_policy_paths:
             if not os.path.exists(path):
                 continue
             self.watches.append(
-                self.watch_manager.add_watch(str(path), mask,
-                                             rec=True, auto_add=True))
+                self.watch_manager.add_watch(
+                    str(path), mask, rec=True, auto_add=True
+                )
+            )
 
     def cleanup(self):
         for wdd in self.watches:

@@ -38,18 +38,30 @@ class MockRPCConfirmationWindow(RPCConfirmationWindow):
 
     def _new_focus_stealing_helper(self):
         return FocusStealingHelperMock(
-                    self._rpc_window,
-                    self._rpc_ok_button,
-                    self._focus_stealing_seconds)
+            self._rpc_window, self._rpc_ok_button, self._focus_stealing_seconds
+        )
 
-    def __init__(self, source, service, argument, whitelist,
-                 target=None, focus_stealing_seconds=1):
+    def __init__(
+        self,
+        source,
+        service,
+        argument,
+        whitelist,
+        target=None,
+        focus_stealing_seconds=1,
+    ):
         # pylint: disable=too-many-arguments
         self._focus_stealing_seconds = focus_stealing_seconds
 
         RPCConfirmationWindow.__init__(
-            self, mock_domains_info, source, service, argument, whitelist,
-            target)
+            self,
+            mock_domains_info,
+            source,
+            service,
+            argument,
+            whitelist,
+            target,
+        )
 
         self.test_called_close = False
         self.test_called_show = False
@@ -95,11 +107,17 @@ class MockRPCConfirmationWindow(RPCConfirmationWindow):
         return domains
 
 
-@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
+@unittest.skipUnless(os.environ.get("DISPLAY"), "no DISPLAY variable")
 class RPCConfirmationWindowTestBase(GtkTestCase):
-    def __init__(self, test_method, source_name="test-source",
-                 service="test.Operation", argument="+", whitelist=mock_whitelist,
-                 target_name=None):
+    def __init__(
+        self,
+        test_method,
+        source_name="test-source",
+        service="test.Operation",
+        argument="+",
+        whitelist=mock_whitelist,
+        target_name=None,
+    ):
         # pylint: disable=too-many-arguments
         GtkTestCase.__init__(self, test_method)
         self.test_source_name = source_name
@@ -118,7 +136,8 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
             self.test_argument,
             self.whitelist,
             self.test_target_name,
-            focus_stealing_seconds=self._test_time)
+            focus_stealing_seconds=self._test_time,
+        )
 
     def test_has_linked_the_fields(self):
         self.assertIsNotNone(self.window._rpc_window)
@@ -131,7 +150,9 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
         self.assertIsNotNone(self.window._error_message)
 
     def test_is_showing_source(self):
-        self.assertTrue(self.test_source_name in self.window._source_entry.get_text())
+        self.assertTrue(
+            self.test_source_name in self.window._source_entry.get_text()
+        )
 
     def test_is_showing_operation(self):
         self.assertTrue(self.test_service in self.window._rpc_label.get_text())
@@ -139,18 +160,18 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
     def test_escape_and_format_rpc_text(self):
         # pylint: disable=no-self-use
         e = escape_and_format_rpc_text
-        assert e('qubes.Test') == 'qubes.<b>Test</b>'
-        assert e('custom.Domain') == 'custom.<b>Domain</b>'
-        assert e('nodomain') == '<b>nodomain</b>'
-        assert e('domain.Sub.Operation') == 'domain.<b>Sub.Operation</b>'
-        assert e('') == '<b></b>'
-        assert e('.') == '<b>.</b>'
-        assert e('inject.<script>') == 'inject.<b>&lt;script&gt;</b>'
-        assert e('<script>.inject') == '&lt;script&gt;.<b>inject</b>'
+        assert e("qubes.Test") == "qubes.<b>Test</b>"
+        assert e("custom.Domain") == "custom.<b>Domain</b>"
+        assert e("nodomain") == "<b>nodomain</b>"
+        assert e("domain.Sub.Operation") == "domain.<b>Sub.Operation</b>"
+        assert e("") == "<b></b>"
+        assert e(".") == "<b>.</b>"
+        assert e("inject.<script>") == "inject.<b>&lt;script&gt;</b>"
+        assert e("<script>.inject") == "&lt;script&gt;.<b>inject</b>"
 
-        assert e('qubes.Test', '') == 'qubes.<b>Test</b>'
-        assert e('qubes.Test', '+') == 'qubes.<b>Test</b>'
-        assert e('qubes.Test', '+arg') == 'qubes.<b>Test</b>+arg'
+        assert e("qubes.Test", "") == "qubes.<b>Test</b>"
+        assert e("qubes.Test", "+") == "qubes.<b>Test</b>"
+        assert e("qubes.Test", "+arg") == "qubes.<b>Test</b>+arg"
 
     async def test_lifecycle_open_select_ok(self):
         await self._lifecycle_start(select_target=True)
@@ -195,19 +216,20 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
 
         self.assertTrue(self.window.test_called_close)
 
-
     async def _lifecycle_start(self, select_target):
         self.assertFalse(self.window.test_called_close)
         self.assertFalse(self.window.test_called_show)
 
         self.assert_initial_state(False)
-        self.assertTrue(isinstance(self.window._focus_helper, FocusStealingHelperMock))
+        self.assertTrue(
+            isinstance(self.window._focus_helper, FocusStealingHelperMock)
+        )
 
         # Need the following because of pylint's complaints
         if isinstance(self.window._focus_helper, FocusStealingHelperMock):
             FocusStealingHelperMock.simulate_focus(self.window._focus_helper)
 
-        self.flush_gtk_events(self._test_time*2)
+        self.flush_gtk_events(self._test_time * 2)
         self.assert_initial_state(True)
 
         # We expect the call to exit immediately, since no window is opened
@@ -245,12 +267,16 @@ class RPCConfirmationWindowTestBase(GtkTestCase):
             self.assertFalse(self.window._focus_helper.can_perform_action())
 
 
-@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
+@unittest.skipUnless(os.environ.get("DISPLAY"), "no DISPLAY variable")
 class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
     def __init__(self, test_method):
-        RPCConfirmationWindowTestBase.__init__(self, test_method,
-                 source_name="test-source", service="test.Operation",
-                 target_name="test-target")
+        RPCConfirmationWindowTestBase.__init__(
+            self,
+            test_method,
+            source_name="test-source",
+            service="test.Operation",
+            target_name="test-target",
+        )
 
     async def test_lifecycle_open_ok(self):
         await self._lifecycle_start(select_target=False)
@@ -264,7 +290,7 @@ class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
         if after_focus_timer:
             self.assertTrue(self.window._rpc_ok_button.get_sensitive())
             self.assertTrue(self.window._focus_helper.can_perform_action())
-            self.assertEqual(self.window._target_name, 'test-target')
+            self.assertEqual(self.window._target_name, "test-target")
         else:
             self.assertFalse(self.window._rpc_ok_button.get_sensitive())
             self.assertFalse(self.window._focus_helper.can_perform_action())
@@ -274,12 +300,16 @@ class RPCConfirmationWindowTestWithTarget(RPCConfirmationWindowTestBase):
         self.assertIsNotNone(self.window._target_name)
 
 
-@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
+@unittest.skipUnless(os.environ.get("DISPLAY"), "no DISPLAY variable")
 class RPCConfirmationWindowTestWithDispVMTarget(RPCConfirmationWindowTestBase):
     def __init__(self, test_method):
-        RPCConfirmationWindowTestBase.__init__(self, test_method,
-                 source_name="test-source", service="test.Operation",
-                 target_name="@dispvm:test-disp6")
+        RPCConfirmationWindowTestBase.__init__(
+            self,
+            test_method,
+            source_name="test-source",
+            service="test.Operation",
+            target_name="@dispvm:test-disp6",
+        )
 
     async def test_lifecycle_open_ok(self):
         await self._lifecycle_start(select_target=False)
@@ -293,13 +323,13 @@ class RPCConfirmationWindowTestWithDispVMTarget(RPCConfirmationWindowTestBase):
         if after_focus_timer:
             self.assertTrue(self.window._rpc_ok_button.get_sensitive())
             self.assertTrue(self.window._focus_helper.can_perform_action())
-            self.assertEqual(self.window._target_name, '@dispvm:test-disp6')
+            self.assertEqual(self.window._target_name, "@dispvm:test-disp6")
         else:
             self.assertFalse(self.window._rpc_ok_button.get_sensitive())
             self.assertFalse(self.window._focus_helper.can_perform_action())
 
 
-@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
+@unittest.skipUnless(os.environ.get("DISPLAY"), "no DISPLAY variable")
 class RPCConfirmationWindowTestWithTargetInvalid(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
@@ -314,12 +344,13 @@ class RPCConfirmationWindowTestWithTargetInvalid(unittest.TestCase):
         self.assert_raises_error(True, "test-source", "test-source")
 
     def assert_raises_error(self, expect, source, target):
-        rpcWindow = MockRPCConfirmationWindow(source, "test.Operation", "+",
-                                              mock_whitelist, target=target)
+        rpcWindow = MockRPCConfirmationWindow(
+            source, "test.Operation", "+", mock_whitelist, target=target
+        )
         self.assertEqual(expect, rpcWindow.is_error_visible())
 
 
-@unittest.skipUnless(os.environ.get('DISPLAY'), 'no DISPLAY variable')
+@unittest.skipUnless(os.environ.get("DISPLAY"), "no DISPLAY variable")
 class RPCConfirmationWindowTestWhitelist(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
@@ -328,47 +359,76 @@ class RPCConfirmationWindowTestWhitelist(unittest.TestCase):
         self._assert_whitelist([], [])
 
     def test_all_red_domains(self):
-        self._assert_whitelist(["test-red1", "test-red2", "test-red3"],
-                               ["test-red1", "test-red2", "test-red3"])
+        self._assert_whitelist(
+            ["test-red1", "test-red2", "test-red3"],
+            ["test-red1", "test-red2", "test-red3"],
+        )
 
     def test_all_red_domains_plus_nonexistent(self):
         self._assert_whitelist(
-            ["test-red1", "test-red2", "test-red3",
-             "test-blue1", "test-blue2", "test-blue3"],
-            ["test-red1", "test-red2", "test-red3"])
+            [
+                "test-red1",
+                "test-red2",
+                "test-red3",
+                "test-blue1",
+                "test-blue2",
+                "test-blue3",
+            ],
+            ["test-red1", "test-red2", "test-red3"],
+        )
 
     def test_all_allowed_domains(self):
         self._assert_whitelist(
-            ["test-red1", "test-red2", "test-red3",
-             "test-target", "@dispvm:test-disp6", "test-source", "dom0"],
-            ["test-red1", "test-red2", "test-red3",
-             "test-target", "Disposable VM (test-disp6)", "test-source",
-                "dom0"])
+            [
+                "test-red1",
+                "test-red2",
+                "test-red3",
+                "test-target",
+                "@dispvm:test-disp6",
+                "test-source",
+                "dom0",
+            ],
+            [
+                "test-red1",
+                "test-red2",
+                "test-red3",
+                "test-target",
+                "Disposable VM (test-disp6)",
+                "test-source",
+                "dom0",
+            ],
+        )
 
     def _assert_whitelist(self, whitelist, expected):
         rpcWindow = MockRPCConfirmationWindow(
-            "test-source", "test.Operation", "+", whitelist)
+            "test-source", "test.Operation", "+", whitelist
+        )
 
         domains = rpcWindow.get_shown_domains()
 
         self.assertCountEqual(domains, expected)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test = False
     window = False
 
-    if len(sys.argv) == 1 or sys.argv[1] == '-t':
+    if len(sys.argv) == 1 or sys.argv[1] == "-t":
         test = True
-    elif sys.argv[1] == '-w':
+    elif sys.argv[1] == "-w":
         window = True
     else:
         print("Usage: " + __file__ + " [-t|-w]")
 
     if window:
-        print(MockRPCConfirmationWindow("test-source",
-                                        "qubes.Filecopy",
-                                        "+",
-                                        mock_whitelist,
-                                        "test-red1").confirm_rpc())
+        print(
+            MockRPCConfirmationWindow(
+                "test-source",
+                "qubes.Filecopy",
+                "+",
+                mock_whitelist,
+                "test-red1",
+            ).confirm_rpc()
+        )
     elif test:
         unittest.main(argv=[sys.argv[0]])

@@ -19,36 +19,44 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
+
 class AccessDenied(Exception):
-    '''
+    """
     Raised when qrexec policy denied access.
 
     :py:attr:`notify` controls whether to notify the user about denying
     access. This defaults to true, except when specified otherwise
     (e.g. because we applied a policy that says `notify=no`).
-    '''
+    """
 
     def __init__(self, *args, notify=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.notify = notify
 
+
 class PolicySyntaxError(AccessDenied):
-    ''' Syntax error in qrexec policy, abort parsing '''
+    """Syntax error in qrexec policy, abort parsing"""
+
     def __init__(self, filepath, lineno, msg):
         super().__init__(
-            '{}:{}: {}'.format(filepath or '<unknown>', lineno, msg))
+            "{}:{}: {}".format(filepath or "<unknown>", lineno, msg)
+        )
+
 
 class PolicyNotFound(AccessDenied):
-    ''' Policy was not found for this service '''
+    """Policy was not found for this service"""
+
     def __init__(self, service_name):
-        super().__init__(
-            'Policy not found for service {}'.format(service_name))
+        super().__init__("Policy not found for service {}".format(service_name))
+
 
 class QubesMgmtException(Exception):
-    ''' Exception returned by qubesd '''
+    """Exception returned by qubesd"""
+
     def __init__(self, exc_type):
         super().__init__()
         self.exc_type = exc_type
 
+
 class ExecutionFailed(Exception):
-    ''' Something went wrong while executing the service '''
+    """Something went wrong while executing the service"""

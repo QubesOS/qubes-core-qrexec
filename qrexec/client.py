@@ -22,20 +22,20 @@ import os
 
 from .utils import prepare_subprocess_kwds
 
-QREXEC_CLIENT_DOM0 = '/usr/bin/qrexec-client'
-QREXEC_CLIENT_VM = '/usr/bin/qrexec-client-vm'
-RPC_MULTIPLEXER = '/usr/lib/qubes/qubes-rpc-multiplexer'
+QREXEC_CLIENT_DOM0 = "/usr/bin/qrexec-client"
+QREXEC_CLIENT_VM = "/usr/bin/qrexec-client-vm"
+RPC_MULTIPLEXER = "/usr/lib/qubes/qubes-rpc-multiplexer"
 
 VERSION = None
 
 if pathlib.Path(QREXEC_CLIENT_DOM0).is_file():
-    VERSION = 'dom0'
+    VERSION = "dom0"
 elif pathlib.Path(QREXEC_CLIENT_VM).is_file():
-    VERSION = 'vm'
+    VERSION = "vm"
 
 
 def call(dest, rpcname, arg=None, *, input=None):
-    '''Invoke qrexec call
+    """Invoke qrexec call
 
     The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
     or a *real* file, which has file descriptor (as returned by ``.fileno()``
@@ -47,17 +47,17 @@ def call(dest, rpcname, arg=None, *, input=None):
     :param str or bytes or file or None input: an input to the qrexec call
     :rtype: str
     :raises subprocess.CalledProcessError: on failure
-    '''
+    """
     # pylint: disable=redefined-builtin
 
     command = make_command(dest, rpcname, arg)
     return subprocess.check_output(
-        command,
-        **prepare_subprocess_kwds(input)).decode()
+        command, **prepare_subprocess_kwds(input)
+    ).decode()
 
 
 async def call_async(dest, rpcname, arg=None, *, input=None):
-    '''Invoke qrexec call (async version)
+    """Invoke qrexec call (async version)
 
     The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
     or a *real* file, which has file descriptor (as returned by ``.fileno()``
@@ -69,7 +69,7 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
     :param str or bytes or file or None input: an input to the qrexec call
     :rtype: str
     :raises subprocess.CalledProcessError: on failure
-    '''
+    """
     # pylint: disable=redefined-builtin
 
     command = make_command(dest, rpcname, arg)
@@ -89,9 +89,8 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
         to_communicate = None
 
     process = await asyncio.create_subprocess_exec(
-        *command,
-        stdin=stdin,
-        stdout=subprocess.PIPE)
+        *command, stdin=stdin, stdout=subprocess.PIPE
+    )
 
     stdout, _stderr = await process.communicate(to_communicate)
     if process.returncode != 0:
@@ -100,21 +99,27 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
 
 
 def make_command(dest, rpcname, arg):
-    assert '+' not in rpcname
+    assert "+" not in rpcname
     if arg is not None:
-        rpcname = '{}+{}'.format(rpcname, arg)
+        rpcname = "{}+{}".format(rpcname, arg)
 
-    if VERSION == 'dom0' and dest == 'dom0':
+    if VERSION == "dom0" and dest == "dom0":
         # Invoke qubes-rpc-multiplexer directly. This will work for non-socket
         # services only.
-        assert os.getuid() == 0, 'you need to run as root for local QubesRPC calls'
-        return [RPC_MULTIPLEXER, rpcname, 'dom0']
+        assert (
+            os.getuid() == 0
+        ), "you need to run as root for local QubesRPC calls"
+        return [RPC_MULTIPLEXER, rpcname, "dom0"]
 
-    if VERSION == 'dom0':
-        return [QREXEC_CLIENT_DOM0, '-d', dest,
-                'DEFAULT:QUBESRPC {} dom0'.format(rpcname)]
-    if VERSION == 'vm':
+    if VERSION == "dom0":
+        return [
+            QREXEC_CLIENT_DOM0,
+            "-d",
+            dest,
+            "DEFAULT:QUBESRPC {} dom0".format(rpcname),
+        ]
+    if VERSION == "vm":
         return [QREXEC_CLIENT_VM, dest, rpcname]
 
     assert VERSION is None
-    raise NotImplementedError('qrexec not available')
+    raise NotImplementedError("qrexec not available")
