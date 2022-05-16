@@ -13,7 +13,11 @@
 ## </param>
 interface(`ipp_qubes_qrexec',`
 	gen_require(`
-		attribute qubes_qrexec_domain;
+		type qubes_qrexec_socket_t;
+		type qubes_var_run_t;
+		type local_login_t; # See UGLY HACK in qubes-core-qrexec.te
 	')
-	typeattribute $1 qubes_qrexec_domain;
+	stream_connect_pattern($1, qubes_var_run_t, qubes_qrexec_socket_t, local_login_t)
+	dev_rw_xen($1)
+	allow $1 qubes_qrexec_socket_t:sock_file rw_sock_file_perms;
 ')

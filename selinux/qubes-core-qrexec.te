@@ -2,6 +2,7 @@ policy_module(qubes-core-qrexec, 0.0.1)
 
 require {
 	type staff_t, init_t, initrc_t, sysadm_t, xauth_exec_t, local_login_t, tmpfs_t, qubes_var_run_t;
+	type user_t;
 	class passwd rootok;
 }
 
@@ -14,17 +15,19 @@ require {
 define(`qubes_qrexec_agent_t', `local_login_t')
 ### END UGLY HACK ###
 
-# The attribute `qubes_qrexec_domain` determines which confined domains that are
-# allowed to use qrexec.
-attribute qubes_qrexec_domain;
-stream_connect_pattern(qubes_qrexec_domain, qubes_var_run_t, qubes_qrexec_socket_t, qubes_qrexec_agent_t)
-dev_rw_xen(qubes_qrexec_domain)
-allow qubes_qrexec_domain qubes_qrexec_socket_t:sock_file rw_sock_file_perms;
-
 # staff_t and sysadm_t can use qrexec.  Unprivileged user domains (such as user_t)
-# cannot.
+# cannot unless a boolean is set.  This is important if one e.g. has a qube that
+# provides shell accounts to mutually distrusting users, although Qubes OS does not
+# consider this to be a good idea the vast majority of the time.
 ipp_qubes_qrexec(staff_t)
 ipp_qubes_qrexec(sysadm_t)
+
+# Allow user_t to use qrexec.  This is mostly equivalent to unconfined root access!
+# In particular, qrexec does not care about the initiating user, only the qube.
+gen_bool(qubes_user_t_can_use_qrexec, false)
+if (qubes_user_t_can_use_qrexec) {
+	ipp_qubes_qrexec(user_t)
+}
 
 # init scripts can use qrexec
 ipp_qubes_qrexec(init_t)
