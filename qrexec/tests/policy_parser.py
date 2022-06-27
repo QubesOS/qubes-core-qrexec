@@ -1016,7 +1016,7 @@ class TC_11_Rule_service(unittest.TestCase):
 # class TC_20_Policy(qubes.tests.QubesTestCase):
 class TC_20_Policy(unittest.TestCase):
     def test_000_load(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
 * * test-vm1 test-vm2 allow
 
@@ -1034,7 +1034,7 @@ class TC_20_Policy(unittest.TestCase):
         self.assertIsInstance(policy.rules[0].action, parser.Action.allow.value)
 
     def test_002_include(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy={
                 "__main__": """\
                 * * test-vm1 test-vm2 allow
@@ -1068,7 +1068,7 @@ class TC_20_Policy(unittest.TestCase):
         self.assertEqual(policy.rules[2].lineno, 3)
 
     def test_003_include_service(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy={
                 "__main__": """\
                 !include-service * * new-syntax
@@ -1099,7 +1099,7 @@ class TC_20_Policy(unittest.TestCase):
         self.assertEqual(policy.rules[3].action.default_target, "@dispvm")
 
     def test_010_find_rule(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 test-vm2 allow
             * * test-vm1 @anyvm ask
@@ -1158,7 +1158,7 @@ class TC_20_Policy(unittest.TestCase):
             policy.find_matching_rule(_req("test-standalone", "@default"))
 
     def test_020_collect_targets_for_ask(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 test-vm2 allow
             * * test-vm1 @anyvm ask
@@ -1343,7 +1343,7 @@ class TC_30_Resolution(unittest.TestCase):
 
 class TC_40_evaluate(unittest.TestCase):
     def setUp(self):
-        self.policy = parser.TestPolicy(
+        self.policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 test-vm2 allow
             * * test-vm1 @default allow target=test-vm2
@@ -1354,7 +1354,7 @@ class TC_40_evaluate(unittest.TestCase):
         )
 
     def test_000_deny(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * @anyvm @anyvm deny"""
         )
@@ -1363,7 +1363,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertTrue(e.exception.notify)
 
     def test_001_deny_no_notify(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * @anyvm @anyvm deny notify=no"""
         )
@@ -1372,7 +1372,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertFalse(e.exception.notify)
 
     def test_030_eval_simple(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 test-vm2 allow"""
         )
@@ -1403,7 +1403,7 @@ class TC_40_evaluate(unittest.TestCase):
 
     def test_032_eval_no_autostart(self):
         # test-vm2 is running, test-vm3 is halted
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 test-vm2 allow autostart=no
             * * test-vm1 test-vm3 allow autostart=no"""
@@ -1460,7 +1460,7 @@ class TC_40_evaluate(unittest.TestCase):
         )
 
     def test_042_eval_ask_no_targets(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @default ask"""
         )
@@ -1468,7 +1468,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy.evaluate(_req("test-vm3", "@default"))
 
     def test_043_eval_ask_no_autostart(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 @anyvm ask"""
         )
@@ -1489,7 +1489,7 @@ class TC_40_evaluate(unittest.TestCase):
             ],
         )
 
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 @anyvm ask autostart=no"""
         )
@@ -1498,7 +1498,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertCountEqual(resolution.targets_for_ask, ["test-vm2"])
 
     def test_050_eval_resolve_dispvm(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @dispvm allow"""
         )
@@ -1510,7 +1510,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.request.target, "@dispvm")
 
     def test_051_eval_resolve_dispvm_fail(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-no-dvm @dispvm allow"""
         )
@@ -1518,7 +1518,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy.evaluate(_req("test-no-dvm", "@dispvm"))
 
     def test_052_eval_invalid_override_target(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @anyvm allow target=no-such-vm"""
         )
@@ -1526,7 +1526,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy.evaluate(_req("test-vm3", "@default"))
 
     def test_053_eval_resolve_dispvm_from_any(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * @anyvm @dispvm allow"""
         )
@@ -1538,7 +1538,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.request.target, "@dispvm")
 
     def test_054_eval_resolve_dispvm_from_target(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * @anyvm @anyvm allow target=@dispvm"""
         )
@@ -1550,7 +1550,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_055_eval_resolve_dispvm_from_default_target(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * @anyvm @anyvm ask default_target=@dispvm
             * * @anyvm @dispvm ask"""
@@ -1564,7 +1564,7 @@ class TC_40_evaluate(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_060_eval_to_dom0(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @adminvm allow"""
         )
@@ -1576,7 +1576,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.request.target, "dom0")
 
     def test_061_eval_to_dom0_keyword(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @adminvm allow"""
         )
@@ -1588,7 +1588,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.request.target, "@adminvm")
 
     def test_070_eval_to_dom0_ask_default_target(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 dom0 ask default_target=dom0"""
         )
@@ -1601,7 +1601,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_071_eval_to_dom0_ask_default_target(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 dom0 ask default_target=@adminvm"""
         )
@@ -1614,7 +1614,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_072_eval_to_dom0_ask_default_target(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @adminvm ask default_target=dom0"""
         )
@@ -1627,7 +1627,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_073_eval_to_dom0_ask_default_target(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @adminvm ask default_target=@adminvm"""
         )
@@ -2103,7 +2103,7 @@ class TC_50_Misc(unittest.TestCase):
 
 class TC_90_Compat40(unittest.TestCase):
     def test_001_loader(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy={"__main__": "!compat-4.0"},
             policy_compat={"test.Allow": "$anyvm $anyvm allow"},
         )
@@ -2118,7 +2118,7 @@ class TC_90_Compat40(unittest.TestCase):
         )
 
     def test_100_implicit_deny(self):
-        policy = parser.TestPolicy(
+        policy = parser.StringPolicy(
             policy={
                 "__main__": """
                 test.AllowBefore    * @anyvm @anyvm allow

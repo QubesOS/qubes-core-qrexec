@@ -50,7 +50,8 @@ install-dom0: all-dom0
 
 	for RPCNAME in \
 		policy.List policy.Get policy.Replace policy.Remove \
-		policy.include.List policy.include.Get policy.include.Replace policy.include.Remove; \
+		policy.include.List policy.include.Get policy.include.Replace \
+		policy.include.Remove policy.GetFiles; \
 	do ln -s /usr/bin/qubes-policy-admin $(DESTDIR)/etc/qubes-rpc/$$RPCNAME; \
 	done
 

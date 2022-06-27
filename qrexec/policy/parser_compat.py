@@ -198,8 +198,10 @@ class Compat40Loader(Compat40Parser):
         ...         subparser.execute(filepath=filepath, lineno=lineno)
     """
 
-    def __init__(self, *, legacy_path=POLICYPATH_OLD, **kwds):
+    def __init__(self, *, legacy_path=None, **kwds):
         super().__init__(**kwds)
+        if legacy_path is None:
+            legacy_path = POLICYPATH_OLD
         self.legacy_path = pathlib.Path(legacy_path)
 
     def resolve_path(self, included_path):
@@ -211,8 +213,8 @@ class Compat40Loader(Compat40Parser):
         yield from walk_compat_files(self.legacy_path)
 
 
-class TestCompat40Loader(Compat40Loader, parser.TestLoader):
-    """Used for tests. See :py:class:`qrexec.policy.parser.TestPolicy`."""
+class TestCompat40Loader(Compat40Loader, parser.StringLoader):
+    """Used for tests. See :py:class:`qrexec.policy.parser.StringPolicy`."""
 
     def walk_includes(self):
         """"""

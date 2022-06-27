@@ -1319,6 +1319,8 @@ class AbstractParser(metaclass=abc.ABCMeta):
 
     @staticmethod
     def _fix_filepath(file, filepath):
+        if filepath and not isinstance(filepath, pathlib.Path):
+            filepath = pathlib.Path(filepath)
         if filepath is None:
             try:
                 filepath = pathlib.Path(file.name)
@@ -1533,7 +1535,7 @@ class AbstractPolicy(AbstractParser):
     def __init__(self, *args, **kwds):
         super().__init__(*args, **kwds)
         #: list of Rule objects
-        self.rules = []
+        self.rules: List[Rule] = []
 
     def handle_rule(self, rule, *, filepath, lineno):
         # pylint: disable=unused-argument
@@ -1559,6 +1561,11 @@ class AbstractPolicy(AbstractParser):
             if rule.is_match(request):
                 return rule
         raise AccessDenied("no matching rule found")
+
+    def find_rules_for_service(self, service):
+        for rule in self.rules:
+            if rule.service is None or rule.service == service:
+                yield rule
 
     def collect_targets_for_ask(self, request):
         """Collect targets the user can choose from in 'ask' action
@@ -1929,7 +1936,7 @@ class ToposortMixIn:
         super().load_policy_file(file, filepath)
 
 
-class TestLoader(AbstractFileLoader):
+class StringLoader(AbstractFileLoader):
     """An in-memory loader used for tests
 
     Args:
@@ -1967,11 +1974,11 @@ class TestLoader(AbstractFileLoader):
         )
 
 
-class TestPolicy(ToposortMixIn, TestLoader, AbstractPolicy):
-    """Test policy, used for tests. It can be used to test most of the code
-    paths used in policy parsing.
+class StringPolicy(ToposortMixIn, StringLoader, AbstractPolicy):
+    """String policy, used for tests and loading single files as policy. It
+    can be used to test most of the code paths used in policy parsing.
 
-    >>> testpolicy = TestPolicy(policy={
+    >>> testpolicy = StringPolicy(policy={
     ...     '__main__': '!include policy2'
     ...     'policy2': '* * @anyvm @anyvm allow'})
     """

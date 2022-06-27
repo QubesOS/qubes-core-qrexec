@@ -108,6 +108,7 @@ rm -f %{name}-%{version}
 %{_sysconfdir}/qubes-rpc/qubes.WaitForSession
 %{_sysconfdir}/qubes-rpc/policy.List
 %{_sysconfdir}/qubes-rpc/policy.Get
+%{_sysconfdir}/qubes-rpc/policy.GetFiles
 %{_sysconfdir}/qubes-rpc/policy.Replace
 %{_sysconfdir}/qubes-rpc/policy.Remove
 %{_sysconfdir}/qubes-rpc/policy.include.List

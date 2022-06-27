@@ -169,3 +169,31 @@ def test_api_remove_validate(policy_dir, api):
         PolicyAdminException, match="including a file that will be removed"
     ):
         api.handle_request("policy.include.Remove", "inc", b"any")
+
+
+def test_api_get_files(policy_dir, api):
+    (policy_dir / "file1.policy").write_text("test.service * $any dom0 deny\n"
+                                             "test.service * $any $any allow")
+    (policy_dir / "file2.policy").write_text("other.service * dom0 dom0 allow\n"
+                                             "third.service * $any $any deny")
+
+    assert api.handle_request(
+        "policy.GetFiles", "test.service", b"") == b"file1\n"
+    assert api.handle_request(
+        "policy.GetFiles", "other.service", b"") == b"file2\n"
+
+    # files from outside normal policy directory should be listed as
+    # complete path
+    with tempfile.TemporaryDirectory() as other_dir_name:
+        (policy_dir / 'compat.policy').write_text('!compat-4.0')
+        other_dir = Path(other_dir_name)
+
+        from unittest import mock
+        with mock.patch("qrexec.policy.parser_compat.POLICYPATH_OLD", other_dir):
+            (other_dir / "third.service").write_text(
+                "dom0 dom0 allow\n"
+                "@anyvm @anyvm deny")
+
+            assert api.handle_request(
+                "policy.GetFiles", "third.service", b"") == \
+                   f"{other_dir / 'third.service'}\nfile2\n".encode('utf-8')

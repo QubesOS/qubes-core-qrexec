@@ -65,6 +65,9 @@ class PolicyClient:
     def policy_include_remove(self, name: str, token="any"):
         self.call("policy.Remove", name, token)
 
+    def policy_get_files(self, name: str):
+        return self.call("policy.GetFiles", name).rstrip("\n").split("\n")
+
     @staticmethod
     def call(service_name, arg=None, payload=""):
         return call("dom0", service_name, arg, input=payload)
