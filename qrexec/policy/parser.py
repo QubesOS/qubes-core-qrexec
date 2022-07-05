@@ -895,6 +895,9 @@ class Deny(ActionType):
     def __repr__(self):
         return "<{}>".format(type(self).__name__)
 
+    def __str__(self):
+        return "deny"
+
     def evaluate(self, request):
         """
         Raises:
@@ -930,6 +933,14 @@ class Allow(ActionType):
         return "<{} target={!r} user={!r}>".format(
             type(self).__name__, self.target, self.user
         )
+
+    def __str__(self):
+        return_str = "allow"
+        if self.target:
+            return_str += f" {self.target}"
+        if self.user:
+            return_str += f" {self.user}"
+        return return_str
 
     def evaluate(self, request):
         """
@@ -1008,6 +1019,16 @@ class Ask(ActionType):
         return "<{} target={!r} default_target={!r} user={!r}>".format(
             type(self).__name__, self.target, self.default_target, self.user
         )
+
+    def __str__(self):
+        return_str = "ask"
+        if self.target:
+            return_str += f" {self.target}"
+        if self.default_target:
+            return_str += f" {self.default_target}"
+        if self.user:
+            return_str += f" {self.user}"
+        return return_str
 
     def evaluate(self, request):
         """
@@ -1190,6 +1211,15 @@ class Rule:
                 self.action,
             )
         )
+
+    def __str__(self):
+        return_str = f"{self.service}\t"
+        if self.argument:
+            return_str += f'{self.argument}\t'
+        else:
+            return_str += '*\t'
+        return_str += f'{self.source}\t{self.target}\t{str(self.action)}'
+        return return_str
 
     @classmethod
     def from_line(cls, policy, line, *, filepath, lineno):
