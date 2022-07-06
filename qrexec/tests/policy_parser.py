@@ -734,6 +734,19 @@ class TC_10_Rule(unittest.TestCase):
             )
         )
 
+    def test_060_serialization(self):
+        lines = ["test.Service\t+argument\t@anyvm\t@anyvm\tallow",
+                 "test.Service\t+argument\t@anyvm\t@anyvm\task",
+                 "test.Service\t+argument\t@anyvm\t@anyvm\tdeny",
+                 "test.Service\t*\t@anyvm\t@anyvm\tdeny",
+                 "test.Service\t+argument\t@anyvm\t@dispvm:default-dvm\tallow",
+                 "test.Service\t+argument\t@tag:tag1\t@type:AppVM\task target=test-vm2 user=user",
+                 "test.Service\t+argument\t@anyvm\t@anyvm\tallow target=@adminvm"]
+
+        for line in lines:
+            rule = parser.Rule.from_line(
+                None, line, filepath="filename", lineno=12)
+            assert str(rule) == line
 
 #   def test_070_expand_override_target(self):
 #       line = parser.Rule.from_line(None,

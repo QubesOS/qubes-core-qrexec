@@ -229,7 +229,7 @@ class PolicyAdmin:
 
     @method("policy.GetFiles", no_payload=True)
     def policy_get_files(self, arg):
-        if not isinstance(arg, str):
+        if not isinstance(arg, str) or not arg:
             raise PolicyAdminException('Service cannot be empty.')
         invalid_chars = get_invalid_characters(arg, disallowed="+")
         if invalid_chars:

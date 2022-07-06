@@ -197,3 +197,13 @@ def test_api_get_files(policy_dir, api):
             assert api.handle_request(
                 "policy.GetFiles", "third.service", b"") == \
                    f"{other_dir / 'third.service'}\nfile2\n".encode('utf-8')
+
+    with pytest.raises(
+        PolicyAdminException, match="Service cannot be empty"
+    ):
+        api.handle_request("policy.GetFiles", "", b"")
+
+    with pytest.raises(
+        PolicyAdminException, match="contains invalid characters"
+    ):
+        api.handle_request("policy.GetFiles", "service+param", b"")

@@ -937,9 +937,9 @@ class Allow(ActionType):
     def __str__(self):
         return_str = "allow"
         if self.target:
-            return_str += f" {self.target}"
+            return_str += f" target={self.target}"
         if self.user:
-            return_str += f" {self.user}"
+            return_str += f" user={self.user}"
         return return_str
 
     def evaluate(self, request):
@@ -1023,11 +1023,11 @@ class Ask(ActionType):
     def __str__(self):
         return_str = "ask"
         if self.target:
-            return_str += f" {self.target}"
+            return_str += f" target={self.target}"
         if self.default_target:
-            return_str += f" {self.default_target}"
+            return_str += f" default_target={self.default_target}"
         if self.user:
-            return_str += f" {self.user}"
+            return_str += f" user={self.user}"
         return return_str
 
     def evaluate(self, request):
