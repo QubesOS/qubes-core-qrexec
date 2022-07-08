@@ -93,8 +93,8 @@ rm -f %{name}-%{version}
 %{_sbindir}/qrexec-daemon
 /usr/lib/qubes/qrexec-client
 
-%dir %{_sysconfdir}/qubes/policy.d
-%dir %{_sysconfdir}/qubes/policy.d/include
+%dir %attr(0775,root,qubes) %{_sysconfdir}/qubes/policy.d
+%dir %attr(0775,root,qubes) %{_sysconfdir}/qubes/policy.d/include
 %{_sysconfdir}/qubes/policy.d/README
 %{_sysconfdir}/qubes/policy.d/35-compat.policy
 %{_sysconfdir}/qubes/policy.d/90-admin-policy-default.policy
