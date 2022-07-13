@@ -29,10 +29,11 @@ md5sums=() #generate with 'makepkg -g'
 
 
 build() {
+    rm -rf "$srcdir"/*
     for source in libqrexec agent qrexec policy-agent-extra lib systemd qubes-rpc-config Makefile setup.py version
     do
         # shellcheck disable=SC2154
-        (ln -s "$srcdir/../$source" "$srcdir/$source")
+        (cp -r "$srcdir/../$source" "$srcdir/$source")
     done
 
     make all-base
