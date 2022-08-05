@@ -43,6 +43,7 @@ allow qubes_qrexec_agent_t self:netlink_selinux_socket { bind create };
 files_pid_file(qubes_qrexec_socket_t)
 su_exec(qubes_qrexec_agent_t)
 dev_rw_xen(qubes_qrexec_agent_t)
+systemd_exec_systemctl(qubes_qrexec_agent_t)
 allow qubes_qrexec_agent_t xauth_exec_t:file execute;
 type_transition qubes_qrexec_agent_t qubes_var_run_t:sock_file qubes_qrexec_socket_t "qrexec-agent";
 manage_sock_files_pattern(qubes_qrexec_agent_t, qubes_var_run_t, qubes_qrexec_socket_t)
