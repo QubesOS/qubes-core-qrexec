@@ -7,6 +7,7 @@ Type=notify
 ExecStartPre=/bin/sh -c '[ -e /dev/xen/evtchn ] || modprobe xen_evtchn'
 ExecStart=/usr/lib/qubes/qrexec-agent
 KillMode=process
+SELinuxContext=system_u:system_r:local_login_t:s0-s0:c0.c1023
 
 [Install]
 WantedBy=multi-user.target
