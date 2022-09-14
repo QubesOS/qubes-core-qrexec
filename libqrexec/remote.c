@@ -76,7 +76,8 @@ int handle_remote_data(
             case MSG_DATA_STDOUT:
                 if (hdr.type != (is_service ? MSG_DATA_STDIN : MSG_DATA_STDOUT)) {
                     LOG(ERROR, is_service ? "client sent MSG_DATA_STDOUT" : "service sent MSG_DATA_STDIN");
-                    continue;
+                    rc = REMOTE_ERROR;
+                    goto out;
                 }
 
                 if (stdin_fd < 0)
@@ -106,7 +107,8 @@ int handle_remote_data(
             case MSG_DATA_STDERR:
                 if (is_service) {
                     LOG(ERROR, "client sent MSG_DATA_STDERR");
-                    continue;
+                    rc = REMOTE_ERROR;
+                    goto out;
                 }
 
                 if (replace_chars_stderr)
@@ -120,7 +122,8 @@ int handle_remote_data(
             case MSG_DATA_EXIT_CODE:
                 if (is_service) {
                     LOG(ERROR, "client sent MSG_DATA_EXIT_CODE");
-                    continue;
+                    rc = REMOTE_ERROR;
+                    goto out;
                 }
 
                 /* remote process exited, so there is no sense to send any data
