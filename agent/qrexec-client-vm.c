@@ -103,10 +103,11 @@ static struct option longopts[] = {
     { "no-filter-escape-chars-stdout", no_argument, 0, opt_no_filter_stdout},
     { "no-filter-escape-chars-stderr", no_argument, 0, opt_no_filter_stderr},
     { "agent-socket", required_argument, 0, 'a'},
+    { "help", no_argument, 0, 'h' },
     { NULL, 0, 0, 0},
 };
 
-_Noreturn static void usage(const char *argv0) {
+_Noreturn static void usage(const char *argv0, int status) {
     fprintf(stderr,
             "usage: %s [options] target_vmname program_ident [local_program [local program arguments]]\n",
             argv0);
@@ -118,7 +119,8 @@ _Noreturn static void usage(const char *argv0) {
     fprintf(stderr, "  --no-filter-escape-chars-stderr - opposite to --filter-escape-chars-stderr\n");
     fprintf(stderr, "  --agent-socket=PATH - path to connect to, default: %s\n",
             QREXEC_AGENT_TRIGGER_PATH);
-    exit(2);
+    fprintf(stderr, "  -h, --help - print this message\n");
+    exit(status);
 }
 
 int main(int argc, char **argv)
@@ -145,7 +147,7 @@ int main(int argc, char **argv)
     signal(SIGPIPE, SIG_IGN);
 
     while (1) {
-        opt = getopt_long(argc, argv, "+tTa:", longopts, NULL);
+        opt = getopt_long(argc, argv, "+tTa:h", longopts, NULL);
         if (opt == -1)
             break;
         switch (opt) {
@@ -175,6 +177,8 @@ int main(int argc, char **argv)
             case 'T':
                 replace_chars_stderr = 1;
                 break;
+            case 'h':
+                usage(argv[0], 0);
             case opt_no_filter_stdout:
                 replace_chars_stdout = 0;
                 break;
@@ -188,12 +192,12 @@ int main(int argc, char **argv)
                 }
                 break;
             case '?':
-                usage(argv[0]);
+                usage(argv[0], 2);
         }
     }
 
     if (argc - optind < 2) {
-        usage(argv[0]);
+        usage(argv[0], 2);
     }
     if (argc - optind > 2) {
         start_local_process = 1;
