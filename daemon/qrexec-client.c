@@ -356,7 +356,7 @@ static void send_service_connect(int s, char *conn_ident,
 
 static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buffer *stdin_buf)
 {
-    struct process_io_request req;
+    struct process_io_request req = { 0 };
     int exit_code;
 
     req.vchan = vchan;
@@ -518,7 +518,7 @@ int main(int argc, char **argv)
     int connect_existing = 0;
     char *local_cmdline = NULL;
     char *remote_cmdline = NULL;
-    char *request_id;
+    char *request_id = NULL;
     char *src_domain_name = NULL;
     int src_domain_id = 0; /* if not -c given, the process is run in dom0 */
     int connection_timeout = 5;
