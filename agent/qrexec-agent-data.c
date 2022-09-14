@@ -180,7 +180,7 @@ static int handle_new_process_common(
     int exit_code;
     int data_protocol_version;
     struct buffer stdin_buf;
-    struct process_io_request req;
+    struct process_io_request req = { 0 };
     int stdin_fd, stdout_fd, stderr_fd;
     pid_t pid;
 
@@ -308,7 +308,7 @@ int handle_data_client(
     int exit_code;
     int data_protocol_version;
     libvchan_t *data_vchan;
-    struct process_io_request req;
+    struct process_io_request req = { 0 };
     struct buffer stdin_buf;
 
     assert(type == MSG_SERVICE_CONNECT);
