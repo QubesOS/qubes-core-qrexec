@@ -266,6 +266,9 @@ static int handle_new_process_common(
     req.sigchld = &sigchld;
     req.sigusr1 = &sigusr1;
 
+    req.prefix_data.data = NULL;
+    req.prefix_data.len = 0;
+
     exit_code = process_io(&req);
 
     if (type == MSG_EXEC_CMDLINE)
@@ -303,7 +306,8 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
 /* Returns exit code of remote process */
 int handle_data_client(
     int type, int connect_domain, int connect_port,
-    int stdin_fd, int stdout_fd, int stderr_fd, int buffer_size, pid_t pid)
+    int stdin_fd, int stdout_fd, int stderr_fd, int buffer_size, pid_t pid,
+    const char *extra_data)
 {
     int exit_code;
     int data_protocol_version;
@@ -345,6 +349,14 @@ int handle_data_client(
 
     req.sigchld = &sigchld;
     req.sigusr1 = &sigusr1;
+
+    if (extra_data) {
+        req.prefix_data.data = extra_data;
+        req.prefix_data.len = strlen(extra_data);
+    } else {
+        req.prefix_data.data = NULL;
+        req.prefix_data.len = 0;
+    }
 
     exit_code = process_io(&req);
     libvchan_close(data_vchan);

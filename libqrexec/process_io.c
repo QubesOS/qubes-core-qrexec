@@ -123,6 +123,7 @@ int process_io(const struct process_io_request *req) {
     sigset_t pollmask;
     struct timespec zero_timeout = { 0, 0 };
     struct timespec normal_timeout = { 10, 0 };
+    struct prefix_data empty = { 0, 0 }, prefix = req->prefix_data;
 
     sigemptyset(&pollmask);
     sigaddset(&pollmask, SIGCHLD);
@@ -297,7 +298,7 @@ int process_io(const struct process_io_request *req) {
         if (stdout_fd >= 0 && fds[FD_STDOUT].revents) {
             switch (handle_input(
                         vchan, stdout_fd, stdout_msg_type,
-                        data_protocol_version)) {
+                        data_protocol_version, &prefix)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send(handle_input stdout)");
                     break;
@@ -310,7 +311,7 @@ int process_io(const struct process_io_request *req) {
         if (stderr_fd >= 0 && fds[FD_STDERR].revents) {
             switch (handle_input(
                         vchan, stderr_fd, MSG_DATA_STDERR,
-                        data_protocol_version)) {
+                        data_protocol_version, &empty)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send(handle_input stderr)");
                     break;

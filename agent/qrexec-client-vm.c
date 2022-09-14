@@ -103,6 +103,7 @@ static struct option longopts[] = {
     { "no-filter-escape-chars-stdout", no_argument, 0, opt_no_filter_stdout},
     { "no-filter-escape-chars-stderr", no_argument, 0, opt_no_filter_stderr},
     { "agent-socket", required_argument, 0, 'a'},
+    { "prefix-data", required_argument, 0, 'p' },
     { "help", no_argument, 0, 'h' },
     { NULL, 0, 0, 0},
 };
@@ -120,6 +121,7 @@ _Noreturn static void usage(const char *argv0, int status) {
     fprintf(stderr, "  --agent-socket=PATH - path to connect to, default: %s\n",
             QREXEC_AGENT_TRIGGER_PATH);
     fprintf(stderr, "  -h, --help - print this message\n");
+    fprintf(stderr, "  -p PREFIX-DATA, --prefix-data=PREFIX-DATA - send the given data before the provided stdin (can only be used once)\n");
     exit(status);
 }
 
@@ -139,7 +141,7 @@ int main(int argc, char **argv)
     int inpipe[2], outpipe[2];
     int buffer_size = 0;
     int opt;
-    const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
+    const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH, *prefix_data = NULL;
 
     setup_logging("qrexec-client-vm");
 
@@ -147,7 +149,7 @@ int main(int argc, char **argv)
     signal(SIGPIPE, SIG_IGN);
 
     while (1) {
-        opt = getopt_long(argc, argv, "+tTa:h", longopts, NULL);
+        opt = getopt_long(argc, argv, "+tTa:hp:", longopts, NULL);
         if (opt == -1)
             break;
         switch (opt) {
@@ -179,6 +181,11 @@ int main(int argc, char **argv)
                 break;
             case 'h':
                 usage(argv[0], 0);
+            case 'p':
+                if (prefix_data)
+                    usage(argv[0], 2);
+                prefix_data = optarg;
+                break;
             case opt_no_filter_stdout:
                 replace_chars_stdout = 0;
                 break;
@@ -293,11 +300,11 @@ int main(int argc, char **argv)
 
         ret = handle_data_client(MSG_SERVICE_CONNECT,
                 exec_params.connect_domain, exec_params.connect_port,
-                inpipe[1], outpipe[0], -1, buffer_size, child_pid);
+                inpipe[1], outpipe[0], -1, buffer_size, child_pid, prefix_data);
     } else {
         ret = handle_data_client(MSG_SERVICE_CONNECT,
                 exec_params.connect_domain, exec_params.connect_port,
-                1, 0, -1, buffer_size, 0);
+                1, 0, -1, buffer_size, 0, prefix_data);
     }
 
     close(trigger_fd);

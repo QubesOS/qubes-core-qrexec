@@ -371,6 +371,8 @@ static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buf
     req.data_protocol_version = data_protocol_version;
     req.sigchld = &sigchld;
     req.sigusr1 = NULL;
+    req.prefix_data.data = NULL;
+    req.prefix_data.len = 0;
 
     exit_code = process_io(&req);
     libvchan_close(vchan);

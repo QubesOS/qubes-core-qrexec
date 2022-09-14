@@ -149,13 +149,13 @@ out:
 
 int handle_input(
     libvchan_t *vchan, int fd, int msg_type,
-    int data_protocol_version)
+    int data_protocol_version, struct prefix_data *prefix_data)
 {
     const size_t max_len = max_data_chunk_size(data_protocol_version);
     char *buf;
     ssize_t len;
     struct msg_header hdr;
-    int rc = REMOTE_ERROR;
+    int rc = REMOTE_ERROR, buf_space;
 
     buf = malloc(max_len);
     if (!buf) {
@@ -165,21 +165,29 @@ int handle_input(
 
     static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
     hdr.type = msg_type;
-    while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
-        len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
+    while ((buf_space = libvchan_buffer_space(vchan)) > (int)sizeof(struct msg_header)) {
+        len = buf_space - sizeof(struct msg_header);
         if ((size_t)len > max_len)
             len = max_len;
-        len = read(fd, buf, len);
-        /* If the other side of the socket is a process that is already dead,
-         * read from such socket could fail with ECONNRESET instead of
-         * just 0. */
-        if (len < 0 && errno == ECONNRESET)
-            len = 0;
-        if (len < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                rc = REMOTE_OK;
-            /* otherwise keep rc = REMOTE_ERROR */
-            goto out;
+        if (prefix_data->len) {
+            if ((size_t)len > prefix_data->len)
+                len = prefix_data->len;
+            memcpy(buf, prefix_data->data, len);
+            prefix_data->data += len;
+            prefix_data->len -= len;
+        } else {
+            len = read(fd, buf, len);
+            /* If the other side of the socket is a process that is already dead,
+             * read from such socket could fail with ECONNRESET instead of
+             * just 0. */
+            if (len < 0 && errno == ECONNRESET)
+                len = 0;
+            if (len < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                    rc = REMOTE_OK;
+                /* otherwise keep rc = REMOTE_ERROR */
+                goto out;
+            }
         }
         hdr.len = (uint32_t)len;
         /* do not fail on sending EOF (think: close()), it will be handled just below */

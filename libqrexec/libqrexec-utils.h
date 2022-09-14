@@ -193,6 +193,11 @@ int handle_remote_data(
     struct buffer *stdin_buf, int data_protocol_version,
     bool replace_chars_stdout, bool replace_chars_stderr, bool is_service);
 
+struct prefix_data {
+    const char *data;
+    size_t len;
+};
+
 /*
  * Handle data from the specified FD (cannot be -1) and send it over vchan
  * with a given message type (MSG_DATA_STDIN/STDOUT/STDERR).
@@ -205,7 +210,7 @@ int handle_remote_data(
  */
 int handle_input(
     libvchan_t *vchan, int fd, int msg_type,
-    int data_protocol_version);
+    int data_protocol_version, struct prefix_data *data);
 
 int send_exit_code(libvchan_t *vchan, int status);
 
@@ -241,6 +246,7 @@ struct process_io_request {
     volatile sig_atomic_t *sigchld;
     // can be NULL
     volatile sig_atomic_t *sigusr1;
+    struct prefix_data prefix_data;
 };
 
 /*
