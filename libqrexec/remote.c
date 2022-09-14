@@ -34,7 +34,7 @@
 int handle_remote_data(
     libvchan_t *data_vchan, int stdin_fd, int *status,
     struct buffer *stdin_buf, int data_protocol_version,
-    bool replace_chars_stdout, bool replace_chars_stderr)
+    bool replace_chars_stdout, bool replace_chars_stderr, bool is_service)
 {
     struct msg_header hdr;
     const size_t max_len = max_data_chunk_size(data_protocol_version);
@@ -74,6 +74,11 @@ int handle_remote_data(
              * of VM-VM connection */
             case MSG_DATA_STDIN:
             case MSG_DATA_STDOUT:
+                if (hdr.type != (is_service ? MSG_DATA_STDIN : MSG_DATA_STDOUT)) {
+                    LOG(ERROR, is_service ? "client sent MSG_DATA_STDOUT" : "service sent MSG_DATA_STDIN");
+                    continue;
+                }
+
                 if (stdin_fd < 0)
                     /* discard the data */
                     continue;
@@ -99,6 +104,11 @@ int handle_remote_data(
                 }
                 break;
             case MSG_DATA_STDERR:
+                if (is_service) {
+                    LOG(ERROR, "client sent MSG_DATA_STDERR");
+                    continue;
+                }
+
                 if (replace_chars_stderr)
                     do_replace_chars(buf, hdr.len);
                 /* stderr of remote service, log locally */
@@ -108,6 +118,11 @@ int handle_remote_data(
                 }
                 break;
             case MSG_DATA_EXIT_CODE:
+                if (is_service) {
+                    LOG(ERROR, "client sent MSG_DATA_EXIT_CODE");
+                    continue;
+                }
+
                 /* remote process exited, so there is no sense to send any data
                  * to it */
                 if (hdr.len < sizeof(*status)) {

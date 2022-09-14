@@ -274,7 +274,8 @@ int process_io(const struct process_io_request *req) {
                     stdin_buf,
                     data_protocol_version,
                     replace_chars_stdout > 0,
-                    replace_chars_stderr > 0)) {
+                    replace_chars_stderr > 0,
+                    is_service)) {
             case REMOTE_ERROR:
                 handle_vchan_error("read");
                 break;

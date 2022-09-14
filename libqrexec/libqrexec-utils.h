@@ -191,7 +191,7 @@ void do_replace_chars(char *buf, int len);
 int handle_remote_data(
     libvchan_t *data_vchan, int stdin_fd, int *status,
     struct buffer *stdin_buf, int data_protocol_version,
-    bool replace_chars_stdout, bool replace_chars_stderr);
+    bool replace_chars_stdout, bool replace_chars_stderr, bool is_service);
 
 /*
  * Handle data from the specified FD (cannot be -1) and send it over vchan
