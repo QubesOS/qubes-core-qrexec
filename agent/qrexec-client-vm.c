@@ -32,6 +32,7 @@
 #include "libqrexec-utils.h"
 #include "qrexec.h"
 #include "qrexec-agent.h"
+#include <err.h>
 
 const bool qrexec_is_fork_server = false;
 
@@ -272,10 +273,10 @@ int main(int argc, char **argv)
                     }
                 }
 
-                dup2(inpipe[0], 0);
-                dup2(outpipe[1], 1);
-                close(inpipe[0]);
-                close(outpipe[1]);
+                if (dup2(inpipe[0], 0) != 0 || dup2(outpipe[1], 1) != 1)
+                    err(1, "dup2()");
+                if (close(inpipe[0]) || close(outpipe[1]))
+                    err(1, "close()");
 
                 abs_exec_path = strdup(argv[optind + 2]);
                 argv[optind + 2] = get_program_name(argv[optind + 2]);
