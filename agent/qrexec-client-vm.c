@@ -265,11 +265,11 @@ int main(int argc, char **argv)
                 for (i = 0; i < 3; i++) {
                     if (i != 2 || getenv("PASS_LOCAL_STDERR")) {
                         char *env;
-                        if (asprintf(&env, "SAVED_FD_%d=%d", i, dup(i)) < 0) {
+                        int dup_fd = dup(i);
+                        if (dup_fd < 0 || asprintf(&env, "SAVED_FD_%d=%d", i, dup_fd) < 0 || putenv(env)) {
                             PERROR("prepare SAVED_FD_");
                             exit(1);
                         }
-                        putenv(env);
                     }
                 }
 
