@@ -24,7 +24,7 @@ import fcntl
 import os
 import hashlib
 
-from .parser import ValidateParser
+from .parser import ValidateParser, FilePolicy, get_invalid_characters
 from ..exc import PolicySyntaxError
 from .. import RPCNAME_ALLOWED_CHARSET
 
@@ -224,6 +224,36 @@ class PolicyAdmin:
         self._validate(path, None)
 
         path.unlink()
+
+    # List files
+
+    @method("policy.GetFiles", no_payload=True)
+    def policy_get_files(self, arg):
+        if not isinstance(arg, str) or not arg:
+            raise PolicyAdminException('Service cannot be empty.')
+        invalid_chars = get_invalid_characters(arg, disallowed="+")
+        if invalid_chars:
+            raise PolicyAdminException(
+                "Service {!r} contains invalid characters: {!r}".format(
+                    arg, invalid_chars))
+
+        service = arg
+
+        policy = FilePolicy(policy_path=self.policy_path)
+        rules = policy.find_rules_for_service(service)
+
+        file_list = []
+        for rule in rules:
+            try:
+                rule.filepath.relative_to(self.policy_path)
+            except ValueError:
+                path_to_append = str(rule.filepath)
+            else:
+                path_to_append = rule.filepath.stem
+            if path_to_append not in file_list:
+                file_list.append(path_to_append)
+
+        return ("".join("{}\n".format(f) for f in file_list)).encode('utf-8')
 
     # helpers
 

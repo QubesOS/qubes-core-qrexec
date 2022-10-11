@@ -895,6 +895,9 @@ class Deny(ActionType):
     def __repr__(self):
         return "<{}>".format(type(self).__name__)
 
+    def __str__(self):
+        return "deny"
+
     def evaluate(self, request):
         """
         Raises:
@@ -930,6 +933,14 @@ class Allow(ActionType):
         return "<{} target={!r} user={!r}>".format(
             type(self).__name__, self.target, self.user
         )
+
+    def __str__(self):
+        return_str = "allow"
+        if self.target:
+            return_str += f" target={self.target}"
+        if self.user:
+            return_str += f" user={self.user}"
+        return return_str
 
     def evaluate(self, request):
         """
@@ -1008,6 +1019,16 @@ class Ask(ActionType):
         return "<{} target={!r} default_target={!r} user={!r}>".format(
             type(self).__name__, self.target, self.default_target, self.user
         )
+
+    def __str__(self):
+        return_str = "ask"
+        if self.target:
+            return_str += f" target={self.target}"
+        if self.default_target:
+            return_str += f" default_target={self.default_target}"
+        if self.user:
+            return_str += f" user={self.user}"
+        return return_str
 
     def evaluate(self, request):
         """
@@ -1191,6 +1212,15 @@ class Rule:
             )
         )
 
+    def __str__(self):
+        return_str = f"{self.service}\t"
+        if self.argument:
+            return_str += f'{self.argument}\t'
+        else:
+            return_str += '*\t'
+        return_str += f'{self.source}\t{self.target}\t{str(self.action)}'
+        return return_str
+
     @classmethod
     def from_line(cls, policy, line, *, filepath, lineno):
         """
@@ -1319,6 +1349,8 @@ class AbstractParser(metaclass=abc.ABCMeta):
 
     @staticmethod
     def _fix_filepath(file, filepath):
+        if filepath and not isinstance(filepath, pathlib.Path):
+            filepath = pathlib.Path(filepath)
         if filepath is None:
             try:
                 filepath = pathlib.Path(file.name)
@@ -1533,7 +1565,7 @@ class AbstractPolicy(AbstractParser):
     def __init__(self, *args, **kwds):
         super().__init__(*args, **kwds)
         #: list of Rule objects
-        self.rules = []
+        self.rules: List[Rule] = []
 
     def handle_rule(self, rule, *, filepath, lineno):
         # pylint: disable=unused-argument
@@ -1559,6 +1591,11 @@ class AbstractPolicy(AbstractParser):
             if rule.is_match(request):
                 return rule
         raise AccessDenied("no matching rule found")
+
+    def find_rules_for_service(self, service):
+        for rule in self.rules:
+            if rule.service is None or rule.service == service:
+                yield rule
 
     def collect_targets_for_ask(self, request):
         """Collect targets the user can choose from in 'ask' action
@@ -1929,7 +1966,7 @@ class ToposortMixIn:
         super().load_policy_file(file, filepath)
 
 
-class TestLoader(AbstractFileLoader):
+class StringLoader(AbstractFileLoader):
     """An in-memory loader used for tests
 
     Args:
@@ -1967,11 +2004,11 @@ class TestLoader(AbstractFileLoader):
         )
 
 
-class TestPolicy(ToposortMixIn, TestLoader, AbstractPolicy):
-    """Test policy, used for tests. It can be used to test most of the code
-    paths used in policy parsing.
+class StringPolicy(ToposortMixIn, StringLoader, AbstractPolicy):
+    """String policy, used for tests and loading single files as policy. It
+    can be used to test most of the code paths used in policy parsing.
 
-    >>> testpolicy = TestPolicy(policy={
+    >>> testpolicy = StringPolicy(policy={
     ...     '__main__': '!include policy2'
     ...     'policy2': '* * @anyvm @anyvm allow'})
     """

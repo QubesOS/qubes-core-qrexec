@@ -18,7 +18,6 @@
 import pathlib
 import subprocess
 import asyncio
-import os
 
 from .utils import prepare_subprocess_kwds
 
@@ -106,9 +105,6 @@ def make_command(dest, rpcname, arg):
     if VERSION == "dom0" and dest == "dom0":
         # Invoke qubes-rpc-multiplexer directly. This will work for non-socket
         # services only.
-        assert (
-            os.getuid() == 0
-        ), "you need to run as root for local QubesRPC calls"
         return [RPC_MULTIPLEXER, rpcname, "dom0"]
 
     if VERSION == "dom0":

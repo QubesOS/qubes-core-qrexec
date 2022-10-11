@@ -17,6 +17,7 @@
 !include-service policy.include.List     *  include/admin-policy-ro
 !include-service policy.Get              *  include/admin-policy-ro
 !include-service policy.include.Get      *  include/admin-policy-ro
+!include-service policy.GetFiles         *  include/admin-policy-ro
 
 !include-service policy.Replace          *  include/admin-policy-rwx
 !include-service policy.include.Replace  *  include/admin-policy-rwx
