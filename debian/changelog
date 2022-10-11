@@ -1,3 +1,40 @@
+qubes-core-qrexec (4.2.0-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Ignore oversensitive pylint warnings
+  * Reformat code to be PEP8 compliant
+
+  [ Frédéric Pierret (fepitre) ]
+  * Drop Travis CI
+
+  [ Marek Marczykowski-Górecki ]
+  * ci: add codecov-wrapper
+
+  [ Marta Marczykowska-Górecka ]
+  * Fix incorrect ownership of policy dirs
+
+  [ Locria Cyber ]
+  * In PKGBUILD: copy instead of symlink
+
+  [ locriacyber ]
+  * Update archlinux/PKGBUILD
+
+  [ Marek Marczykowski-Górecki ]
+  * ci: install extra packages necessary for unit tests
+
+  [ Frédéric Pierret (fepitre) ]
+  * Add Qubes Builder v2 integration
+
+  [ Marta Marczykowska-Górecka ]
+  * Add get_files to policy admin client
+  * Remove root user requirement for policy admin client
+  * Add str representation to policy rule objects
+  * add more tests to placate codecov
+  * Apply @marmarek's code review
+  * Fix empty file list in PolicyClient.get_files
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Tue, 11 Oct 2022 17:58:34 +0200
+
 qubes-core-qrexec (4.1.18-1) unstable; urgency=medium
 
   * Fix parsing legacy policy files
