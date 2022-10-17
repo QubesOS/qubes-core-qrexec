@@ -30,6 +30,7 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#include <poll.h>
 #include <errno.h>
 #include <assert.h>
 #include "qrexec.h"
@@ -658,11 +659,10 @@ int main(int argc, char **argv)
             close(s);
             if (wait_connection_end) {
                 /* wait for EOF */
-                fd_set read_fd;
-                assert(wait_connection_end < FD_SETSIZE);
-                FD_ZERO(&read_fd);
-                FD_SET(wait_connection_end, &read_fd);
-                select(wait_connection_end+1, &read_fd, NULL, NULL, 0);
+                struct pollfd fds[1] = {
+                    { .fd = wait_connection_end, .events = POLLIN | POLLHUP, .revents = 0 },
+                };
+                poll(fds, 1, -1);
             }
         } else {
             data_vchan = libvchan_server_init(data_domain, data_port,
