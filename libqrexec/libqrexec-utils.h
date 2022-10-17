@@ -30,6 +30,7 @@
 #include <libvchan.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <poll.h>
 
 #include <qrexec.h>
 
@@ -134,6 +135,12 @@ int fork_and_flush_stdin(int fd, struct buffer *buffer);
 int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
                               int *stdout_fd, int *stderr_fd,
                               bool strip_username, struct buffer *buffer);
+/*
+ * A version of ppoll() that also correctly handles vchan's event pending
+ * flag.  fds[0] is used internally and fds[0].fd must be equal to -1 on entry.
+ */
+int ppoll_vchan(libvchan_t *ctrl, struct pollfd *fds, size_t nfds,
+                struct timespec *timeout, const sigset_t *sigmask);
 
 /*
  * A version of pselect() that also correctly handles vchan's event pending

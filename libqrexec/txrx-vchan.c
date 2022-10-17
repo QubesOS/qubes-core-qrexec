@@ -30,6 +30,26 @@
 
 #include "libqrexec-utils.h"
 
+int ppoll_vchan(libvchan_t *ctrl, struct pollfd *fds, size_t nfds,
+                struct timespec *timeout, const sigset_t *sigmask) {
+    struct timespec zero_timeout = { 0, 0 };
+    int ret;
+
+    assert(nfds >= 1);
+    if (libvchan_data_ready(ctrl) > 0) {
+        /* check for other FDs, but exit immediately */
+        ret = ppoll(fds, nfds, &zero_timeout, sigmask);
+    } else {
+        ret = ppoll(fds, nfds, timeout, sigmask);
+    }
+
+    /* clear event pending flag, this shouldn't block */
+    if (ret > 0 && fds[0].revents)
+        libvchan_wait(ctrl);
+
+    return ret;
+}
+
 int pselect_vchan(libvchan_t *ctrl, int nfds, fd_set *rdset, fd_set *wrset,
                   struct timespec *timeout, const sigset_t *sigmask) {
     struct timespec zero_timeout = { 0, 0 };
