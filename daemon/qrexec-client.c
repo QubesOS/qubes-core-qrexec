@@ -517,7 +517,6 @@ int main(int argc, char **argv)
     int s;
     int just_exec = 0;
     int wait_connection_end = 0;
-    int connect_existing = 0;
     char *local_cmdline = NULL;
     char *remote_cmdline = NULL;
     char *request_id = NULL;
@@ -546,7 +545,6 @@ int main(int argc, char **argv)
                 break;
             case 'c':
                 parse_connect(optarg, &request_id, &src_domain_name, &src_domain_id);
-                connect_existing = 1;
                 is_service = 1;
                 break;
             case 't':
@@ -577,13 +575,13 @@ int main(int argc, char **argv)
 
     register_exec_func(&do_exec);
 
-    if (just_exec + connect_existing + (local_cmdline != 0) > 1) {
+    if (just_exec + (request_id != NULL) + (local_cmdline != 0) > 1) {
         fprintf(stderr, "ERROR: only one of -e, -l, -c can be specified\n");
         usage(argv[0]);
     }
 
     if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
-        if (connect_existing) {
+        if (request_id != NULL) {
             msg_type = MSG_SERVICE_CONNECT;
             strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
             svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
@@ -600,8 +598,8 @@ int main(int argc, char **argv)
         negotiate_connection_params(s,
                 0, /* dom0 */
                 msg_type,
-                connect_existing ? (void*)&svc_params : (void*)remote_cmdline,
-                connect_existing ? sizeof(svc_params) : compute_service_length(remote_cmdline, argv[0]),
+                request_id ? (void*)&svc_params : (void*)remote_cmdline,
+                request_id ? sizeof(svc_params) : compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
                 &data_port);
 
@@ -609,7 +607,7 @@ int main(int argc, char **argv)
         buffer_init(&stdin_buffer);
         wait_for_session_maybe(remote_cmdline);
         prepare_ret = prepare_local_fds(remote_cmdline, &stdin_buffer);
-        if (connect_existing) {
+        if (request_id) {
             void (*old_handler)(int);
 
             /* libvchan_client_init is blocking and does not support connection
@@ -628,7 +626,7 @@ int main(int argc, char **argv)
             LOG(ERROR, "Failed to open data vchan connection");
             exit(1);
         }
-        data_protocol_version = handle_agent_handshake(data_vchan, connect_existing);
+        data_protocol_version = handle_agent_handshake(data_vchan, request_id != NULL);
         if (data_protocol_version < 0)
             exit(1);
         if (prepare_ret < 0)
@@ -644,7 +642,7 @@ int main(int argc, char **argv)
                 compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
                 &data_port);
-        if (wait_connection_end && connect_existing)
+        if (wait_connection_end && request_id)
             /* save socket fd, 's' will be reused for the other qrexec-daemon
              * connection */
             wait_connection_end = s;
@@ -654,7 +652,7 @@ int main(int argc, char **argv)
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
         prepare_ret = prepare_local_fds(local_cmdline, &stdin_buffer);
-        if (connect_existing) {
+        if (request_id) {
             s = connect_unix_socket(src_domain_name);
             send_service_connect(s, request_id, data_domain, data_port);
             close(s);
