@@ -808,12 +808,11 @@ static void reap_children(void)
     child_exited = 0;
 }
 
-static int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
+static int fill_fds_for_select(fd_set * rdset)
 {
     int max = -1;
     int i;
     FD_ZERO(rdset);
-    FD_ZERO(wrset);
 
     FD_SET(trigger_fd, rdset);
     if (trigger_fd > max)
@@ -966,17 +965,17 @@ int main(int argc, char **argv)
 
     while (!terminate_requested) {
         struct timespec timeout = { 1, 0 };
-        fd_set rdset, wrset;
+        fd_set rdset;
         int ret, max;
 
         if (child_exited)
             reap_children();
 
-        max = fill_fds_for_select(&rdset, &wrset);
+        max = fill_fds_for_select(&rdset);
         if (libvchan_buffer_space(ctrl_vchan) <= (int)sizeof(struct msg_header))
             FD_ZERO(&rdset);
 
-        ret = pselect_vchan(ctrl_vchan, max+1, &rdset, &wrset, &timeout, &selectmask);
+        ret = pselect_vchan(ctrl_vchan, max+1, &rdset, NULL, &timeout, &selectmask);
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
