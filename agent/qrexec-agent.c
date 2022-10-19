@@ -666,9 +666,7 @@ static void handle_server_exec_request_do(int type, int connect_domain, int conn
          * (which sends back what it got from us earlier), so it isn't critical.
          */
         if (write(client_fd, &params, sizeof(params)) < 0) {
-            /* Do not start pooling invalid FD - it will crash the qrexec-agent with
-             * "pselect: Bad file descriptor"
-             */
+            /* Do not start polling invalid FD */
             if (errno == EBADF) {
                 LOG(ERROR, "Got MSG_SERVICE_CONNECT from qrexec-daemon with invalid ident (%s), ignoring",
                         cmdline);
@@ -808,32 +806,6 @@ static void reap_children(void)
     child_exited = 0;
 }
 
-static int fill_fds_for_select(fd_set * rdset)
-{
-    int max = -1;
-    int i;
-    FD_ZERO(rdset);
-
-    FD_SET(trigger_fd, rdset);
-    if (trigger_fd > max)
-        max = trigger_fd;
-
-    for (i = 0; i < MAX_FDS; i++) {
-        if (connection_info[i].pid != 0 && connection_info[i].fd != -1) {
-            if (connection_info[i].fd >= FD_SETSIZE) {
-                fprintf(stderr,
-                        "connection_info[%d].fd (%d) not less than FD_SETSIZE (%d)\n",
-                        i, connection_info[i].fd, FD_SETSIZE);
-                abort();
-            }
-            FD_SET(connection_info[i].fd, rdset);
-            if (connection_info[i].fd > max)
-                max = connection_info[i].fd;
-        }
-    }
-    return max;
-}
-
 static void handle_trigger_io()
 {
     struct msg_header hdr;
@@ -883,25 +855,15 @@ error:
     close(client_fd);
 }
 
-static void handle_terminated_fork_client(fd_set *rdset) {
-    int i;
+static void handle_terminated_fork_client(int id) {
     ssize_t ret;
     char buf[2];
 
-    for (i = 0; i < MAX_FDS; i++) {
-        if (connection_info[i].pid && connection_info[i].fd >= 0 &&
-                FD_ISSET(connection_info[i].fd, rdset)) {
-            ret = read(connection_info[i].fd, buf, sizeof(buf));
-            if (ret == 0 || (ret == -1 && errno == ECONNRESET)) {
-                close(connection_info[i].fd);
-                release_connection(i);
-            } else {
-                PERROR("Unexpected read on fork-server connection: %zd", ret);
-                close(connection_info[i].fd);
-                release_connection(i);
-            }
-        }
-    }
+    ret = read(connection_info[id].fd, buf, sizeof(buf));
+    if (!(ret == 0 || (ret == -1 && errno == ECONNRESET)))
+        PERROR("Unexpected read on fork-server connection: %zd", ret);
+    close(connection_info[id].fd);
+    release_connection(id);
 }
 
 struct option longopts[] = {
@@ -963,33 +925,71 @@ int main(int argc, char **argv)
     sigprocmask(SIG_BLOCK, &selectmask, NULL);
     sigemptyset(&selectmask);
 
+    struct pollfd fds[MAX_FDS + 2];
+    fds[0] = (struct pollfd) { libvchan_fd_for_select(ctrl_vchan), POLLIN | POLLHUP, 0 };
+    fds[1] = (struct pollfd) { trigger_fd, POLLIN | POLLHUP, 0 };
+
     while (!terminate_requested) {
         struct timespec timeout = { 1, 0 };
-        fd_set rdset;
-        int ret, max;
+        size_t nfds = 1;
+        int ret;
 
         if (child_exited)
             reap_children();
 
-        max = fill_fds_for_select(&rdset);
-        if (libvchan_buffer_space(ctrl_vchan) <= (int)sizeof(struct msg_header))
-            FD_ZERO(&rdset);
+        if (libvchan_buffer_space(ctrl_vchan) > (int)sizeof(struct msg_header)) {
+            /* vchan has space, so poll for clients */
 
-        ret = pselect_vchan(ctrl_vchan, max+1, &rdset, NULL, &timeout, &selectmask);
+            nfds++; /* for trigger_fd */
+            for (size_t i = 0; i < MAX_FDS; i++) {
+                if (connection_info[i].pid != 0 && connection_info[i].fd != -1)
+                    fds[nfds++] = (struct pollfd) { connection_info[i].fd, POLLIN | POLLHUP, 0 };
+            }
+        }
+
+        ret = ppoll_vchan(ctrl_vchan, fds, nfds, &timeout, &selectmask);
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
-            PERROR("pselect");
+            PERROR("ppoll");
             return 1;
+        }
+
+        if (nfds > 2) {
+            size_t fds_checked = 2;
+
+            /*
+             * Iterate over the connection_info entries again.  For each entry
+             * that is valid (pid nonzero and FD not equal to -1), retrieve the
+             * polling result from fds[fds_checked] and increment fds_checked to
+             * point to the next polled file descriptor, if any.  This relies on
+             * connection_info not having changed since fds[] was populated above,
+             * which ensures that the retrieved `struct pollfd` will be the one
+             * for the correct `struct _connection_info`.  Therefore, this loop
+             * must come immediately after the call to `ppoll_vchan`.
+             */
+            for (size_t i = 0; i < MAX_FDS; i++) {
+                if (connection_info[i].pid != 0 && connection_info[i].fd != -1) {
+                    if (nfds <= fds_checked) {
+                        fprintf(stderr, "BAD: nfds (%zu) <= fds_checked (%zu), aborting!\n", nfds, fds_checked);
+                        assert(nfds > fds_checked);
+                        abort();
+                    }
+                    struct pollfd fd_info = fds[fds_checked++];
+                    assert(fd_info.fd == connection_info[i].fd);
+                    if (fd_info.revents)
+                        handle_terminated_fork_client(i);
+                }
+            }
+
+            assert(fds_checked == nfds);
         }
 
         while (libvchan_data_ready(ctrl_vchan))
             handle_server_cmd();
 
-        if (FD_ISSET(trigger_fd, &rdset))
+        if (nfds > 1 && fds[1].revents)
             handle_trigger_io();
-
-        handle_terminated_fork_client(&rdset);
     }
 
     libvchan_close(ctrl_vchan);

@@ -1186,7 +1186,7 @@ int main(int argc, char **argv)
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
-            PERROR("pselect");
+            PERROR("ppoll");
             return 1;
         }
 

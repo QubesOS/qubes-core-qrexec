@@ -24,7 +24,6 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <errno.h>
-#include <sys/select.h>
 #include <libvchan.h>
 #include <assert.h>
 
@@ -45,32 +44,6 @@ int ppoll_vchan(libvchan_t *ctrl, struct pollfd *fds, size_t nfds,
 
     /* clear event pending flag, this shouldn't block */
     if (ret > 0 && fds[0].revents)
-        libvchan_wait(ctrl);
-
-    return ret;
-}
-
-int pselect_vchan(libvchan_t *ctrl, int nfds, fd_set *rdset, fd_set *wrset,
-                  struct timespec *timeout, const sigset_t *sigmask) {
-    struct timespec zero_timeout = { 0, 0 };
-    int vchan_fd;
-    int ret;
-
-    vchan_fd = libvchan_fd_for_select(ctrl);
-    assert(vchan_fd < FD_SETSIZE);
-    FD_SET(vchan_fd, rdset);
-    if (vchan_fd + 1 > nfds)
-        nfds = vchan_fd + 1;
-
-    if (libvchan_data_ready(ctrl) > 0) {
-        /* check for other FDs, but exit immediately */
-        ret = pselect(nfds, rdset, wrset, NULL, &zero_timeout, sigmask);
-    } else {
-        ret = pselect(nfds, rdset, wrset, NULL, timeout, sigmask);
-    }
-
-    /* clear event pending flag, this shouldn't block */
-    if (ret > 0 && FD_ISSET(vchan_fd, rdset))
         libvchan_wait(ctrl);
 
     return ret;

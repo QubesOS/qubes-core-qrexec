@@ -29,7 +29,7 @@
 #include "libqrexec-utils.h"
 
 /* 
-There is buffered data in "buffer" for client and select()
+There is buffered data in "buffer" for client and poll()
 reports that "fd" is writable. Write as much as possible to fd.
 */
 int flush_client_data(int fd, struct buffer *buffer)

@@ -141,13 +141,6 @@ int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
 int ppoll_vchan(libvchan_t *ctrl, struct pollfd *fds, size_t nfds,
                 struct timespec *timeout, const sigset_t *sigmask);
 
-/*
- * A version of pselect() that also correctly handles vchan's event pending
- * flag.
- */
-int pselect_vchan(libvchan_t *ctrl, int nfds, fd_set *rdset, fd_set *wrset,
-                  struct timespec *timeout, const sigset_t *sigmask);
-
 int read_vchan_all(libvchan_t *vchan, void *data, size_t size);
 int write_vchan_all(libvchan_t *vchan, const void *data, size_t size);
 int read_all(int fd, void *buf, int size);
