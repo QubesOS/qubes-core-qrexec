@@ -637,6 +637,8 @@ static void handle_message_from_client(int fd)
             }
             terminate_client(fd);
             return;
+        case CLIENT_INVALID:
+            return; /* nothing to do */
         default:
             LOG(ERROR, "Invalid client state %d", clients[fd].state);
             exit(1);
@@ -1205,11 +1207,8 @@ int main(int argc, char **argv)
             handle_message_from_agent();
 
         for (size_t i = 2; i < nfds; i++) {
-            if (fds[i].revents) {
-                int fd = fds[i].fd;
-                if (clients[fd].state != CLIENT_INVALID)
-                    handle_message_from_client(fd);
-            }
+            if (fds[i].revents)
+                handle_message_from_client(fds[i].fd);
         }
     }
 
