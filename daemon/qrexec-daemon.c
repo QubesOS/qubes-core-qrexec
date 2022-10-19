@@ -1022,34 +1022,6 @@ static void handle_message_from_agent(void)
     }
 }
 
-/*
- * Scan the "clients" table, add ones we want to read from (because the other
- * end has not send MSG_XOFF on them) to read_fdset, add ones we want to write
- * to (because its pipe is full) to write_fdset. Return the highest used file
- * descriptor number, needed for the first select() parameter.
- */
-static int fill_fdsets_for_select(fd_set * read_fdset)
-{
-    int i;
-    int max = -1;
-
-    FD_ZERO(read_fdset);
-    assert(max_client_fd < FD_SETSIZE);
-    assert(qrexec_daemon_unix_socket_fd < FD_SETSIZE);
-    for (i = 0; i <= max_client_fd; i++) {
-        if (clients[i].state != CLIENT_INVALID) {
-            FD_SET(i, read_fdset);
-            max = i;
-        }
-    }
-
-    FD_SET(qrexec_daemon_unix_socket_fd, read_fdset);
-    if (qrexec_daemon_unix_socket_fd > max)
-        max = qrexec_daemon_unix_socket_fd;
-
-    return max;
-}
-
 /* qrexec-agent has disconnected, cleanup local state and try to connect again.
  * If remote domain dies, terminate qrexec-daemon.
  */
@@ -1190,18 +1162,25 @@ int main(int argc, char **argv)
      */
     while (!terminate_requested) {
         struct timespec timeout = { 1, 0 };
-        fd_set rdset, wrset;
-        int ret, max;
+        int ret;
 
         if (child_exited)
             reap_children();
 
-        FD_ZERO(&wrset);
-        max = fill_fdsets_for_select(&rdset);
-        if (libvchan_buffer_space(vchan) <= (int)sizeof(struct msg_header))
-            FD_ZERO(&rdset);	// vchan full - don't read from clients
+        size_t nfds = 0;
+        struct pollfd fds[MAX_CLIENTS + 2];
+        fds[nfds++] = (struct pollfd) { libvchan_fd_for_select(vchan), POLLIN | POLLHUP, 0 };
+        if (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
+            assert(max_client_fd < MAX_CLIENTS);
+            // vchan not full, read from clients
+            fds[nfds++] = (struct pollfd) { qrexec_daemon_unix_socket_fd, POLLIN | POLLHUP, 0 };
+            for (i = 0; i <= max_client_fd; i++) {
+                if (clients[i].state != CLIENT_INVALID)
+                    fds[nfds++] = (struct pollfd) { i, POLLIN | POLLHUP, 0 };
+            }
+        }
 
-        ret = pselect_vchan(vchan, max+1, &rdset, &wrset, &timeout, &selectmask);
+        ret = ppoll_vchan(vchan, fds, nfds, &timeout, &selectmask);
         if (ret < 0) {
             if (errno == EINTR)
                 continue;
@@ -1219,16 +1198,19 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (FD_ISSET(qrexec_daemon_unix_socket_fd, &rdset))
+        if (nfds > 1 && fds[1].revents)
             handle_new_client();
 
         while (libvchan_data_ready(vchan))
             handle_message_from_agent();
 
-        for (i = 0; i <= max_client_fd; i++)
-            if (clients[i].state != CLIENT_INVALID
-                && FD_ISSET(i, &rdset))
-                handle_message_from_client(i);
+        for (size_t i = 2; i < nfds; i++) {
+            if (fds[i].revents) {
+                int fd = fds[i].fd;
+                if (clients[fd].state != CLIENT_INVALID)
+                    handle_message_from_client(fd);
+            }
+        }
     }
 
     if (vchan)
