@@ -29,7 +29,6 @@
 #include <stdbool.h>
 #include <libvchan.h>
 #include <errno.h>
-#include <sys/select.h>
 #include <poll.h>
 
 #include <qrexec.h>

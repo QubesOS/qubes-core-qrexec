@@ -19,7 +19,6 @@
  *
  */
 
-#include <sys/select.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -1029,13 +1028,12 @@ static void handle_message_from_agent(void)
  * to (because its pipe is full) to write_fdset. Return the highest used file
  * descriptor number, needed for the first select() parameter.
  */
-static int fill_fdsets_for_select(fd_set * read_fdset, fd_set * write_fdset)
+static int fill_fdsets_for_select(fd_set * read_fdset)
 {
     int i;
     int max = -1;
 
     FD_ZERO(read_fdset);
-    FD_ZERO(write_fdset);
     assert(max_client_fd < FD_SETSIZE);
     assert(qrexec_daemon_unix_socket_fd < FD_SETSIZE);
     for (i = 0; i <= max_client_fd; i++) {
@@ -1198,7 +1196,8 @@ int main(int argc, char **argv)
         if (child_exited)
             reap_children();
 
-        max = fill_fdsets_for_select(&rdset, &wrset);
+        FD_ZERO(&wrset);
+        max = fill_fdsets_for_select(&rdset);
         if (libvchan_buffer_space(vchan) <= (int)sizeof(struct msg_header))
             FD_ZERO(&rdset);	// vchan full - don't read from clients
 
