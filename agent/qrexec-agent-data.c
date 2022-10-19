@@ -37,7 +37,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <fcntl.h>

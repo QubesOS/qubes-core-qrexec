@@ -29,7 +29,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/time.h>
-#include <sys/select.h>
 #include <poll.h>
 #include <errno.h>
 #include <assert.h>
@@ -461,12 +460,8 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
     }
     while (conn && libvchan_is_open(conn) == VCHAN_WAITING) {
         if (timeout) {
-            fd_set rdset;
-            int fd = libvchan_fd_for_select(conn);
-            if (fd >= FD_SETSIZE) {
-                fprintf(stderr, "vchan fd not less than FD_SETSIZE\n");
-                exit(1);
-            }
+            int const fd = libvchan_fd_for_select(conn);
+            struct pollfd fds = { .fd = fd, .events = POLLIN | POLLHUP, .revents = 0 };
 
             /* calculate how much time left until connection timeout expire */
             if (gettimeofday(&now_tv, NULL) == -1) {
@@ -479,9 +474,11 @@ static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
                 LOG(ERROR, "vchan connection timeout");
                 exit(1);
             }
-            FD_ZERO(&rdset);
-            FD_SET(fd, &rdset);
-            switch (select(fd+1, &rdset, NULL, NULL, &timeout_tv)) {
+            struct timespec timeout_tp = {
+                .tv_sec = timeout_tv.tv_sec,
+                .tv_nsec = 1000 * timeout_tv.tv_usec,
+            };
+            switch (ppoll(&fds, 1, &timeout_tp, NULL)) {
             case -1:
                 if (errno == EINTR) {
                     break;
