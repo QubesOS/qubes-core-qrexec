@@ -34,6 +34,8 @@
 #include <assert.h>
 #include "qrexec.h"
 #include <fcntl.h>
+#include <err.h>
+#include <time.h>
 
 #include "libqrexec-utils.h"
 
@@ -451,38 +453,42 @@ static void sigalrm_handler(int x __attribute__((__unused__)))
     exit(1);
 }
 
-static void wait_for_vchan_client_with_timeout(libvchan_t *conn, int timeout) {
-    struct timeval start_tv, now_tv, timeout_tv;
+static const long BILLION_NANOSECONDS = 1000000000L;
 
-    if (timeout && gettimeofday(&start_tv, NULL) == -1) {
-        PERROR("gettimeofday");
+static void wait_for_vchan_client_with_timeout(libvchan_t *conn, time_t timeout) {
+    struct timespec end_tp, now_tp, timeout_tp;
+
+    if (timeout && clock_gettime(CLOCK_MONOTONIC, &end_tp)) {
+        PERROR("clock_gettime");
         exit(1);
     }
+    assert(end_tp.tv_nsec >= 0 && end_tp.tv_nsec < BILLION_NANOSECONDS);
+    end_tp.tv_sec += timeout;
+    int const fd = libvchan_fd_for_select(conn);
     while (conn && libvchan_is_open(conn) == VCHAN_WAITING) {
         if (timeout) {
-            int const fd = libvchan_fd_for_select(conn);
+            bool did_timeout = true;
             struct pollfd fds = { .fd = fd, .events = POLLIN | POLLHUP, .revents = 0 };
 
             /* calculate how much time left until connection timeout expire */
-            if (gettimeofday(&now_tv, NULL) == -1) {
-                PERROR("gettimeofday");
+            if (clock_gettime(CLOCK_MONOTONIC, &now_tp)) {
+                PERROR("clock_gettime");
                 exit(1);
             }
-            timersub(&start_tv, &now_tv, &timeout_tv);
-            timeout_tv.tv_sec += timeout;
-            if (timeout_tv.tv_sec < 0) {
-                LOG(ERROR, "vchan connection timeout");
-                exit(1);
-            }
-            struct timespec timeout_tp = {
-                .tv_sec = timeout_tv.tv_sec,
-                .tv_nsec = 1000 * timeout_tv.tv_usec,
-            };
-            switch (ppoll(&fds, 1, &timeout_tp, NULL)) {
-            case -1:
-                if (errno == EINTR) {
-                    break;
+            assert(now_tp.tv_nsec >= 0 && now_tp.tv_nsec < BILLION_NANOSECONDS);
+            if (now_tp.tv_sec <= end_tp.tv_sec) {
+                timeout_tp.tv_sec = end_tp.tv_sec - now_tp.tv_sec;
+                timeout_tp.tv_nsec = end_tp.tv_nsec - now_tp.tv_nsec;
+                if (timeout_tp.tv_nsec < 0) {
+                    timeout_tp.tv_nsec += BILLION_NANOSECONDS;
+                    timeout_tp.tv_sec--;
                 }
+                did_timeout = timeout_tp.tv_sec < 0;
+            }
+            switch (did_timeout ? 0 : ppoll(&fds, 1, &timeout_tp, NULL)) {
+            case -1:
+                if (errno == EINTR)
+                    break;
                 LOG(ERROR, "vchan connection error");
                 exit(1);
             case 0:
