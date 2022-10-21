@@ -381,11 +381,7 @@ static void init(void)
     if (handle_handshake(ctrl_vchan) < 0)
         exit(1);
     old_umask = umask(0);
-    if ((trigger_fd = get_server_socket(agent_trigger_path)) >= FD_SETSIZE) {
-        fprintf(stderr, "TRIGGER_FD too large (got %d, FD_SETSIZE is %d)\n",
-                trigger_fd, FD_SETSIZE);
-        exit(1);
-    }
+    trigger_fd = get_server_socket(agent_trigger_path);
     umask(old_umask);
     register_exec_func(do_exec);
 
