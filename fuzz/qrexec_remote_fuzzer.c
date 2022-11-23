@@ -25,7 +25,7 @@ void LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     handle_remote_data(
         vchan_file, stdin_file->fd, &status,
         &stdin_buf, QREXEC_PROTOCOL_V2,
-        false, true);
+        false, true, false);
 
     fuzz_file_destroy(stdin_file);
     fuzz_file_destroy(vchan_file);
