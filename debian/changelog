@@ -1,3 +1,15 @@
+qubes-core-qrexec (4.1.19-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Prevent log injection into qrexec-agent
+
+  [ Marek Marczykowski-Górecki ]
+  * ci: install extra packages necessary for unit tests
+  * Ignore oversensitive pylint warnings
+  * Update fuzzer wrapper
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 23 Nov 2022 13:43:46 +0100
+
 qubes-core-qrexec (4.1.18-1) unstable; urgency=medium
 
   * Fix parsing legacy policy files
