@@ -40,6 +40,7 @@ int handle_remote_data(
     const size_t max_len = max_data_chunk_size(data_protocol_version);
     char *buf;
     int rc = REMOTE_ERROR;
+    bool msg_data_warned = false;
 
     /* do not receive any data if we have something already buffered */
     switch (flush_client_data(stdin_fd, stdin_buf)) {
@@ -74,9 +75,10 @@ int handle_remote_data(
              * of VM-VM connection */
             case MSG_DATA_STDIN:
             case MSG_DATA_STDOUT:
-                if (hdr.type != (is_service ? MSG_DATA_STDIN : MSG_DATA_STDOUT)) {
+                if (hdr.type != (is_service ? MSG_DATA_STDIN : MSG_DATA_STDOUT) &&
+                        !msg_data_warned) {
                     LOG(ERROR, is_service ? "client sent MSG_DATA_STDOUT" : "service sent MSG_DATA_STDIN");
-                    continue;
+                    msg_data_warned = true;
                 }
 
                 if (stdin_fd < 0)
