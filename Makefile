@@ -13,6 +13,7 @@ clean:
 	+$(MAKE) -C libqrexec clean
 	+$(MAKE) -C daemon clean
 	+$(MAKE) -C agent clean
+	rm -rf selinux/*.pp selinux/tmp/
 .PHONY: clean
 
 

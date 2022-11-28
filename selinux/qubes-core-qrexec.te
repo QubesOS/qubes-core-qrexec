@@ -39,7 +39,7 @@ init_daemon_domain(qubes_qrexec_agent_t, qubes_qrexec_agent_exec_t)
 init_ranged_daemon_domain(qubes_qrexec_agent_t, qubes_qrexec_agent_exec_t, s0 - mcs_systemhigh)
 allow qubes_qrexec_agent_t tmpfs_t:dir create;
 allow { qubes_qrexec_agent_t init_t } self:passwd rootok;
-allow qubes_qrexec_agent_t init_t:system start;
+systemd_start_systemd_services(qubes_qrexec_agent_t)
 allow qubes_qrexec_agent_t self:netlink_selinux_socket { bind create };
 files_pid_file(qubes_qrexec_socket_t)
 su_exec(qubes_qrexec_agent_t)
