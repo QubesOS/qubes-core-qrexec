@@ -1,3 +1,20 @@
+qubes-core-qrexec (4.1.20-1) unstable; urgency=medium
+
+  [ Frédéric Pierret (fepitre) ]
+  * Drop Travis CI
+
+  [ Marek Marczykowski-Górecki ]
+  * Reformat code to be PEP8 compliant
+
+  [ Marta Marczykowska-Górecka ]
+  * Remove root user requirement for policy admin client
+  * Fix incorrect ownership of policy dirs
+
+  [ Marek Marczykowski-Górecki ]
+  * Relax validation of MSG_DATA_STDIN/MSG_DATA_STDOUT
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Tue, 29 Nov 2022 05:28:29 +0100
+
 qubes-core-qrexec (4.1.19-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
