@@ -339,7 +339,7 @@ int process_io(const struct process_io_request *req) {
             PERROR("waitpid");
     }
 
-    if (!is_service)
+    if (!is_service && remote_status)
         return remote_status;
     return local_pid ? local_status : 0;
 }

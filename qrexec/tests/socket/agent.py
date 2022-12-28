@@ -931,7 +931,7 @@ echo "received: $x" >&0
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
 
-    def test_run_client_with_local_proc_failed(self):
+    def test_run_client_with_local_proc_service_failed(self):
         target_client = self.run_service(local_program=["/bin/cat"])
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         target_client.send_message(
@@ -943,6 +943,26 @@ echo "received: $x" >&0
         self.assertEqual(self.client.stdout.read(), b"")
         self.client.wait()
         self.assertEqual(self.client.returncode, 127)
+
+    def test_run_client_with_local_proc_local_proc_failed(self):
+        target_client = self.run_service(local_program=["/bin/false"])
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
+        target_client.send_message(
+            qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 0)
+        )
+        # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
+        # empty MSG_DATA_STDIN (EOF) is permitted but not required
+        messages_received = target_client.recv_all_messages()
+        if messages_received:
+            self.assertListEqual(messages_received, [(qrexec.MSG_DATA_STDIN, b"")])
+        target_client.close()
+        self.assertEqual(self.client.stdout.read(), b"")
+        self.client.wait()
+
+        # Client must exit with nonzero status (QubesOS/qubes-issues#7905),
+        # otherwise qvm-move and qvm-move-to-vm will destroy user data if
+        # qfile-agent fails.
+        self.assertEqual(self.client.returncode, 1)
 
     def test_run_client_with_local_proc_refused(self):
         server = self.connect_server()
