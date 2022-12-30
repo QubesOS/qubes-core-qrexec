@@ -1,3 +1,52 @@
+qubes-core-qrexec (4.2.1-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Only spawn services via exec
+  * Prevent log injection into qrexec-agent
+
+  [ Marek Marczykowski-Górecki ]
+  * Update fuzzer wrapper
+  * Relax validation of MSG_DATA_STDIN/MSG_DATA_STDOUT
+
+  [ Demi Marie Obenour ]
+  * Zero-initialize some stack variables
+  * Add some error checking
+  * More error checking
+  * qrexec-client-vm: add --help
+  * Prefix data support
+  * Remove the connect_existing variable
+  * Replace one use of select(2) with poll(2)
+  * Add a ppoll_vchan() function
+  * Abort on bad return from select()
+  * Replace one use of select(2) with ppoll(2)
+  * simplify fd_set code
+  * Remove another use of select()
+  * Move CLIENT_INVALID check to handle_message_from_client
+  * Use a NULL fdset instead of an empty one
+  * Remove last use of select(2)
+  * Use clock_gettime() instead of gettimeofday()
+  * Drop FD_SETSIZE check
+  * Do not exit successfully if local process failed
+
+  [ Marek Marczykowski-Górecki ]
+  * ci: drop R4.1
+
+  [ Demi Marie Obenour ]
+  * Add SELinux policy for qrexec
+  * Allow user_t to use qrexec if a boolean is set
+  * Allow qrexec to exec systemctl
+  * Set agent SELinux context in systemd unit file
+  * Set SELinux context in qrexec too
+  * Avoid running /bin/sh as local_login_t
+  * Try to fix an SELinux denial
+  * Allow qrexec to start systemd services
+  * fix for systemd selinux rules
+  * try to fix more denials
+  * Allow qrexec to connect to anything
+  * Allow qrexec to connect to any socket
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 30 Dec 2022 06:12:11 +0100
+
 qubes-core-qrexec (4.2.0-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
