@@ -5,7 +5,7 @@ Maintainer: unman <unman@thirdeyesecurity.org>
 Build-Depends:
  debhelper,
  libpam0g-dev,
- libvchan-xen-dev,
+ libvchan-xen-dev|libvchan-kvm-dev,
  pkg-config,
  dh-python,
  lsb-release,
@@ -18,10 +18,10 @@ Homepage: https://www.qubes-os.org
 
 Package: qubes-core-qrexec
 Architecture: any
-Depends: 
- libvchan-xen,
+Depends:
+ libvchan-xen|libvchan-kvm-dev,
  libqrexec-utils2 (= ${binary:Version}),
- ${shlibs:Depends}, 
+ ${shlibs:Depends},
  ${misc:Depends}
 Replaces: qubes-core-agent-qrexec (<< 4.1.0-1)
 Breaks:
