@@ -19,7 +19,6 @@ Homepage: https://www.qubes-os.org
 Package: qubes-core-qrexec
 Architecture: any
 Depends: 
- libvchan-xen,
  libqrexec-utils2 (= ${binary:Version}),
  ${shlibs:Depends}, 
  ${misc:Depends}
