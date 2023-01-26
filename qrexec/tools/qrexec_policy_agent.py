@@ -650,7 +650,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     tasks = [
-        agent.run(),
+        asyncio.create_task(agent.run()),
     ]
     loop.run_until_complete(asyncio.wait(tasks))
 
