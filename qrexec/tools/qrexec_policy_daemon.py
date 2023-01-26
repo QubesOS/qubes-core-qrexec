@@ -335,7 +335,7 @@ async def start_serving(args=None):
 
     await asyncio.wait(
         [
-            server.serve_forever()
+            asyncio.create_task(server.serve_forever())
             for server in (policy_server, eval_server, gui_eval_server)
         ]
     )
