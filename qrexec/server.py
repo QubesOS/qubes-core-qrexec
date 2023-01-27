@@ -100,9 +100,9 @@ async def call_socket_service_local(
     service, source_domain, params, rpc_path=RPC_PATH
 ):
     if source_domain == "dom0":
-        header = "{} dom0 name dom0\0".format(service).encode("ascii")
+        header = f"{service} dom0 name dom0\0".encode("ascii")
     else:
-        header = "{} {}\0".format(service, source_domain).encode("ascii")
+        header = f"{service} {source_domain}\0".encode("ascii")
 
     path = os.path.join(rpc_path, service)
     reader, writer = await asyncio.open_unix_connection(path)

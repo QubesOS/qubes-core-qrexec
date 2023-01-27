@@ -83,7 +83,7 @@ def qubesd_call(dest, method, arg=None, payload=None):
         raise
 
     # src, method, dest, arg
-    call_header = "{}+{} dom0 name {}\0".format(method, arg or "", dest)
+    call_header = f"{method}+{arg or ''} dom0 name {dest}\0"
     client_socket.sendall(call_header.encode("ascii"))
     if payload is not None:
         client_socket.sendall(payload)

@@ -253,7 +253,7 @@ class PolicyAdmin:
             if path_to_append not in file_list:
                 file_list.append(path_to_append)
 
-        return ("".join("{}\n".format(f) for f in file_list)).encode('utf-8')
+        return ("".join(f"{f}\n" for f in file_list)).encode('utf-8')
 
     # helpers
 
