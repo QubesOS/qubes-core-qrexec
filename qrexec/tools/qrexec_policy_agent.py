@@ -648,11 +648,7 @@ def main():
     gbulb.install()
     agent = PolicyAgent(args.socket_path)
 
-    loop = asyncio.get_event_loop()
-    tasks = [
-        asyncio.create_task(agent.run()),
-    ]
-    loop.run_until_complete(asyncio.wait(tasks))
+    asyncio.run(agent.run()),
 
 
 if __name__ == "__main__":
