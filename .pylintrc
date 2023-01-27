@@ -74,6 +74,7 @@ disable=
  fixme,
  too-few-public-methods,
  duplicate-code,
+ consider-using-f-string,
  cyclic-import,
  import-outside-toplevel,
  abstract-method,

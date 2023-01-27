@@ -39,7 +39,7 @@ class PolicySyntaxError(AccessDenied):
 
     def __init__(self, filepath, lineno, msg):
         super().__init__(
-            "{}:{}: {}".format(filepath or "<unknown>", lineno, msg)
+            f"{filepath or '<unknown>'}:{lineno}: {msg}"
         )
 
 

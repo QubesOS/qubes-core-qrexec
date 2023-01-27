@@ -81,7 +81,7 @@ class VMListModeler:
             icon = self._get_icon(vm.get("icon", None))
 
             if dispvm:
-                display_name = "Disposable VM ({})".format(vm_name)
+                display_name = f"Disposable VM ({vm_name})"
             else:
                 display_name = vm_name
             self._entries[display_name] = {
@@ -522,9 +522,9 @@ def escape_and_format_rpc_text(service, argument=""):
 
     domain, dot, name = service.partition(".")
     if dot and name:
-        result = "{}.<b>{}</b>".format(domain, name)
+        result = f"{domain}.<b>{name}</b>"
     else:
-        result = "<b>{}</b>".format(service)
+        result = f"<b>{service}</b>"
 
     if argument != "+":
         result += argument
@@ -546,7 +546,8 @@ class PolicyAgent(SocketService):
             return await self.handle_notify(params)
         raise Exception("unknown service name: {}".format(service))
 
-    async def handle_ask(self, params):
+    @staticmethod
+    async def handle_ask(params):
         source = params["source"]
         service = params["service"]
         argument = params["argument"]
@@ -567,7 +568,7 @@ class PolicyAgent(SocketService):
         )
 
         if target:
-            return "allow:{}".format(target)
+            return f"allow:{target}"
         return "deny"
 
     async def handle_notify(self, params):
@@ -648,7 +649,7 @@ def main():
     gbulb.install()
     agent = PolicyAgent(args.socket_path)
 
-    asyncio.run(agent.run()),
+    asyncio.run(agent.run())
 
 
 if __name__ == "__main__":

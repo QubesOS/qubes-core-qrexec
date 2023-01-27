@@ -34,7 +34,7 @@ from ..server import call_socket_service
 
 
 def create_default_policy(service_name):
-    with open(str(POLICYPATH / service_name), "w") as policy:
+    with open(str(POLICYPATH / service_name), "w", encoding='utf-8') as policy:
         policy.write(DEFAULT_POLICY)
 
 
@@ -287,9 +287,7 @@ async def handle_request(
     # Add source domain information, required by qrexec-client for establishing
     # connection
     caller_ident = process_ident + "," + source + "," + domain_id
-    log_prefix = "qrexec: {}: {} -> {}:".format(
-        service_and_arg, source, intended_target
-    )
+    log_prefix = f"qrexec: {service_and_arg}: {source} -> {intended_target}:"
     if system_info is None:
         try:
             system_info = utils.get_system_info()

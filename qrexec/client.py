@@ -100,7 +100,7 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
 def make_command(dest, rpcname, arg):
     assert "+" not in rpcname
     if arg is not None:
-        rpcname = "{}+{}".format(rpcname, arg)
+        rpcname = f"{rpcname}+{arg}"
 
     if VERSION == "dom0" and dest == "dom0":
         # Invoke qubes-rpc-multiplexer directly. This will work for non-socket
@@ -112,7 +112,7 @@ def make_command(dest, rpcname, arg):
             QREXEC_CLIENT_DOM0,
             "-d",
             dest,
-            "DEFAULT:QUBESRPC {} dom0".format(rpcname),
+            f"DEFAULT:QUBESRPC {rpcname} dom0",
         ]
     if VERSION == "vm":
         return [QREXEC_CLIENT_VM, dest, rpcname]

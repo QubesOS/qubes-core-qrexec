@@ -85,13 +85,9 @@ def handle_single_action(args, action):
         return ""
     if isinstance(action, parser.AskResolution):
         if args.include_ask:
-            return '  "{}" -> "{}" [label="{}" color=orange];\n'.format(
-                action.request.source, target, service
-            )
+            return f'  "{action.request.source}" -> "{target}" [label="{service}" color=orange];\n'
     elif isinstance(action, parser.AllowResolution):
-        return '  "{}" -> "{}" [label="{}" color=red];\n'.format(
-            action.request.source, target, service
-        )
+        return f'  "{action.request.source}" -> "{target}" [label="{service}" color=red];\n'
     return ""
 
 
@@ -101,10 +97,10 @@ def main(args=None):
     output = sys.stdout
     if args.output:
         # pylint: disable=consider-using-with
-        output = open(args.output, "w")
+        output = open(args.output, "w", encoding='utf-8')
 
     if args.system_info:
-        with open(args.system_info) as f_system_info:
+        with open(args.system_info, encoding='utf-8') as f_system_info:
             system_info = json.load(f_system_info)
     else:
         system_info = utils.get_system_info()

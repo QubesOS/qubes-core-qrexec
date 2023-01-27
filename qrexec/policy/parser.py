@@ -893,7 +893,7 @@ class Deny(ActionType):
         self.notify = True if notify is None else notify
 
     def __repr__(self):
-        return "<{}>".format(type(self).__name__)
+        return f"<{type(self).__name__}>"
 
     def evaluate(self, request):
         """
@@ -1635,7 +1635,7 @@ class AbstractFileLoader(AbstractParser):
                 filepath, lineno, "not a file: {}".format(included_path)
             )
         # pylint: disable=consider-using-with
-        return open(str(included_path)), included_path
+        return open(str(included_path), encoding='utf-8'), included_path
 
     def handle_include(
         self, included_path: pathlib.PurePosixPath, *, filepath, lineno
@@ -1800,6 +1800,8 @@ class ValidateParser(FilePolicy):
 
 class ToposortMixIn:
     """A helper for topological sorting the policy files"""
+    # pylint can't deal with mixins
+    # pylint: disable=no-member
 
     @enum.unique
     class State(enum.Enum):
