@@ -1,3 +1,11 @@
+qubes-core-qrexec (4.2.3-1) unstable; urgency=medium
+
+  * Wrap coroutine in a task before passing to asyncio.wait
+  * Do not call asyncio.get_event_loop() before creating one
+  * Make pylint happy
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 28 Jan 2023 03:39:36 +0100
+
 qubes-core-qrexec (4.2.2-1) unstable; urgency=medium
 
   * debian: drop explicit dependency on libvchan-xen
