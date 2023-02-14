@@ -52,7 +52,7 @@ else
 endif
 
 %.1: %.rst
-	$(PANDOC) $< > $@
+	$(PANDOC) -t man $< > $@
 
 %.1.gz: %.1
 	gzip -f $<
