@@ -65,6 +65,10 @@ make all-dom0
 %post
 %systemd_post qubes-qrexec-policy-daemon.service
 
+# old version of the package failed to set this, fix on update
+chgrp qubes %{_sysconfdir}/qubes/policy.d
+chgrp qubes %{_sysconfdir}/qubes/policy.d/include
+
 %preun
 %systemd_preun qubes-qrexec-policy-daemon.service
 
