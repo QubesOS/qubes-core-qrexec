@@ -33,6 +33,7 @@ Admin client in Python
 ... \'\'\')
 """
 
+from __future__ import annotations
 from typing import List, Tuple
 
 from ..client import call

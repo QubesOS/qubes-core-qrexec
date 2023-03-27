@@ -23,6 +23,7 @@
 
 """qubes-policy-restore -- CLI tool for restoring policy from backup"""
 
+from __future__ import annotations
 import argparse
 import pathlib
 import sys

@@ -18,6 +18,7 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
+from __future__ import annotations
 import argparse
 import logging
 import logging.handlers
@@ -33,36 +34,38 @@ from ..policy.utils import PolicyCache
 from ..server import call_socket_service
 
 
-def create_default_policy(service_name):
+def create_default_policy(service_name: str):
     with open(str(POLICYPATH / service_name), "w", encoding='utf-8') as policy:
         policy.write(DEFAULT_POLICY)
 
 
 class JustEvaluateResult(Exception):
-    def __init__(self, exit_code):
+    __slots__ = ('exit_code',)
+    exit_code: int
+    def __init__(self, exit_code: int):
         super().__init__()
         self.exit_code = exit_code
 
 
 class JustEvaluateAllowResolution(parser.AllowResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> List[bytes]:
         raise JustEvaluateResult(0)
 
 
 class JustEvaluateAskResolution(parser.AskResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> List[bytes]:
         raise JustEvaluateResult(1)
 
 
 class AssumeYesForAskResolution(parser.AskResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> List[bytes]:
         return await self.handle_user_response(
             True, self.request.target
         ).execute(caller_ident)
 
 
 class AgentAskResolution(parser.AskResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str):
         domains = self.request.system_info["domains"]
         guivm = domains[self.request.source]["guivm"]
         if not guivm:

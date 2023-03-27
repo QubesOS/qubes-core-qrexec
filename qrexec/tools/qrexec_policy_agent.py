@@ -23,23 +23,25 @@
 """ Agent running in user session, responsible for asking the user about policy
 decisions."""
 
+from __future__ import annotations
 import itertools
 import os
 import argparse
 import asyncio
+from typing import Dict
 
-import pkg_resources
+import pkg_resources #type: ignore
 
 # pylint: disable=import-error,wrong-import-position
-import gi
+import gi #type: ignore
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio # type: ignore
 
 # pylint: enable=import-error
 
 # pylint: disable=wrong-import-order
-import gbulb
+import gbulb # type: ignore
 
 from .. import POLICY_AGENT_SOCKET_PATH
 from ..utils import sanitize_domain_name, sanitize_service_name
@@ -321,10 +323,23 @@ class FocusStealingHelper(GtkOneTimerHelper):
 
 class RPCConfirmationWindow:
     # pylint: disable=too-few-public-methods,too-many-instance-attributes
-    _source_file = pkg_resources.resource_filename(
+    __slots__ = ('_gtk_builder',
+                 '_rpc_window',
+                 '_rpc_ok_button',
+                 '_rpc_cancel_button',
+                 '_rpc_label',
+                 '_source_entry',
+                 '_rpc_combo_box',
+                 '_error_bar',
+                 '_error_message',
+                 '_target_name',
+                 '_focus_helper',
+                 '_entries_info',
+                 '_confirmed')
+    _source_file: str = pkg_resources.resource_filename(
         "qrexec", os.path.join("glade", "RPCConfirmationWindow.glade")
     )
-    _source_id = {
+    _source_id: Dict[str, str] = {
         "window": "RPCConfirmationWindow",
         "ok": "okButton",
         "cancel": "cancelButton",
@@ -334,8 +349,9 @@ class RPCConfirmationWindow:
         "error_bar": "ErrorBar",
         "error_message": "ErrorMessage",
     }
+    _gtk_builder: Gtk.Builder
 
-    def _clicked_ok(self, source):
+    def _clicked_ok(self, source) -> None:
         assert (
             source is not None
         ), "Called the clicked ok callback from no source object"

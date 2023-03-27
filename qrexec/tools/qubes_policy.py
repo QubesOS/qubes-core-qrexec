@@ -21,6 +21,7 @@
 
 """qubes-policy -- CLI tool for manipulating policy"""
 
+from __future__ import annotations
 import argparse
 import sys
 import os

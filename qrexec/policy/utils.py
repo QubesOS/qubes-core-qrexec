@@ -17,15 +17,27 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
+from __future__ import annotations
 import asyncio
 import os.path
-import pyinotify
+import pyinotify # type: ignore
+from pathlib import Path
 from qrexec import POLICYPATH, POLICYPATH_OLD
+from typing import Optional, List, Dict, Tuple
 from . import parser
 
 
 class PolicyCache:
-    def __init__(self, path=POLICYPATH, use_legacy=True, lazy_load=False):
+    path: Path
+    outdated: bool
+    parser: Optional[parser.FilePolicy]
+    default_policy_paths: List[str]
+    watch_manager: Optional[pyinotify.WatchManager]
+    watches: List[Dict[str, int]]
+    notifier: Optional[pyinotify.AsyncioNotifier]
+    __slots__: Tuple[str] = ('path', 'outdated', 'parser', 'default_policy_paths', 'watch_manager', 'watches', 'notifier', 'policy')
+
+    def __init__(self, path:str=POLICYPATH, use_legacy:bool=True, lazy_load:bool=False) -> None:
         self.path = path
         self.outdated = lazy_load
         if lazy_load:
@@ -44,11 +56,11 @@ class PolicyCache:
         self.watches = []
         self.notifier = None
 
-    def initialize_watcher(self):
+    def initialize_watcher(self) -> None:
         self.watch_manager = pyinotify.WatchManager()
 
         # pylint: disable=no-member
-        mask = pyinotify.IN_CREATE | pyinotify.IN_DELETE | pyinotify.IN_MODIFY
+        mask: int = pyinotify.IN_CREATE | pyinotify.IN_DELETE | pyinotify.IN_MODIFY
 
         loop = asyncio.get_event_loop()
 

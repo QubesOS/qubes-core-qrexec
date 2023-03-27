@@ -32,11 +32,13 @@
    :member-order: bysource
 """
 
+from __future__ import annotations
 import abc
 import collections
 import functools
 import logging
 import pathlib
+from typing import Iterable, NoReturn, Tuple, Iterable, Dict, Set
 
 from .. import POLICYPATH_OLD
 from ..exc import PolicySyntaxError
@@ -47,13 +49,17 @@ IGNORED_SUFFIXES = (".rpmsave", ".rpmnew", ".swp")
 
 @functools.total_ordering
 class _NoArgumentLastKey:
-    def __init__(self, arg):
+    def __init__(self, arg: str):
         self.arg = arg
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _NoArgumentLastKey):
+            return NotImplemented
         return self.arg == other.arg
 
-    def __lt__(self, other):
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, _NoArgumentLastKey):
+            return NotImplemented
         if self.arg == "*":
             return False
         if other.arg == "*":
@@ -61,8 +67,8 @@ class _NoArgumentLastKey:
         return self.arg < other.arg
 
 
-def _sorted_compat_files(filepaths):
-    services = collections.defaultdict(dict)
+def _sorted_compat_files(filepaths: Iterable[pathlib.Path]) -> Iterable[Tuple[str, str, pathlib.Path]]:
+    services: collections.defaultdict[str, Dict[str, pathlib.Path]] = collections.defaultdict(dict)
 
     for filepath in filepaths:
         service, argument = parser.parse_service_and_argument(
@@ -75,7 +81,7 @@ def _sorted_compat_files(filepaths):
             yield service, argument, services[service][argument]
 
 
-def _list_compat_files(legacy_path):
+def _list_compat_files(legacy_path: pathlib.Path) -> Iterable[pathlib.Path]:
     for filepath in legacy_path.iterdir():
         if not filepath.is_file():
             logging.info("ignoring %s (not a file)", filepath)
@@ -99,7 +105,7 @@ def _list_compat_files(legacy_path):
         yield filepath
 
 
-def walk_compat_files(legacy_path=POLICYPATH_OLD):
+def walk_compat_files(legacy_path: pathlib.Path=POLICYPATH_OLD) -> Iterable[Tuple[str, str, pathlib.Path]]:
     """Walks files in correct order for generating compat policy.
 
     Args:
@@ -115,17 +121,17 @@ class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
     """Abstract parser for compat policy. Needs :py:func:`walk_includes`.
 
     Args:
-        master (qrexec.policy.parser.AbstractPolicyParser):
+        master (qrexec.policy.parser.AbstractParser):
             the parser that will handle all the syntax parsed from the legacy
             policy
     """
 
-    def __init__(self, *, master, **kwds):
-        super().__init__(**kwds)
+    def __init__(self, *, master: parser.AbstractParser, **kwargs):
+        super().__init__(**kwargs)
         self.master = master
 
     @abc.abstractmethod
-    def walk_includes(self):
+    def walk_includes(self) -> Iterable[Tuple[str, str, pathlib.PurePosixPath]]:
         """An iterator that walks over all files to be included via
         ``!compat-4.0`` statement.
 
@@ -134,7 +140,7 @@ class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
         """
         raise NotImplementedError()
 
-    def execute(self, *, filepath, lineno):
+    def execute(self, *, filepath: str, lineno: int) -> None:
         """Insert the policy into :py:attr:`master` parser."""
         for service, argument, path in self.walk_includes():
             self.handle_include_service(
@@ -152,10 +158,10 @@ class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
                         argument,
                         "@anyvm @anyvm deny",
                         filepath=path,
-                        lineno=None,
+                        lineno=0,
                     ),
                     filepath=path,
-                    lineno=None,
+                    lineno=0,
                 )
                 self.handle_rule(
                     self.rule_type.from_line_service(
@@ -164,24 +170,30 @@ class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
                         argument,
                         "@anyvm @adminvm deny",
                         filepath=path,
-                        lineno=None,
+                        lineno=0,
                     ),
                     filepath=path,
-                    lineno=None,
+                    lineno=0,
                 )
 
-    def handle_rule(self, rule, *, filepath, lineno):
+    def handle_rule(
+        self,
+        rule: parser.Rule,
+        *,
+        filepath: pathlib.PurePosixPath,
+        lineno: int,
+    ) -> None:
         """"""
-        return self.master.handle_rule(rule, filepath=filepath, lineno=lineno)
+        self.master.handle_rule(rule, filepath=filepath, lineno=lineno)
 
-    def collect_targets_for_ask(self, request):
+    def collect_targets_for_ask(self, request: parser.Request) -> Set[str]:
         return self.master.collect_targets_for_ask(request)
 
-    def load_policy_file(self, file, filepath):
+    def load_policy_file(self, file: object, filepath: object) -> NoReturn:
         """"""
         raise RuntimeError("this method should not be called")
 
-    def handle_compat40(self, *, filepath, lineno):
+    def handle_compat40(self, *, filepath: pathlib.Path, lineno: int) -> NoReturn:
         """"""
         raise PolicySyntaxError(
             filepath, lineno, "!compat-4.0 is not recursive"
@@ -198,17 +210,17 @@ class Compat40Loader(Compat40Parser):
         ...         subparser.execute(filepath=filepath, lineno=lineno)
     """
 
-    def __init__(self, *, legacy_path=None, **kwds):
-        super().__init__(**kwds)
+    def __init__(self, *, master: parser.AbstractParser, legacy_path: Optional[pathlib.Path]=None, **kwds):
+        super().__init__(master=master, **kwds)
         if legacy_path is None:
             legacy_path = POLICYPATH_OLD
-        self.legacy_path = pathlib.Path(legacy_path)
+        self.legacy_path = legacy_path
 
-    def resolve_path(self, included_path):
+    def resolve_path(self, included_path: pathlib.Path):
         """"""
         return (self.legacy_path / included_path).resolve()
 
-    def walk_includes(self):
+    def walk_includes(self) -> Iterable[Tuple[str, str, pathlib.Path]]:
         """"""
         yield from walk_compat_files(self.legacy_path)
 

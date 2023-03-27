@@ -18,6 +18,7 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
+from __future__ import annotations
 import argparse
 import functools
 import pathlib

@@ -776,7 +776,7 @@ static int connect_daemon_socket(
     }
 
     result = connect(daemon_socket, (struct sockaddr *) &daemon_socket_address,
-            sizeof(daemon_socket_address));
+                     sizeof(daemon_socket_address));
     if (result < 0) {
          PERROR("connection to socket failed");
          return -1;

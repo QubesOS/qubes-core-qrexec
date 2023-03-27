@@ -17,6 +17,7 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
+from __future__ import annotations
 from typing import Optional
 from pathlib import Path
 import contextlib

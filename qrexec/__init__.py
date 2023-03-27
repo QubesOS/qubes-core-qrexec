@@ -24,6 +24,7 @@ Constants
 
    Allowed characters in name of qrexec calls and in argument, including ``+``.
 """
+from __future__ import annotations
 
 __version__ = "4.0.0"
 

@@ -26,32 +26,39 @@ ASCII text.
 Currently disregards the target specification part of the request.
 """
 
+from __future__ import annotations
 import os
 import os.path
 import asyncio
 import json
+import io
+from typing import NoReturn
 
 from . import RPC_PATH
 from .client import call_async
 
 
 class SocketService:
-    def __init__(self, socket_path):
+    def __init__(self, socket_path: str):
         self._socket_path = socket_path
 
-    async def run(self):
+    async def run(self) -> None:
         server = await self.start()
         async with server:
             await server.serve_forever()
 
-    async def start(self):
+    async def start(self) -> asyncio.Server:
         if os.path.exists(self._socket_path):
             os.unlink(self._socket_path)
         return await asyncio.start_unix_server(
             self._client_connected, path=self._socket_path
         )
 
-    async def _client_connected(self, reader, writer):
+    async def _client_connected(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
         try:
             data = await reader.read()
             data = data.decode("ascii")
@@ -76,7 +83,12 @@ class SocketService:
             writer.close()
             await writer.wait_closed()
 
-    async def handle_request(self, params, service, source_domain):
+    async def handle_request(
+        self,
+        params: NoReturn,
+        service: NoReturn,
+        source_domain: NoReturn,
+    ) -> object:
         raise NotImplementedError()
 
 

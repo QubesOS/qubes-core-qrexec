@@ -18,15 +18,17 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
 import json
 import socket
 import subprocess
+from typing import Sequence, Dict, Any, Optional
 
 from . import QUBESD_SOCK, QUBESD_INTERNAL_SOCK
 from .exc import QubesMgmtException
 
 
-def _sanitize_char(input_char, extra_allowed_characters):
+def _sanitize_char(input_char: str, extra_allowed_characters: Sequence[str]) -> str:
     input_char_ord = ord(input_char)
 
     if (
@@ -49,7 +51,7 @@ def _sanitize_char(input_char, extra_allowed_characters):
 # See https://github.com/QubesOS/qubes-core-admin-linux/blob/
 #  4f0878ccbf8a95f8264b54d2b6f4dc433ca0793a/qrexec/qrexec-daemon.c#L627-L646
 #
-def _sanitize_name(input_string, extra_allowed_characters, assert_sanitized):
+def _sanitize_name(input_string: str, extra_allowed_characters: Sequence[str], assert_sanitized: bool) -> str:
     result = "".join(
         _sanitize_char(character, extra_allowed_characters)
         for character in input_string
@@ -62,15 +64,15 @@ def _sanitize_name(input_string, extra_allowed_characters, assert_sanitized):
     return result
 
 
-def sanitize_domain_name(input_string, assert_sanitized=False):
-    return _sanitize_name(input_string, {}, assert_sanitized)
+def sanitize_domain_name(input_string:str, assert_sanitized:bool=False)->str:
+    return _sanitize_name(input_string, (), assert_sanitized)
 
 
-def sanitize_service_name(input_string, assert_sanitized=False):
-    return _sanitize_name(input_string, {"+"}, assert_sanitized)
+def sanitize_service_name(input_string:str, assert_sanitized:bool=False) -> str:
+    return _sanitize_name(input_string, "+", assert_sanitized)
 
 
-def qubesd_call(dest, method, arg=None, payload=None):
+def qubesd_call(dest: str, method:str, arg:str='', payload:Optional[bytes]=None) -> bytes:
     if method.startswith("internal."):
         socket_path = QUBESD_INTERNAL_SOCK
     else:
@@ -83,7 +85,7 @@ def qubesd_call(dest, method, arg=None, payload=None):
         raise
 
     # src, method, dest, arg
-    call_header = f"{method}+{arg or ''} dom0 name {dest}\0"
+    call_header = f"{method}+{arg} dom0 name {dest}\0"
     client_socket.sendall(call_header.encode("ascii"))
     if payload is not None:
         client_socket.sendall(payload)
@@ -102,7 +104,7 @@ def qubesd_call(dest, method, arg=None, payload=None):
     raise AssertionError("invalid qubesd response: {!r}".format(return_data))
 
 
-def get_system_info():
+def get_system_info() -> Any:
     """Get system information
 
     This retrieve information necessary to process qrexec policy. Returned
@@ -120,15 +122,16 @@ def get_system_info():
     return json.loads(system_info.decode("utf-8"))
 
 
-def prepare_subprocess_kwds(input):
+# FIXME: better type
+def prepare_subprocess_kwds(input: Any) -> Dict[str, Any]:
     """Prepare kwds for :py:func:`subprocess.run` for given input"""  # pylint: disable=redefined-builtin
-    kwds = {}
+    kwds: Dict[str, Any] = {}
     if input is None:
         kwds["stdin"] = subprocess.DEVNULL
     elif isinstance(input, bytes):
         kwds["input"] = input
     elif isinstance(input, str):
-        kwds["input"] = input.encode()
+        kwds["input"] = input.encode('ascii', 'strict')
     else:
         # XXX this breaks on file-like objects that don't have .fileno
         kwds["stdin"] = input

@@ -15,9 +15,12 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
 import pathlib
 import subprocess
 import asyncio
+from typing import List, Union, Optional, TYPE_CHECKING
+import io
 
 from .utils import prepare_subprocess_kwds
 
@@ -33,7 +36,11 @@ elif pathlib.Path(QREXEC_CLIENT_VM).is_file():
     VERSION = "vm"
 
 
-def call(dest, rpcname, arg=None, *, input=None):
+def call(dest: str,
+         rpcname: str,
+         arg: Optional[str] = None,
+         *,
+         input: Union[None, str, bytes, io.BufferedReader] = None) -> str:
     """Invoke qrexec call
 
     The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
@@ -44,18 +51,22 @@ def call(dest, rpcname, arg=None, *, input=None):
     :param str rpcname: name of a call from Policy API
     :param str or None arg: argument of the call
     :param str or bytes or file or None input: an input to the qrexec call
-    :rtype: str
     :raises subprocess.CalledProcessError: on failure
     """
     # pylint: disable=redefined-builtin
 
     command = make_command(dest, rpcname, arg)
-    return subprocess.check_output(
+    v: bytes = subprocess.check_output(
         command, **prepare_subprocess_kwds(input)
-    ).decode()
+    )
+    return v.decode('ascii', 'strict')
 
 
-async def call_async(dest, rpcname, arg=None, *, input=None):
+async def call_async(dest: str,
+                     rpcname: str,
+                     arg: Optional[str] = None,
+                     *,
+                     input: Union[None, str, bytes, io.BufferedReader] = None) -> str:
     """Invoke qrexec call (async version)
 
     The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
@@ -71,6 +82,7 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
     """
     # pylint: disable=redefined-builtin
 
+    stdin: Union[int, io.BufferedReader, bytes]
     command = make_command(dest, rpcname, arg)
 
     if input is None:
@@ -97,7 +109,7 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
     return stdout.decode()
 
 
-def make_command(dest, rpcname, arg):
+def make_command(dest: str, rpcname: str, arg: Optional[str]) -> List[str]:
     assert "+" not in rpcname
     if arg is not None:
         rpcname = f"{rpcname}+{arg}"
