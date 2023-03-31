@@ -836,7 +836,7 @@ static int fill_fds_for_select(fd_set * rdset, fd_set * wrset)
     return max;
 }
 
-static void handle_trigger_io()
+static void handle_trigger_io(void)
 {
     struct msg_header hdr;
     struct trigger_service_params3 params;
