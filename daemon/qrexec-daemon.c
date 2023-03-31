@@ -715,6 +715,8 @@ static void reap_children()
     while ((pid=waitpid(-1, &status, WNOHANG)) > 0) {
         for (i = 0; i <= policy_pending_max; i++) {
             if (policy_pending[i].pid == pid) {
+                if (!WIFEXITED(status))
+                    continue;
                 status = WEXITSTATUS(status);
                 if (status != 0) {
                     if (policy_pending[i].response_sent != RESPONSE_PENDING) {
