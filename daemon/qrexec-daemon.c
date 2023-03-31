@@ -820,12 +820,18 @@ static int connect_daemon_socket(
          return -1;
     }
 
-    result = send(daemon_socket, command, command_size, 0);
-    free(command);
-    if (result < 0) {
-         PERROR("send to socket failed");
-         return -1;
+    for (int i = 0; i < command_size; i += result) {
+        result = send(daemon_socket, command + i, command_size - i, MSG_NOSIGNAL);
+        if (result > command_size - i)
+            abort(); // kernel read beyond buffer bounds?
+        if (result < 0) {
+             PERROR("send to socket failed");
+             free(command);
+             return -1;
+        }
     }
+    free(command);
+    command = NULL;
 
     result = recv(daemon_socket, response, sizeof(response) - 1, 0);
     if (result < 0) {
