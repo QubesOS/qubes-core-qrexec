@@ -136,8 +136,6 @@ void sigchld_parent_handler(int UNUSED(x))
     }
 }
 
-static void sigchld_handler(int UNUSED(x));
-static void sigterm_handler(int UNUSED(x));
 
 char *remote_domain_name;	// guess what
 int remote_domain_id;
@@ -261,6 +259,8 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
     return actual_version;
 }
 
+static void signal_handler(int sig);
+
 /* do the preparatory tasks, needed before entering the main event loop */
 void init(int xid)
 {
@@ -284,8 +284,15 @@ void init(int xid)
     }
 
     if (!opt_direct) {
-        signal(SIGUSR1, sigusr1_handler);
-        signal(SIGCHLD, sigchld_parent_handler);
+        struct sigaction action = {
+            .sa_handler = sigusr1_handler,
+            .sa_flags = 0,
+        };
+        if (sigaction(SIGUSR1, &action, NULL))
+            err(1, "sigaction");
+        action.sa_handler = sigchld_parent_handler;
+        if (sigaction(SIGCHLD, &action, NULL))
+            err(1, "sigaction");
         switch (pid=fork()) {
             case -1:
                 PERROR("fork");
@@ -370,11 +377,22 @@ void init(int xid)
     qrexec_daemon_unix_socket_fd =
         create_qrexec_socket(xid, remote_domain_name);
 
-    signal(SIGPIPE, SIG_IGN);
-    signal(SIGCHLD, sigchld_handler);
-    signal(SIGUSR1, SIG_DFL);
-    signal(SIGTERM, sigterm_handler);
-
+    struct sigaction sigchld_action = {
+        .sa_handler = signal_handler,
+        .sa_flags = SA_NOCLDSTOP,
+    };
+    struct sigaction sigterm_action = {
+        .sa_handler = signal_handler,
+        .sa_flags = 0,
+    };
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+        err(1, "signal");
+    if (sigaction(SIGCHLD, &sigchld_action, NULL))
+        err(1, "sigaction");
+    if (signal(SIGUSR1, SIG_DFL) == SIG_ERR)
+        err(1, "signal");
+    if (sigaction(SIGTERM, &sigterm_action, NULL))
+        err(1, "sigaction");
     if (!opt_direct)
         kill(getppid(), SIGUSR1);   // let the parent know we are ready
 }
@@ -655,16 +673,19 @@ static void handle_message_from_client(int fd)
  * to set a flag "signal has arrived", and let the main even loop react to this
  * flag in appropriate moment.
  */
-
-static void sigchld_handler(int UNUSED(x))
+static void signal_handler(int sig)
 {
-    child_exited = 1;
-    signal(SIGCHLD, sigchld_handler);
-}
-
-static void sigterm_handler(int UNUSED(x))
-{
-    terminate_requested = 1;
+    switch (sig) {
+    case SIGCHLD:
+        child_exited = 1;
+        break;
+    case SIGTERM:
+        terminate_requested = 1;
+        break;
+    default:
+        /* cannot happen */
+        abort();
+    }
 }
 
 static void send_service_refused(libvchan_t *vchan, const struct service_params *params) {
@@ -868,9 +889,16 @@ static void handle_execute_service(
     LOG(ERROR, "couldn't invoke qrexec-policy-daemon, using qrexec-policy-exec");
 
     sigemptyset(&sigmask);
-    sigprocmask(SIG_SETMASK, &sigmask, NULL);
-    signal(SIGCHLD, SIG_DFL);
-    signal(SIGPIPE, SIG_DFL);
+    if (sigprocmask(SIG_SETMASK, &sigmask, NULL)) {
+        PERROR("sigprocmask");
+        _exit(1);
+    }
+    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR ||
+        signal(SIGPIPE, SIG_DFL) == SIG_ERR)
+    {
+        PERROR("signal");
+        _exit(1);
+    }
     int v = snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",
                      remote_domain_id);
     if (v >= 1 && v < (int)sizeof(remote_domain_id_str)) {
@@ -1069,7 +1097,8 @@ static int handle_agent_restart(int xid) {
     /* Restore default SIGTERM handling: libvchan_client_init() might block
      * indefinitely, so we want the program to be killable.
      */
-    signal(SIGTERM, SIG_DFL);
+    if (signal(SIGTERM, SIG_DFL) == SIG_ERR)
+        err(1, "signal()");
     if (terminate_requested)
         return -1;
 
@@ -1091,7 +1120,12 @@ static int handle_agent_restart(int xid) {
     }
     LOG(INFO, "qrexec-agent has reconnected");
 
-    signal(SIGTERM, sigterm_handler);
+    struct sigaction action = {
+        .sa_handler = signal_handler,
+        .sa_flags = 0,
+    };
+    if (sigaction(SIGTERM, &action, NULL))
+        err(1, "sigaction");
 
     qrexec_daemon_unix_socket_fd =
         create_qrexec_socket(xid, remote_domain_name);
