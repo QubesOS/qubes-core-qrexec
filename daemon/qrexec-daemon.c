@@ -1128,10 +1128,12 @@ int main(int argc, char **argv)
                 opt_quiet = 1;
                 break;
             case 'd' + 128:
-                socket_dir = strdup(optarg);
+                if ((socket_dir = strdup(optarg)) == NULL)
+                    err(1, "strdup()");
                 break;
             case 'p':
-                policy_program = strdup(optarg);
+                if ((policy_program = strdup(optarg)) == NULL)
+                    err(1, "strdup()");
                 break;
             case 'D':
                 opt_direct = 1;
