@@ -140,7 +140,7 @@ void sigchld_parent_handler(int UNUSED(x))
 char *remote_domain_name;	// guess what
 int remote_domain_id;
 
-void unlink_qrexec_socket()
+void unlink_qrexec_socket(void)
 {
     char socket_address[40];
     char link_to_socket_name[strlen(remote_domain_name) + sizeof(socket_address)];
@@ -456,7 +456,7 @@ static int allocate_vchan_port(int connect_domain)
     return 0;
 }
 
-static void handle_new_client()
+static void handle_new_client(void)
 {
     int fd = do_accept(qrexec_daemon_unix_socket_fd);
     if (fd >= MAX_CLIENTS) {
@@ -706,7 +706,7 @@ static void send_service_refused(libvchan_t *vchan, const struct service_params 
 }
 
 /* clean zombies, check for denied service calls */
-static void reap_children()
+static void reap_children(void)
 {
     int status;
     int i;
@@ -740,10 +740,8 @@ static void reap_children()
     child_exited = 0;
 }
 
-static int find_policy_pending_slot() {
-    int i;
-
-    for (i = 0; i < MAX_CLIENTS; i++) {
+static int find_policy_pending_slot(void) {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
         if (policy_pending[i].pid == 0) {
             if (i > policy_pending_max)
                 policy_pending_max = i;
@@ -925,7 +923,7 @@ static void handle_execute_service(
 }
 
 
-static void handle_connection_terminated()
+static void handle_connection_terminated(void)
 {
     struct exec_params untrusted_params, params;
 

@@ -802,7 +802,7 @@ static void reap_children(void)
     child_exited = 0;
 }
 
-static void handle_trigger_io()
+static void handle_trigger_io(void)
 {
     struct msg_header hdr;
     struct trigger_service_params3 params;
