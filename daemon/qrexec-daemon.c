@@ -827,7 +827,6 @@ static void handle_execute_service(
         const char *service_name,
         const struct service_params *request_id)
 {
-    int i;
     int result;
     int policy_pending_slot;
     pid_t pid;
@@ -853,9 +852,8 @@ static void handle_execute_service(
             policy_pending[policy_pending_slot].response_sent = RESPONSE_PENDING;
             return;
     }
-
-    for (i = 3; i < MAX_FDS; i++)
-        close(i);
+    if (close_range(3, ~0U, 0))
+        abort(); /* cannot happen */
 
     result = connect_daemon_socket(remote_domain_id, remote_domain_name,
                                    target_domain, service_name, request_id);
