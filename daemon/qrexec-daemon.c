@@ -147,10 +147,14 @@ void unlink_qrexec_socket()
     char socket_address[40];
     char link_to_socket_name[strlen(remote_domain_name) + sizeof(socket_address)];
 
-    snprintf(socket_address, sizeof(socket_address),
-             "%s/qrexec.%d", socket_dir, remote_domain_id);
-    snprintf(link_to_socket_name, sizeof link_to_socket_name,
-             "%s/qrexec.%s", socket_dir, remote_domain_name);
+    int v = snprintf(socket_address, sizeof(socket_address),
+                     "%s/qrexec.%d", socket_dir, remote_domain_id);
+    if (v < (int)sizeof("/qrexec.1") || v >= (int)sizeof(socket_address))
+        abort();
+    v = snprintf(link_to_socket_name, sizeof(link_to_socket_name),
+                 "%s/qrexec.%s", socket_dir, remote_domain_name);
+    if (v < (int)sizeof("/qrexec.") || v >= (int)sizeof(link_to_socket_name))
+        abort();
     unlink(socket_address);
     unlink(link_to_socket_name);
 }
@@ -867,16 +871,20 @@ static void handle_execute_service(
     sigprocmask(SIG_SETMASK, &sigmask, NULL);
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
-    snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",
-            remote_domain_id);
-    execl(policy_program, "qrexec-policy-exec", "--",
-            remote_domain_id_str,
-            remote_domain_name,
-            target_domain,
-            service_name,
-            request_id->ident,
-            NULL);
-    PERROR("execl");
+    int v = snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",
+                     remote_domain_id);
+    if (v >= 1 && v < (int)sizeof(remote_domain_id_str)) {
+        execl(policy_program, "qrexec-policy-exec", "--",
+              remote_domain_id_str,
+              remote_domain_name,
+              target_domain,
+              service_name,
+              request_id->ident,
+              NULL);
+        PERROR("execl");
+    } else {
+        PERROR("snprintf");
+    }
     _exit(1);
 }
 
