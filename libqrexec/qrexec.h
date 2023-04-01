@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef _QREXEC_H
-#define _QREXEC_H
+#ifndef QREXEC_H
+#define QREXEC_H
 
 /* For information on qrexec, see:
  * - https://www.qubes-os.org/doc/qrexec/
@@ -173,4 +173,4 @@ enum {
 // support only very small configuration files,
 #define MAX_CONFIG_SIZE 4096
 
-#endif /* _QREXEC_H */
+#endif /* QREXEC_H */

@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef _LIBQREXEC_UTILS_H
-#define _LIBQREXEC_UTILS_H
+#ifndef LIBQREXEC_UTILS_H
+#define LIBQREXEC_UTILS_H
 
 #define _POSIX_C_SOURCE 200809L
 #define _GNU_SOURCE 1
@@ -279,4 +279,4 @@ void qrexec_log(int level, int errnoval, const char *file, int line,
 
 void setup_logging(const char *program_name);
 
-#endif /* _LIBQREXEC_UTILS_H */
+#endif /* LIBQREXEC_UTILS_H */
