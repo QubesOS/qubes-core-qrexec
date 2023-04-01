@@ -127,10 +127,10 @@ static int do_fork_exec(const char *user,
                 fix_fds(inpipe[0], outpipe[1], 2);
 
             close(statuspipe[0]);
-#if !SOCK_CLOEXEC
-            status = fcntl(statuspipe[1], F_GETFD);
-            fcntl(statuspipe[1], F_SETFD, status | FD_CLOEXEC);
-#endif
+            if (SOCK_CLOEXEC == (0)) {
+                status = fcntl(statuspipe[1], F_GETFD);
+                fcntl(statuspipe[1], F_SETFD, status | FD_CLOEXEC);
+            }
             if (exec_func != NULL)
                 exec_func(cmdline, user);
             else
