@@ -336,7 +336,7 @@ _Noreturn void handle_vchan_error(const char *op)
     exit(1);
 }
 
-int my_sd_notify(int unset_environment, const char *state) {
+static int my_sd_notify(int unset_environment, const char *state) {
     struct sockaddr_un addr;
     int fd;
     int ret = -1;
