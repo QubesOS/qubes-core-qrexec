@@ -598,15 +598,18 @@ out:
 static void handle_server_exec_request_init(struct msg_header *hdr)
 {
     struct exec_params params;
-    int buf_len = hdr->len-sizeof(params);
+    if (hdr->len < sizeof(params))
+        abort();
+    size_t buf_len = hdr->len - sizeof(params);
+    if (buf_len > INT_MAX)
+        abort();
     char *buf = malloc(buf_len);
-    if (!buf) abort();
-
-    assert((hdr->len >= sizeof params));
+    if (!buf)
+        abort();
 
     if (libvchan_recv(ctrl_vchan, &params, sizeof(params)) != sizeof(params))
         handle_vchan_error("read exec params");
-    if (libvchan_recv(ctrl_vchan, buf, buf_len) != buf_len)
+    if (libvchan_recv(ctrl_vchan, buf, (int)buf_len) != (int)buf_len)
         handle_vchan_error("read exec cmd");
 
     buf[buf_len-1] = 0;
