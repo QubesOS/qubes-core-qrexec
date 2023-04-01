@@ -46,7 +46,7 @@
 #include "libqrexec-utils.h"
 #include "qrexec-agent.h"
 
-struct _connection_info {
+struct connection_info {
     int pid; /* pid of child process handling the data */
     int fd;  /* socket to the process handling the data (wait for EOF here) */
     int connect_domain;
@@ -55,7 +55,7 @@ struct _connection_info {
 
 /* structure describing a single request waiting for qubes.WaitForSession to
  * finish */
-struct _waiting_request {
+struct waiting_request {
     int type;
     int connect_domain;
     int connect_port;
@@ -64,9 +64,9 @@ struct _waiting_request {
 };
 
 /*  */
-static struct _connection_info connection_info[MAX_FDS];
+static struct connection_info connection_info[MAX_FDS];
 
-static struct _waiting_request requests_waiting_for_session[MAX_FDS];
+static struct waiting_request requests_waiting_for_session[MAX_FDS];
 
 static libvchan_t *ctrl_vchan;
 
