@@ -19,6 +19,7 @@
  *
  */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,12 +30,13 @@ static int total_mem;
 static char *limited_malloc(int len)
 {
     char *ret;
-    total_mem += len;
-    if (total_mem > BUFFER_LIMIT) {
+    if (__builtin_add_overflow(len, total_mem, &total_mem) ||
+        (total_mem > BUFFER_LIMIT) || (len <= 0))
+    {
         LOG(ERROR, "attempt to allocate >BUFFER_LIMIT");
         exit(1);
     }
-    ret = malloc(len);
+    ret = malloc((size_t)len);
     if (!ret) {
         PERROR("malloc");
         exit(1);
@@ -44,6 +46,8 @@ static char *limited_malloc(int len)
 
 static void limited_free(char *ptr, int len)
 {
+    if (len < 0 || total_mem < len)
+        abort();
     free(ptr);
     total_mem -= len;
 }
@@ -61,6 +65,10 @@ void buffer_free(struct buffer *b)
     buffer_init(b);
 }
 
+#if BUFFER_LIMIT >= INT_MAX / 2
+#error BUFFER_LIMIT too large
+#endif
+
 /*
    The following two functions can be made much more efficient.
    Yet the profiling output show they are not significant CPU hogs, so
@@ -71,6 +79,10 @@ void buffer_append(struct buffer *b, const char *data, int len)
 {
     int newsize;
     char *qdata;
+    if (b->buflen < 0 || b->buflen > BUFFER_LIMIT) {
+        LOG(ERROR, "buffer_append buflen %d", len);
+        exit(1);
+    }
     if (len < 0 || len > BUFFER_LIMIT) {
         LOG(ERROR, "buffer_append %d", len);
         exit(1);
@@ -79,8 +91,8 @@ void buffer_append(struct buffer *b, const char *data, int len)
         return;
     newsize = len + b->buflen;
     qdata = limited_malloc(len + b->buflen);
-    memcpy(qdata, b->data, b->buflen);
-    memcpy(qdata + b->buflen, data, len);
+    memcpy(qdata, b->data, (size_t)b->buflen);
+    memcpy(qdata + b->buflen, data, (size_t)len);
     buffer_free(b);
     b->buflen = newsize;
     b->data = qdata;
@@ -97,7 +109,7 @@ void buffer_remove(struct buffer *b, int len)
     newsize = b->buflen - len;
     if (newsize > 0) {
         qdata = limited_malloc(newsize);
-        memcpy(qdata, b->data + len, newsize);
+        memcpy(qdata, b->data + len, (size_t)newsize);
     }
     buffer_free(b);
     b->buflen = newsize;
