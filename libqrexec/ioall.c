@@ -26,6 +26,7 @@
 #include <errno.h>
 
 #include "libqrexec-utils.h"
+#include "ioall.h"
 
 void set_nonblock(int fd)
 {
