@@ -633,7 +633,7 @@ class AllowResolution(AbstractResolution):
         if dispvm:
             qrexec_opts.append("-W")
         try:
-            command = [QREXEC_CLIENT] + qrexec_opts + [cmd]
+            command = [QREXEC_CLIENT] + qrexec_opts + ["--", cmd]
             process = await asyncio.create_subprocess_exec(*command)
             await process.communicate()
         finally:
