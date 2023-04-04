@@ -403,6 +403,7 @@ _Noreturn static void usage(const char *const name)
             "  -W - waits for connection end even in case of VM-VM (-c)\n"
             "  -c - connect to existing process (response to trigger service call)\n"
             "  -w timeout - override default connection timeout of 5s (set 0 for no timeout)\n"
+            "  -k - kill the domain right before exiting\n"
             "  --socket-dir=PATH -  directory for qrexec socket, default: %s\n",
             name, QREXEC_DAEMON_SOCKET_DIR);
     exit(1);
@@ -534,10 +535,11 @@ int main(int argc, char **argv)
     struct service_params svc_params;
     int data_protocol_version;
     int prepare_ret;
+    bool kill = false;
 
     setup_logging("qrexec-client");
 
-    while ((opt = getopt_long(argc, argv, "hd:l:eEc:tTw:W", longopts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hd:l:eEc:tTw:Wk", longopts, NULL)) != -1) {
         switch (opt) {
             case 'd':
                 domname = xstrdup(optarg);
@@ -569,6 +571,9 @@ int main(int argc, char **argv)
                 break;
             case 'd' + 128:
                 socket_dir = strdup(optarg);
+                break;
+            case 'k':
+                kill = true;
                 break;
             case 'h':
             default:
@@ -691,6 +696,12 @@ int main(int argc, char **argv)
             select_loop(data_vchan, data_protocol_version, &stdin_buffer);
         }
     }
+
+    if (kill && domname) {
+        size_t l;
+        qubesd_call(domname, "admin.vm.Kill", "", &l);
+    }
+
     return 0;
 }
 
