@@ -30,6 +30,7 @@
 #include <libvchan.h>
 #include <errno.h>
 #include <poll.h>
+#include <sys/socket.h>
 
 #include <qrexec.h>
 
@@ -283,5 +284,38 @@ void qrexec_log(int level, int errnoval, const char *file, int line,
                 const char *func, const char *fmt, ...);
 
 void setup_logging(const char *program_name);
+
+/**
+ * Make an Admin API call to qubesd.  The returned buffer must be released by
+ * the caller using free().
+ *
+ * @param dest The destination VM name.
+ * @param method The method name.
+ * @param arg The service argument
+ * @param len The length of the data returned
+ * @return The value on success.  On failure returns NULL and sets errno.
+ */
+char *qubesd_call(const char *dest, char *method, char *arg, size_t *len);
+
+/**
+ * Read all data from the file descriptor until EOF, then close it.
+ * The returned buffer must be released by the caller using free().
+ *
+ * @param fd The file descriptor to read from.
+ * @param initial_buffer_size The size of the buffer to use initially.
+ *        Must be at least 1.
+ * @param max_bytes Maximum number of bytes to read.  The function will fail
+ *        if more than this number of bytes are read.
+ * @param[out] len The number of bytes read.
+ * @return A buffer to the number of bytes read.  On failure returns NULL and sets errno.
+ */
+void *qubes_read_all_to_malloc(int fd, size_t initial_buffer_size, size_t max_bytes, size_t *len);
+
+/**
+ * Send all data in the given msghdr.  Short writes are retried as necessary.
+ *
+ * Returns true on success.  Otherwise returns false setting errno.
+ */
+bool qubes_sendmsg_all(struct msghdr *msg, int sock);
 
 #endif /* LIBQREXEC_UTILS_H */
