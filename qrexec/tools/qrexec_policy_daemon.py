@@ -58,11 +58,9 @@ argparser.add_argument(
 )
 
 REQUIRED_REQUEST_ARGUMENTS = (
-    "domain_id",
     "source",
     "intended_target",
     "service_and_arg",
-    "process_ident",
 )
 
 OPTIONAL_REQUEST_ARGUMENTS = ("assume_yes_for_ask", "just_evaluate")
@@ -121,7 +119,7 @@ async def handle_client_connection(log, policy_cache, reader, writer):
             **args, log=log, policy_cache=policy_cache
         )
 
-        writer.write(b"result=allow\n" if result == 0 else b"result=deny\n")
+        writer.write(result.encode("ascii", "strict") if result else b"result=deny\n")
         await writer.drain()
 
     finally:
@@ -243,8 +241,6 @@ async def qrexec_policy_eval(
         source=source,
         intended_target=intended_target,
         service_and_arg=service_queried.decode("ascii", "strict"),
-        domain_id="dummy_id",
-        process_ident="0",
         assume_yes_for_ask=True,
         just_evaluate=True,
         log=log,
@@ -252,7 +248,7 @@ async def qrexec_policy_eval(
         system_info=system_info,
     )
 
-    writer.write(b"result=allow\n" if result == 0 else b"result=deny\n")
+    writer.write(result.encode("ascii", "strict") + b"\n")
     await writer.drain()
 
 

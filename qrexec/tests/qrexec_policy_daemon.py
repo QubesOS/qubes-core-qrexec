@@ -47,7 +47,7 @@ class TestPolicyDaemon:
     @pytest.fixture
     def mock_request(self, monkeypatch):
         mock_request = AsyncMock()
-        mock_request.return_value = 1
+        mock_request.return_value = "result=deny"
         monkeypatch.setattr(
             "qrexec.tools.qrexec_policy_daemon.handle_request", mock_request
         )
@@ -144,21 +144,17 @@ class TestPolicyDaemon:
     async def test_simple_request(self, mock_request, async_server, tmp_path):
 
         data = (
-            b"domain_id=a\n"
             b"source=b\n"
             b"intended_target=c\n"
             b"service_and_arg=d\n"
-            b"process_ident=1 9\n\n"
         )
 
         await self.send_data(async_server, tmp_path, data)
 
         mock_request.assert_called_once_with(
-            domain_id="a",
             source="b",
             intended_target="c",
             service_and_arg="d",
-            process_ident="1 9",
             log=unittest.mock.ANY,
             policy_cache=unittest.mock.ANY,
         )
@@ -167,11 +163,9 @@ class TestPolicyDaemon:
     async def test_complex_request(self, mock_request, async_server, tmp_path):
 
         data = (
-            b"domain_id=a\n"
             b"source=b\n"
             b"intended_target=c\n"
             b"service_and_arg=d\n"
-            b"process_ident=9\n"
             b"assume_yes_for_ask=yes\n"
             b"just_evaluate=yes\n\n"
         )
@@ -179,11 +173,9 @@ class TestPolicyDaemon:
         await self.send_data(async_server, tmp_path, data)
 
         mock_request.assert_called_once_with(
-            domain_id="a",
             source="b",
             intended_target="c",
             service_and_arg="d",
-            process_ident="9",
             log=unittest.mock.ANY,
             assume_yes_for_ask=True,
             just_evaluate=True,
@@ -194,11 +186,9 @@ class TestPolicyDaemon:
     async def test_complex_request2(self, mock_request, async_server, tmp_path):
 
         data = (
-            b"domain_id=a\n"
             b"source=b\n"
             b"intended_target=c\n"
             b"service_and_arg=d\n"
-            b"process_ident=9\n"
             b"assume_yes_for_ask=no\n"
             b"just_evaluate=no\n\n"
         )
@@ -206,11 +196,9 @@ class TestPolicyDaemon:
         await self.send_data(async_server, tmp_path, data)
 
         mock_request.assert_called_once_with(
-            domain_id="a",
             source="b",
             intended_target="c",
             service_and_arg="d",
-            process_ident="9",
             log=unittest.mock.ANY,
             assume_yes_for_ask=False,
             just_evaluate=False,
@@ -252,14 +240,12 @@ class TestPolicyDaemon:
     async def test_duplicate_arg(self, mock_request, async_server, tmp_path):
 
         data = (
-            b"domain_id=a\n"
+            b"source=b\n"
             b"source=b\n"
             b"intended_target=c\n"
             b"service_and_arg=d\n"
-            b"process_ident=9\n"
             b"assume_yes_for_ask=no\n"
             b"just_evaluate=no\n"
-            b"domain_id=a\n\n"
         )
 
         await self.send_data(async_server, tmp_path, data)
@@ -270,11 +256,10 @@ class TestPolicyDaemon:
     async def test_wrong_arg(self, mock_request, async_server, tmp_path):
 
         data = (
-            b"tremendous_domain_id=a\n"
+            b"domain_id=a\n"
             b"source=b\n"
             b"intended_target=c\n"
             b"service_and_arg=d\n"
-            b"process_ident=9\n"
             b"assume_yes_for_ask=no\n"
             b"just_evaluate=no\n\n"
         )
@@ -288,7 +273,7 @@ class TestPolicyDaemon:
     async def test_simple_qrexec_request_succeeds(
         self, mock_request, qrexec_server, tmp_path, mock_system, server_type
     ):
-        mock_request.return_value = 0
+        mock_request.return_value = "result=allow"
 
         data = b"policy.Eval%s+d c keyword adminvm\0a\0b" % server_type
 
@@ -318,8 +303,6 @@ class TestPolicyDaemon:
             source="a",
             intended_target="b",
             service_and_arg="d",
-            domain_id="dummy_id",
-            process_ident="0",
             assume_yes_for_ask=True,
             just_evaluate=True,
             log=log,
@@ -349,11 +332,9 @@ class TestPolicyDaemon:
             == b"result=deny\n"
         )
         mock_request.assert_called_once_with(
-            domain_id="dummy_id",
             source="c",
             intended_target="a",
             service_and_arg="d",
-            process_ident="0",
             log=log,
             assume_yes_for_ask=True,
             just_evaluate=True,
@@ -383,11 +364,9 @@ class TestPolicyDaemon:
             == b"result=deny\n"
         )
         mock_request.assert_called_once_with(
-            domain_id="dummy_id",
             source="c",
             intended_target="a",
             service_and_arg="d",
-            process_ident="0",
             log=log,
             assume_yes_for_ask=True,
             just_evaluate=True,
@@ -417,11 +396,9 @@ class TestPolicyDaemon:
             == b"result=deny\n"
         )
         mock_request.assert_called_once_with(
-            domain_id="dummy_id",
             source="a",
             intended_target="c",
             service_and_arg="d",
-            process_ident="0",
             log=log,
             assume_yes_for_ask=True,
             just_evaluate=True,
@@ -556,11 +533,9 @@ class TestPolicyDaemon:
             == b""
         )
         mock_request.assert_called_once_with(
-            domain_id="dummy_id",
             source="a",
             intended_target="b",
             service_and_arg="d",
-            process_ident="0",
             log=log,
             assume_yes_for_ask=True,
             just_evaluate=True,
@@ -585,11 +560,9 @@ class TestPolicyDaemon:
             == b""
         )
         mock_request.assert_called_once_with(
-            domain_id="dummy_id",
             source="a",
             intended_target="b",
             service_and_arg="d",
-            process_ident="0",
             log=log,
             assume_yes_for_ask=True,
             just_evaluate=True,

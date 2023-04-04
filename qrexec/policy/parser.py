@@ -32,7 +32,6 @@ import itertools
 import logging
 import pathlib
 import string
-import asyncio
 
 from typing import (
     Iterable,
@@ -49,15 +48,12 @@ from typing import (
     Sequence,
 )
 
-from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
+from .. import POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
 from ..utils import FullSystemInfo
 from .. import exc
-from .. import utils
 from ..exc import (
     AccessDenied,
     PolicySyntaxError,
-    QubesMgmtException,
-    ExecutionFailed,
 )
 
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + "_.-")
@@ -313,23 +309,6 @@ class VMToken(str, metaclass=VMTokenMeta):
         """Check if this token matches opposite token"""
         # pylint: disable=unused-argument
         return self == other
-
-    def is_special_value(self) -> bool:
-        """Check if the token specification is special (keyword) value"""
-        return self.startswith("@") or self == "*"
-
-    @property
-    def type(self) -> str:
-        """Type of the token
-
-        ``'keyword'`` for special values, ``'name'`` for qube name
-        """
-        return "keyword" if self.is_special_value() else "name"
-
-    @property
-    def text(self) -> str:
-        """Text of the token, without possibly '@' prefix"""
-        return self.lstrip("@")
 
 
 class Source(VMToken):
@@ -645,7 +624,7 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         self.notify = rule.action.notify
 
     @abc.abstractmethod
-    async def execute(self, caller_ident: str) -> str:
+    async def execute(self) -> str:
         """
         Execute the action. For allow, this runs the qrexec. For ask, it asks
         user and then (depending on verdict) runs the call.
@@ -667,10 +646,13 @@ class AllowResolution(AbstractResolution):
         *,
         user: Optional[str],
         target: str,
+        autostart: bool,
     ):
         super().__init__(rule, request, user=user)
         #: target domain the service should be connected to
         self.target = target
+        self.autostart = autostart
+        assert isinstance(self.autostart,bool)
 
     @classmethod
     def from_ask_resolution(cls, ask_resolution: AskResolution, *, target: str) -> AllowResolution:
@@ -682,101 +664,25 @@ class AllowResolution(AbstractResolution):
             ask_resolution.request,
             user=ask_resolution.user,
             target=target,
+            autostart=ask_resolution.autostart,
         )
 
-    async def execute(self, caller_ident: str) -> None:
-        """Execute the allowed action"""
-        assert self.target is not None
+    async def execute(self) -> str:
+        """Return the allowed action"""
+        request, target = self.request, self.target
+        assert target is not None
+        assert isinstance(self.autostart,bool)
 
         # XXX remove when #951 gets fixed
-        if self.request.source == self.target:
+        if request.source == target:
             raise AccessDenied("loopback qrexec connection not supported")
 
-        target = self.target
-
-        if target in ("dom0", "@adminvm"):
-            cmd = (
-                "QUBESRPC {request.service}{request.argument} "
-                "{request.source} {request.target.type} {request.target.text}"
-            ).format(request=self.request)
-        else:
-            cmd = (
-                "{user}:QUBESRPC {request.service}{request.argument} "
-                "{request.source}".format(
-                    user=(self.user or "DEFAULT"), request=self.request
-                )
-            )
-
-        try:
-            if target.startswith("@dispvm:"):
-                target = self.spawn_dispvm()
-                dispvm = True
-            else:
-                self.ensure_target_running()
-                dispvm = False
-        except QubesMgmtException as err:
-            raise ExecutionFailed(
-                "Failed to start the target: {}".format(exc)
-            ) from err
-
-        qrexec_opts = ["-d", target, "-c", caller_ident, "-E"]
-        if dispvm:
-            qrexec_opts.append("-W")
-        try:
-            command = [QREXEC_CLIENT] + qrexec_opts + ["--", cmd]
-            process = await asyncio.create_subprocess_exec(*command)
-            await process.communicate()
-        finally:
-            if dispvm:
-                self.cleanup_dispvm(target)
-        if process.returncode != 0:
-            raise ExecutionFailed("qrexec-client failed: {}".format(command))
-
-    def spawn_dispvm(self) -> str:
-        """
-        Create and start Disposable VM based on AppVM specified in
-        :py:attr:`target`.
-
-        Returns:
-            str: name of new Disposable VM
-        """
-        assert isinstance(self.target, DispVMTemplate)
-        base_appvm = self.target.value
-        dispvm_name = utils.qubesd_call(base_appvm, "admin.vm.CreateDisposable")
-        dispvm_name_str = dispvm_name.decode("ascii")
-        utils.qubesd_call(dispvm_name_str, "admin.vm.Start")
-        return IntendedTarget(dispvm_name_str)
-
-    def ensure_target_running(self) -> None:
-        """
-        Start domain if not running already
-
-        Returns:
-            None
-        """
-        if self.target == "@adminvm":
-            return
-        try:
-            utils.qubesd_call(self.target, "admin.vm.Start")
-        except QubesMgmtException as err:
-            if err.exc_type == "QubesVMNotHaltedError":
-                pass
-            else:
-                raise
-
-    @staticmethod
-    def cleanup_dispvm(dispvm: str) -> None:
-        """
-        Kill and remove Disposable VM
-
-        Args:
-            dispvm (str): name of Disposable VM
-
-        Returns:
-            None
-        """
-        utils.qubesd_call(dispvm, "admin.vm.Kill")
-
+        return f"""\
+user={self.user or 'DEFAULT'}
+result=allow
+target={self.target}
+autostart={self.autostart}
+requested_target={self.request.target}"""
 
 class AskResolution(AbstractResolution):
     """Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
@@ -800,11 +706,13 @@ class AskResolution(AbstractResolution):
                  targets_for_ask: Sequence[str],
                  # default target, or None
                  default_target: Optional[str],
+                 autostart: bool,
                  user: Optional[str]):
         super().__init__(rule, request, user=user)
         assert default_target is None or default_target in targets_for_ask
         self.targets_for_ask = targets_for_ask
         self.default_target = default_target
+        self.autostart = autostart
 
     def handle_user_response(self, response: bool, target: str) -> AllowResolution:
         """
@@ -845,7 +753,7 @@ class AskResolution(AbstractResolution):
         # pylint: disable=no-self-use
         raise AccessDenied("invalid response")
 
-    async def execute(self, caller_ident: str) -> None:
+    async def execute(self) -> NoReturn:
         """Ask the user for permission.
 
         This method should be overloaded in children classes. This
@@ -1095,7 +1003,7 @@ class Allow(ActionType):
             )
 
         return request.allow_resolution_type(
-            self.rule, request, user=self.user, target=target
+            self.rule, request, user=self.user, target=target, autostart=self.autostart
         )
 
 
@@ -1189,6 +1097,7 @@ class Ask(ActionType):
             user=self.user,
             targets_for_ask=targets_for_ask,
             default_target=default_target,
+            autostart=self.autostart,
         )
 
 

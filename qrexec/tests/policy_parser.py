@@ -1245,7 +1245,7 @@ class TC_30_Resolution(unittest.TestCase):
             None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
         )
         resolution = parser.AllowResolution(
-            rule, self.request, user=None, target="test-vm2"
+            rule, self.request, user=None, target="test-vm2", autostart=True
         )
         self.assertIs(resolution.rule, rule)
         self.assertIs(resolution.request, self.request)
@@ -1261,7 +1261,7 @@ class TC_30_Resolution(unittest.TestCase):
             lineno=12,
         )
         resolution = parser.AllowResolution(
-            rule, self.request, user=None, target="test-vm2"
+            rule, self.request, user=None, target="test-vm2", autostart=True
         )
         self.assertIs(resolution.rule, rule)
         self.assertIs(resolution.request, self.request)
@@ -1283,6 +1283,7 @@ class TC_30_Resolution(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm2"],
             default_target="test-vm2",
+            autostart=True,
         )
 
         with self.assertRaises(AttributeError):
@@ -1304,6 +1305,7 @@ class TC_30_Resolution(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm2", "test-vm3"],
             default_target="test-vm2",
+            autostart=True,
         )
 
         self.assertIs(resolution.rule, rule)
@@ -1328,6 +1330,7 @@ class TC_30_Resolution(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm2"],
             default_target="test-vm2",
+            autostart=True,
         )
 
         with self.assertRaises(AttributeError):
@@ -1349,6 +1352,7 @@ class TC_30_Resolution(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm2", "test-vm3"],
             default_target=None,
+            autostart=True,
         )
 
         self.assertIsNone(resolution.default_target)
@@ -1665,6 +1669,7 @@ class TC_40_evaluate(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm1", "test-vm2"],
             default_target=None,
+            autostart=True,
         )
         resolution = resolution.handle_user_response(True, "test-vm2")
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1687,6 +1692,7 @@ class TC_40_evaluate(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm1", "test-vm2"],
             default_target=None,
+            autostart=True,
         )
         resolution = resolution.handle_user_response(True, "test-vm2")
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1706,6 +1712,7 @@ class TC_40_evaluate(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm2", "test-vm3"],
             default_target=None,
+            autostart=True,
         )
         with self.assertRaises(exc.AccessDenied) as e:
             resolution.handle_user_response(True, "test-no-dvm")
@@ -1722,6 +1729,7 @@ class TC_40_evaluate(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm1", "test-vm2"],
             default_target=None,
+            autostart=True,
         )
         with self.assertRaises(exc.AccessDenied) as e:
             resolution.handle_user_response(False, "")
@@ -1741,6 +1749,7 @@ class TC_40_evaluate(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm1", "test-vm2"],
             default_target=None,
+            autostart=True,
         )
         with self.assertRaises(exc.AccessDenied) as e:
             resolution.handle_user_response(False, "")
@@ -1760,141 +1769,87 @@ class TC_40_evaluate(unittest.TestCase):
             user=None,
             targets_for_ask=["test-vm2", "test-vm3"],
             default_target="test-vm2",
+            autostart=True,
         )
         resolution = resolution.handle_user_response(True, "test-vm2")
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.target, "test-vm2")
 
-    @unittest.mock.patch("qrexec.utils.qubesd_call")
-    def test_120_execute(self, mock_qubesd_call):
-        with unittest.mock.patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
-            asyncio.run(
-                self._test_120_execute(mock_subprocess, mock_qubesd_call)
-            )
+    def test_120_execute(self):
+        asyncio.run(
+            self._test_120_execute()
+        )
 
-    async def _test_120_execute(self, mock_subprocess, mock_qubesd_call):
+    async def _test_120_execute(self):
         rule = parser.Rule.from_line(
             None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
         )
         request = _req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
-            rule, request, user=None, target="test-vm2"
+            rule, request, user=None, target="test-vm2", autostart=True,
         )
-        mock_subprocess.return_value.returncode = 0
-        await resolution.execute("some-ident")
+        result = await resolution.execute()
         self.assertEqual(
-            mock_qubesd_call.mock_calls,
-            [unittest.mock.call("test-vm2", "admin.vm.Start")],
-        )
-        self.assertEqual(
-            mock_subprocess.mock_calls,
-            [
-                unittest.mock.call(
-                    QREXEC_CLIENT,
-                    "-d",
-                    "test-vm2",
-                    "-c",
-                    "some-ident",
-                    "-E",
-                    "--",
-                    "DEFAULT:QUBESRPC test.Service+argument test-vm1",
-                ),
-                unittest.mock.call().communicate(),
-            ],
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test-vm2
+autostart=True
+requested_target=test-vm2\
+""",
         )
 
-    @unittest.expectedFailure
-    @unittest.mock.patch("qrexec.utils.qubesd_call")
-    def test_121_execute_dom0(self, mock_qubesd_call):
-        with unittest.mock.patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
-            asyncio.run(
-                self._test_121_execute_dom0(mock_subprocess, mock_qubesd_call)
-            )
+    def test_121_execute_dom0(self):
+        asyncio.run(self._test_121_execute_dom0())
 
-    async def _test_121_execute_dom0(self, mock_subprocess, mock_qubesd_call):
+    async def _test_121_execute_dom0(self):
         rule = parser.Rule.from_line(
             None, "* * @anyvm dom0 allow", filepath="filename", lineno=12
         )
         request = _req("test-vm1", "dom0")
         resolution = parser.AllowResolution(
-            rule, request, user=None, target="dom0"
+            rule, request, user=None, target="dom0", autostart=True
         )
-        mock_subprocess.return_value.returncode = 0
-        await resolution.execute("some-ident")
-        self.assertEqual(mock_qubesd_call.mock_calls, [])
+        result = await resolution.execute()
         self.assertEqual(
-            mock_subprocess.mock_calls,
-            [
-                unittest.mock.call(
-                    [
-                        QREXEC_CLIENT,
-                        "-d",
-                        "dom0",
-                        "-c",
-                        "some-ident",
-                        "-E",
-                        "--",
-                        "QUBESRPC test.Service+argument test-vm1 name dom0",
-                    ]
-                )
-            ],
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=dom0
+autostart=True
+requested_target=@adminvm\
+"""
         )
 
-    @unittest.mock.patch("qrexec.utils.qubesd_call")
-    def test_121_execute_dom0_keyword(self, mock_qubesd_call):
-        with unittest.mock.patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
-            asyncio.run(
-                self._test_121_execute_dom0_keyword(
-                    mock_subprocess, mock_qubesd_call
-                )
-            )
+    def test_121_execute_dom0_keyword(self):
+        asyncio.run(self._test_121_execute_dom0_keyword())
 
-    async def _test_121_execute_dom0_keyword(
-        self, mock_subprocess, mock_qubesd_call
-    ):
+    async def _test_121_execute_dom0_keyword(self):
         rule = parser.Rule.from_line(
             None, "* * @anyvm dom0 allow", filepath="filename", lineno=12
         )
         request = _req("test-vm1", "@adminvm")
         resolution = parser.AllowResolution(
-            rule, request, user=None, target="@adminvm"
+            rule, request, user=None, target="@adminvm", autostart=True,
         )
-        mock_subprocess.return_value.returncode = 0
-        await resolution.execute("some-ident")
-        self.assertEqual(mock_qubesd_call.mock_calls, [])
+        result = await resolution.execute()
         self.assertEqual(
-            mock_subprocess.mock_calls,
-            [
-                unittest.mock.call(
-                    QREXEC_CLIENT,
-                    "-d",
-                    "@adminvm",
-                    "-c",
-                    "some-ident",
-                    "-E",
-                    "--",
-                    "QUBESRPC test.Service+argument test-vm1 keyword adminvm",
-                ),
-                unittest.mock.call().communicate(),
-            ],
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=@adminvm
+autostart=True
+requested_target=@adminvm\
+"""
         )
 
-    @unittest.mock.patch("qrexec.utils.qubesd_call")
-    def test_122_execute_dispvm(self, mock_qubesd_call):
-        with unittest.mock.patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
-            asyncio.run(
-                self._test_122_execute_dispvm(mock_subprocess, mock_qubesd_call)
-            )
+    def test_122_execute_dispvm(self):
+        asyncio.run(self._test_122_execute_dispvm())
 
-    async def _test_122_execute_dispvm(self, mock_subprocess, mock_qubesd_call):
+    async def _test_122_execute_dispvm(self):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @dispvm:default-dvm allow",
@@ -1907,146 +1862,40 @@ class TC_40_evaluate(unittest.TestCase):
             request,
             user=None,
             target=parser.DispVMTemplate("@dispvm:default-dvm"),
+            autostart=True,
         )
-        mock_qubesd_call.side_effect = (
-            lambda target, call: b"dispvm-name"
-            if call == "admin.vm.CreateDisposable"
-            else unittest.mock.DEFAULT
-        )
-        mock_subprocess.return_value.returncode = 0
-        await resolution.execute("some-ident")
+        result = await resolution.execute()
         self.assertEqual(
-            mock_qubesd_call.mock_calls,
-            [
-                unittest.mock.call("default-dvm", "admin.vm.CreateDisposable"),
-                unittest.mock.call("dispvm-name", "admin.vm.Start"),
-                unittest.mock.call("dispvm-name", "admin.vm.Kill"),
-            ],
-        )
-        self.assertEqual(
-            mock_subprocess.mock_calls,
-            [
-                unittest.mock.call(
-                    QREXEC_CLIENT,
-                    "-d",
-                    "dispvm-name",
-                    "-c",
-                    "some-ident",
-                    "-E",
-                    "-W",
-                    "--",
-                    "DEFAULT:QUBESRPC test.Service+argument test-vm1",
-                ),
-                unittest.mock.call().communicate(),
-            ],
-        )
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=@dispvm:default-dvm
+autostart=True
+requested_target=@dispvm:default-dvm\
+""")
 
-    @unittest.mock.patch("qrexec.utils.qubesd_call")
-    def test_123_execute_already_running(self, mock_qubesd_call):
-        with unittest.mock.patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
-            asyncio.run(
-                self._test_123_execute_already_running(
-                    mock_subprocess, mock_qubesd_call
-                )
-            )
+    def test_123_execute_already_running(self):
+        asyncio.run(self._test_123_execute_already_running())
 
-    async def _test_123_execute_already_running(
-        self, mock_subprocess, mock_qubesd_call
-    ):
+    async def _test_123_execute_already_running(self):
         rule = parser.Rule.from_line(
             None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
         )
         request = _req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
-            rule, request, user=None, target="test-vm2"
+            rule, request, user=None, target="test-vm2", autostart=True,
         )
-        mock_qubesd_call.side_effect = exc.QubesMgmtException(
-            "QubesVMNotHaltedError"
-        )
-        mock_subprocess.return_value.returncode = 0
-        await resolution.execute("some-ident")
+        result = await resolution.execute()
         self.assertEqual(
-            mock_qubesd_call.mock_calls,
-            [unittest.mock.call("test-vm2", "admin.vm.Start")],
-        )
-        self.assertEqual(
-            mock_subprocess.mock_calls,
-            [
-                unittest.mock.call(
-                    QREXEC_CLIENT,
-                    "-d",
-                    "test-vm2",
-                    "-c",
-                    "some-ident",
-                    "-E",
-                    "--",
-                    "DEFAULT:QUBESRPC test.Service+argument test-vm1",
-                ),
-                unittest.mock.call().communicate(),
-            ],
-        )
-
-    @unittest.mock.patch("qrexec.utils.qubesd_call")
-    def test_124_execute_startup_error(self, mock_qubesd_call):
-        with unittest.mock.patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
-            asyncio.run(
-                self._test_124_execute_startup_error(
-                    mock_subprocess, mock_qubesd_call
-                )
-            )
-
-    async def _test_124_execute_startup_error(
-        self, mock_subprocess, mock_qubesd_call
-    ):
-        rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
-        )
-        request = parser.Request(
-            "test.service", "+", "test-vm1", "test-vm2", system_info=SYSTEM_INFO
-        )
-        resolution = parser.AllowResolution(
-            rule, request, user=None, target="test-vm2"
-        )
-        mock_qubesd_call.side_effect = exc.QubesMgmtException("QubesVMError")
-        with self.assertRaises(exc.ExecutionFailed):
-            await resolution.execute("some-ident")
-        self.assertEqual(
-            mock_qubesd_call.mock_calls,
-            [unittest.mock.call("test-vm2", "admin.vm.Start")],
-        )
-        self.assertEqual(mock_subprocess.mock_calls, [])
-
-    @unittest.mock.patch("qrexec.utils.qubesd_call")
-    def test_125_execute_call_error(self, mock_qubesd_call):
-        with unittest.mock.patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
-            asyncio.run(
-                self._test_125_execute_call_error(
-                    mock_subprocess, mock_qubesd_call
-                )
-            )
-
-    async def _test_125_execute_call_error(
-        self, mock_subprocess, __mock_qubesd_call
-    ):
-        rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
-        )
-        request = parser.Request(
-            "test.service", "+", "test-vm1", "test-vm2", system_info=SYSTEM_INFO
-        )
-        resolution = parser.AllowResolution(
-            rule, request, user=None, target="test-vm2"
-        )
-        mock_subprocess.return_value.returncode = 1
-        with self.assertRaises(exc.ExecutionFailed):
-            await resolution.execute("some-ident")
-
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test-vm2
+autostart=True
+requested_target=test-vm2\
+""")
 
 # class TC_30_Misc(qubes.tests.QubesTestCase):
 class TC_50_Misc(unittest.TestCase):

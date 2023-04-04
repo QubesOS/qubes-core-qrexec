@@ -35,9 +35,10 @@
 #include <getopt.h>
 #include "qrexec.h"
 #include "libqrexec-utils.h"
+#include "../libqrexec/ioall.h"
 
 #define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
-#define QREXEC_SOCKET_PATH "/var/run/qubes/policy.sock"
+#define QREXEC_SOCKET_PATH "/run/qubes/policy.sock"
 
 #ifdef COVERAGE
 void __gcov_dump(void);
@@ -62,7 +63,8 @@ struct _client {
 enum policy_response {
     RESPONSE_PENDING,
     RESPONSE_ALLOW,
-    RESPONSE_DENY
+    RESPONSE_DENY,
+    RESPONSE_MALFORMED,
 };
 
 struct _policy_pending {
@@ -724,8 +726,11 @@ static void reap_children(void)
                                 policy_pending[i].params.ident, status,
                                 policy_pending[i].response_sent == RESPONSE_ALLOW ? "allow" : "deny");
                     } else {
+                        policy_pending[i].response_sent = RESPONSE_DENY;
                         send_service_refused(vchan, &policy_pending[i].params);
                     }
+                } else {
+                    policy_pending[i].response_sent = RESPONSE_ALLOW;
                 }
                 /* in case of allowed calls, we will do the rest in
                  * MSG_SERVICE_CONNECT from client handler */
@@ -771,85 +776,249 @@ static void sanitize_name(char * untrusted_s_signed, char *extra_allowed_chars)
     }
 }
 
-#define ENSURE_NULL_TERMINATED(x) x[sizeof(x)-1] = 0
+static int parse_policy_response(
+    char *response,
+    size_t result_bytes,
+    bool daemon,
+    char **user,
+    char **target,
+    char **requested_target,
+    int *autostart
+) {
+    *user = *target = *requested_target = NULL;
+    int result = *autostart = -1;
+    const char *const msg = daemon ? "qrexec-policy-daemon" : "qrexec-policy-exec";
+    // At least one byte must be returned
+    if (result_bytes < 1) {
+        LOG(ERROR, "%s didn't return any data", msg);
+        return RESPONSE_MALFORMED;
+    }
+    // Forbid NUL bytes in response.  qrexec_read_all_to_malloc() has added the
+    // NUL terminator already.
+    if (strlen(response) != result_bytes) {
+        LOG(ERROR, "%s wrote a NUL byte", msg);
+        return RESPONSE_MALFORMED;
+    }
+    // Strip any trailing newlines.
+    if (response[result_bytes - 1] == '\n') {
+        result_bytes--;
+        response[result_bytes] = '\0';
+    }
+    char *resp = response, *current_response;
+    while ((current_response = strsep(&resp, "\n"))) {
+        if (!strncmp(current_response, "result=", sizeof("result=") - 1)) {
+            current_response += sizeof("result=") - 1;
+            if (result != -1) {
+                goto bad_response;
+            }
+            if (!strcmp(current_response, "allow"))
+                result = 0;
+            else if (!strcmp(current_response, "deny")) {
+                result = 1;
+            } else {
+                goto bad_response;
+            }
+        } else if (!strncmp(current_response, "user=", sizeof("user=") - 1)) {
+            if (*user)
+                goto bad_response;
+            *user = strdup(current_response + (sizeof("user=") - 1));
+            if (*user == NULL)
+                abort();
+        } else if (!strncmp(current_response, "target=", sizeof("target=") - 1)) {
+            if (*target != NULL)
+                goto bad_response;
+            *target = strdup(current_response + (sizeof("target=") - 1));
+            if (*target == NULL)
+                abort();
+        } else if (!strncmp(current_response, "autostart=", sizeof("autostart=") - 1)) {
+            current_response += sizeof("autostart=") - 1;
+            if (*autostart != -1)
+                goto bad_response;
+            if (!strcmp(current_response, "True"))
+                *autostart = 1;
+            else if (!strcmp(current_response, "False"))
+                *autostart = 0;
+            else
+                goto bad_response;
+        } else if (!strncmp(current_response, "requested_target=", sizeof("requested_target=") - 1)) {
+            if (*requested_target != NULL)
+                goto bad_response;
+            *requested_target = strdup(current_response + (sizeof("requested_target=") - 1));
+            if (*requested_target == NULL)
+                abort();
+        } else {
+            char *p = strchr(current_response, '=');
+            if (p == NULL)
+                goto bad_response;
+            *p = '\0';
+            LOG(ERROR, "Unknown response key %s, ignoring", current_response);
+        }
+    }
+
+    switch (result) {
+    case 0:
+        if (*user == NULL || *target == NULL || *requested_target == NULL || *autostart == -1)
+            break;
+        return RESPONSE_ALLOW;
+    case 1:
+        if (*user != NULL || *target != NULL || *requested_target != NULL || *autostart != -1)
+            break;
+        return RESPONSE_DENY;
+    default:
+        break;
+    }
+
+bad_response:
+    LOG(ERROR, "%s sent invalid response", msg);
+    return RESPONSE_MALFORMED;
+}
+
+struct QrexecPolicyRequest {
+};
+
+static void send_request_to_daemon(
+        const int daemon_socket,
+        const char *remote_domain_name,
+        const char *target_domain,
+        const char *service_name)
+{
+    char *command;
+    ssize_t bytes_sent = 0;
+    int command_size = asprintf(&command,
+            "source=%s\n"
+            "intended_target=%s\n"
+            "service_and_arg=%s\n\n",
+            remote_domain_name,
+            target_domain,
+            service_name);
+    if (command_size < 0) {
+        PERROR("failed to construct request");
+        _exit(126);
+    }
+
+    for (int i = 0; i < command_size; i += bytes_sent) {
+        bytes_sent = send(daemon_socket, command + i, command_size - i, MSG_NOSIGNAL);
+        if (bytes_sent > command_size - i)
+            abort(); // kernel read beyond buffer bounds?
+        if (bytes_sent < 0) {
+            assert(bytes_sent == -1);
+            PERROR("send to socket failed");
+            _exit(126);
+        }
+    }
+    free(command);
+}
 
 /*
  * Called when agent sends a message asking to execute a predefined command.
  */
 
-static int connect_daemon_socket(
-        const int remote_domain_id,
+static enum policy_response connect_daemon_socket(
         const char *remote_domain_name,
         const char *target_domain,
         const char *service_name,
-        const struct service_params *request_id
+        char **user,
+        char **target,
+        char **requested_target,
+        int *autostart
 ) {
-    int result;
-    int command_size;
-    char response[32];
-    char *command;
-    int daemon_socket;
+    int pid = -1;
     struct sockaddr_un daemon_socket_address = {
         .sun_family = AF_UNIX,
         .sun_path = QREXEC_SOCKET_PATH
     };
 
-    daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+    int daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (daemon_socket < 0) {
          PERROR("socket creation failed");
-         return -1;
+         _exit(126);
     }
 
-    result = connect(daemon_socket, (struct sockaddr *) &daemon_socket_address,
+    int connect_result = connect(daemon_socket,
+            (struct sockaddr *) &daemon_socket_address,
             sizeof(daemon_socket_address));
-    if (result < 0) {
-         PERROR("connection to socket failed");
-         return -1;
-    }
-
-    command_size = asprintf(&command, "domain_id=%d\n"
-        "source=%s\n"
-        "intended_target=%s\n"
-        "service_and_arg=%s\n"
-        "process_ident=%s\n\n",
-        remote_domain_id, remote_domain_name, target_domain,
-        service_name, request_id->ident);
-    if (command_size < 0) {
-         PERROR("failed to construct request");
-         return -1;
-    }
-
-    for (int i = 0; i < command_size; i += result) {
-        result = send(daemon_socket, command + i, command_size - i, MSG_NOSIGNAL);
-        if (result > command_size - i)
-            abort(); // kernel read beyond buffer bounds?
-        if (result < 0) {
-             PERROR("send to socket failed");
-             free(command);
-             return -1;
+    if (connect_result == 0) {
+        send_request_to_daemon(daemon_socket,
+                               remote_domain_name,
+                               target_domain,
+                               service_name);
+        size_t result_bytes;
+        // this closes the socket
+        char *result = qubes_read_all_to_malloc(daemon_socket, 64, 4096, &result_bytes);
+        int policy_result = parse_policy_response(result, result_bytes, true, user, target, requested_target, autostart);
+        if (policy_result != RESPONSE_MALFORMED) {
+            // This leaks 'result', but as the code execs later anyway this isn't a problem.
+            // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
+            // the same buffer.
+            return policy_result;
         }
+        free(result);
+    } else {
+        PERROR("connection to socket failed");
+        assert(connect_result == -1);
+        if (close(daemon_socket))
+            abort();
     }
-    free(command);
-    command = NULL;
+    int fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds)) {
+        PERROR("socketpair()");
+        _exit(126);
+    }
+    daemon_socket = fds[0];
 
-    result = recv(daemon_socket, response, sizeof(response) - 1, 0);
-    if (result < 0) {
-         PERROR("error reading from socket");
-         return -1;
-    }
-    else {
-        response[result] = '\0';
-        if (!strncmp(response, "result=allow\n", sizeof("result=allow\n")-1)) {
-            return 0;
-        } else if (!strncmp(response, "result=deny\n", sizeof("result=deny\n")-1)) {
-            return 1;
-        } else {
-            LOG(ERROR, "invalid response: %s", response);
-            return -1;
-        }
+    pid = fork();
+    switch (pid) {
+        case -1:
+            LOG(ERROR, "Could not fork!");
+            _exit(126);
+        case 0:
+            if (close(fds[0]))
+                abort();
+            if (dup2(fds[1], 0) != 0 || dup2(fds[1], 1) != 1) {
+                PERROR("dup2()");
+                _exit(126);
+            }
+            if (close(fds[1]))
+                abort();
+            char remote_domain_id_str[10];
+            int v = snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",
+                    remote_domain_id);
+            if (v >= 1 && v < (int)sizeof(remote_domain_id_str)) {
+                execl(policy_program,
+                        "qrexec-policy-exec",
+                        "--",
+                        remote_domain_name,
+                        target_domain,
+                        service_name,
+                        NULL);
+                PERROR("execl");
+            } else {
+                PERROR("snprintf");
+            }
+            _exit(126);
+        default:
+            if (close(fds[1]))
+                abort();
+            size_t result_bytes;
+            int status;
+            // this closes the socket
+            char *result = qubes_read_all_to_malloc(daemon_socket, 64, 4096, &result_bytes);
+            do {
+                if (waitpid(pid, &status, 0) != pid) {
+                    PERROR("waitpid");
+                    _exit(126);
+                }
+            } while (!WIFEXITED(status));
+            if (WEXITSTATUS(status) != 0) {
+                LOG(ERROR, "qrexec-policy-exec failed");
+                _exit(126);
+            }
+            // This leaks 'result', but as the code execs later anyway this isn't a problem.
+            // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
+            // the same buffer.
+            return parse_policy_response(result, result_bytes, true, user, target, requested_target, autostart);
     }
 }
-
 
 static void handle_execute_service(
         const int remote_domain_id,
@@ -858,11 +1027,8 @@ static void handle_execute_service(
         const char *service_name,
         const struct service_params *request_id)
 {
-    int result;
     int policy_pending_slot;
     pid_t pid;
-    char remote_domain_id_str[10];
-    sigset_t sigmask;
 
     policy_pending_slot = find_policy_pending_slot();
     if (policy_pending_slot < 0) {
@@ -886,40 +1052,104 @@ static void handle_execute_service(
     if (close_range(3, ~0U, 0))
         abort(); /* cannot happen */
 
-    result = connect_daemon_socket(remote_domain_id, remote_domain_name,
-                                   target_domain, service_name, request_id);
-    if (result >= 0) {
-        _exit(result);
-    }
+    char *user, *target, *requested_target;
+    int autostart;
+    int policy_response =
+        connect_daemon_socket(remote_domain_name, target_domain, service_name,
+                              &user, &target, &requested_target, &autostart);
 
-    LOG(ERROR, "couldn't invoke qrexec-policy-daemon, using qrexec-policy-exec");
+    if (policy_response != RESPONSE_ALLOW)
+        _exit(126);
 
-    sigemptyset(&sigmask);
-    if (sigprocmask(SIG_SETMASK, &sigmask, NULL)) {
-        PERROR("sigprocmask");
-        _exit(1);
-    }
-    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR ||
-        signal(SIGPIPE, SIG_DFL) == SIG_ERR)
-    {
-        PERROR("signal");
-        _exit(1);
-    }
-    int v = snprintf(remote_domain_id_str, sizeof(remote_domain_id_str), "%d",
-                     remote_domain_id);
-    if (v >= 1 && v < (int)sizeof(remote_domain_id_str)) {
-        execl(policy_program, "qrexec-policy-exec", "--",
-              remote_domain_id_str,
-              remote_domain_name,
-              target_domain,
-              service_name,
-              request_id->ident,
-              NULL);
-        PERROR("execl");
+    /* Replace the target domain with the version normalized by the policy engine */
+    target_domain = requested_target;
+    char *cmd = NULL;
+    bool disposable = false;
+    size_t resp_len;
+
+    /*
+     * If there was no service argument, pretend that an empty argument was
+     * provided by appending "+" to the service name.
+     */
+    const char *const trailer = strchr(service_name, '+') ? "" : "+";
+
+    /* Check if the target is dom0, which requires special handling. */
+    bool target_is_dom0 = strcmp(target, "@adminvm") == 0 ||
+                          strcmp(target, "dom0") == 0;
+    if (target_is_dom0) {
+        char *type;
+        bool target_is_keyword = target_domain[0] == '@';
+        if (target_is_keyword) {
+            target_domain++;
+            type = "keyword";
+        } else {
+            type = "name";
+        }
+        if (asprintf(&cmd, "QUBESRPC %s%s %s %s %s",
+                     service_name,
+                     trailer,
+                     remote_domain_name,
+                     type,
+                     target_domain) <= 0)
+            _exit(126);
     } else {
-        PERROR("snprintf");
+        char *buf;
+        if (strncmp("@dispvm:", target, sizeof("@dispvm:") - 1) == 0) {
+            disposable = true;
+            buf = qubesd_call(target + 8, "admin.vm.CreateDisposable", "", &resp_len);
+            if (!buf) // error already printed by qubesd_call
+                _exit(126);
+            if (memcmp(buf, "0", 2) == 0) {
+                /* we exec later so memory leaks do not matter */
+                target = buf + 2;
+            } else {
+                if (memcmp(buf, "2", 2) == 0) {
+                    LOG(ERROR, "qubesd could not create disposable VM: %s", buf + 2);
+                } else {
+                    LOG(ERROR, "invalid response to admin.vm.CreateDisposable");
+                }
+                _exit(126);
+            }
+        }
+        if (asprintf(&cmd, "%s:QUBESRPC %s%s %s",
+                    user,
+                    service_name,
+                    trailer,
+                    remote_domain_name) <= 0)
+            _exit(126);
+        if (autostart) {
+            buf = qubesd_call(target, "admin.vm.Start", "", &resp_len);
+            if (!buf) // error already printed by qubesd_call
+                _exit(126);
+            if (!((memcmp(buf, "0", 2) == 0) ||
+                  (resp_len >= 24 && memcmp(buf, "2\0QubesVMNotHaltedError", 24) == 0))) {
+                if (memcmp(buf, "2", 2) == 0) {
+                    LOG(ERROR, "qubesd could not start VM %s: %s", target, buf + 2);
+                } else {
+                    LOG(ERROR, "invalid response to admin.vm.Start");
+                }
+                _exit(126);
+            }
+            free(buf);
+        }
     }
-    _exit(1);
+    char *cid;
+    if (asprintf(&cid, "%s,%s,%d", request_id->ident, remote_domain_name, remote_domain_id) <= 0)
+        _exit(126);
+
+    const char *to_exec[] = {
+        "/usr/bin/qrexec-client",
+        disposable ? "-EWkd" : "-Ed",
+        target,
+        "-c",
+        cid,
+        "--",
+        cmd,
+        NULL,
+    };
+    execv(to_exec[0], (char **)to_exec);
+    LOG(ERROR, "execve() failed: %m");
+    _exit(126);
 }
 
 
@@ -986,6 +1216,8 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
             exit(1);
     }
 }
+
+#define ENSURE_NULL_TERMINATED(x) x[sizeof(x)-1] = 0
 
 static void handle_message_from_agent(void)
 {

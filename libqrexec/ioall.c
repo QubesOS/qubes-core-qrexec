@@ -315,6 +315,15 @@ char *qubesd_call(const char *dest, char *method, char *arg, size_t *len)
 #define BUF_SIZE 35
 #define BUF_MAX 65535
     buf = qubes_read_all_to_malloc(sock, BUF_SIZE, BUF_MAX, len);
+    if (buf && (*len < 2 || strlen(buf) >= *len)) {
+        LOG(ERROR,
+            "Truncated response to %s: got %zu bytes",
+            method,
+            *len);
+        *len = 0;
+        free(buf);
+        buf = NULL;
+    }
 out:
     if (sock != -1)
         close(sock);

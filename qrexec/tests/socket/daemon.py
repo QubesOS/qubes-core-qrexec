@@ -178,11 +178,9 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
             self.get_policy_program_params(),
             [
                 "--",
-                str(self.domain),
                 self.domain_name,
                 target_domain_name,
                 service_name,
-                ident,
             ],
         )
 
