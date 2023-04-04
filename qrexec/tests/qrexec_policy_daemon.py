@@ -56,8 +56,8 @@ class TestPolicyDaemon:
                     "b": {"tags": ["guivm-c", "created-by-dom0"]},
                     "c": {"tags": ["created-by-dom0"]},
                     "dom0": {"tags": []},
-                }
-            }
+                },
+            },
         )
         monkeypatch.setattr(
             "qrexec.tools.qrexec_policy_daemon.get_system_info", mock_system

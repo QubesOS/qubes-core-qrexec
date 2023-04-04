@@ -18,7 +18,9 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
-
+from __future__ import annotations
+import pathlib
+from typing import Optional
 
 class AccessDenied(Exception):
     """
@@ -29,15 +31,15 @@ class AccessDenied(Exception):
     (e.g. because we applied a policy that says `notify=no`).
     """
 
-    def __init__(self, *args, notify=True, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, msg: str, notify:bool=True):
+        super().__init__(msg)
         self.notify = notify
 
 
 class PolicySyntaxError(AccessDenied):
     """Syntax error in qrexec policy, abort parsing"""
 
-    def __init__(self, filepath, lineno, msg):
+    def __init__(self, filepath: Optional[pathlib.PurePath], lineno: Optional[int], msg: str):
         super().__init__(
             f"{filepath or '<unknown>'}:{lineno}: {msg}"
         )
@@ -46,14 +48,14 @@ class PolicySyntaxError(AccessDenied):
 class PolicyNotFound(AccessDenied):
     """Policy was not found for this service"""
 
-    def __init__(self, service_name):
+    def __init__(self, service_name: str):
         super().__init__("Policy not found for service {}".format(service_name))
 
 
 class QubesMgmtException(Exception):
     """Exception returned by qubesd"""
 
-    def __init__(self, exc_type):
+    def __init__(self, exc_type: str):
         super().__init__()
         self.exc_type = exc_type
 

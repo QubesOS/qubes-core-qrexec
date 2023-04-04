@@ -18,12 +18,15 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
+from __future__ import annotations
 import argparse
 import logging
 import logging.handlers
 import pathlib
 import sys
 import asyncio
+import subprocess
+from typing import Optional, List, Union, Dict, Type
 
 from .. import DEFAULT_POLICY, POLICYPATH
 from .. import exc
@@ -38,31 +41,32 @@ def create_default_policy(service_name):
         policy.write(DEFAULT_POLICY)
 
 
-class JustEvaluateResult(Exception):
-    def __init__(self, exit_code):
+class JustEvaluateResult(BaseException):
+    exit_code: int
+    def __init__(self, exit_code: int):
         super().__init__()
         self.exit_code = exit_code
 
 
 class JustEvaluateAllowResolution(parser.AllowResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> None:
         raise JustEvaluateResult(0)
 
 
 class JustEvaluateAskResolution(parser.AskResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> None:
         raise JustEvaluateResult(1)
 
 
 class AssumeYesForAskResolution(parser.AskResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> None:
         return await self.handle_user_response(
             True, self.request.target
         ).execute(caller_ident)
 
 
 class AgentAskResolution(parser.AskResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> None:
         domains = self.request.system_info["domains"]
         guivm = domains[self.request.source]["guivm"]
         if not guivm:
@@ -122,7 +126,7 @@ class AgentAskResolution(parser.AskResolution):
 
 
 class NotifyAllowedResolution(parser.AllowResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> None:
         try:
             guivm = self.request.system_info["domains"][self.request.source][
                 "guivm"
@@ -174,7 +178,7 @@ async def notify(guivm, params):
 
 
 class LogAllowedResolution(NotifyAllowedResolution):
-    async def execute(self, caller_ident):
+    async def execute(self, caller_ident: str) -> None:
         log_prefix = (
             "qrexec: {request.service}{request.argument}: "
             "{request.source} -> {request.target}:".format(request=self.request)
@@ -243,9 +247,8 @@ argparser.add_argument(
     help="Qrexec process identifier - for connecting data channel",
 )
 
-
-def main(args=None):
-    args = argparser.parse_args(args)
+def main(args: Optional[List[str]]) -> Union[str, int]:
+    parsed_args = argparser.parse_args(args)
 
     log = logging.getLogger("policy")
     log.setLevel(logging.INFO)
@@ -253,18 +256,18 @@ def main(args=None):
         handler = logging.handlers.SysLogHandler(address="/dev/log")
         log.addHandler(handler)
 
-    policy_cache = PolicyCache(args.path)
+    policy_cache = PolicyCache(parsed_args.path)
 
     return asyncio.run(
         handle_request(
-            args.domain_id,
-            args.source,
-            args.intended_target,
-            args.service_and_arg,
-            args.process_ident,
+            parsed_args.domain_id,
+            parsed_args.source,
+            parsed_args.intended_target,
+            parsed_args.service_and_arg,
+            parsed_args.process_ident,
             log,
-            just_evaluate=args.just_evaluate,
-            assume_yes_for_ask=args.assume_yes_for_ask,
+            just_evaluate=parsed_args.just_evaluate,
+            assume_yes_for_ask=parsed_args.assume_yes_for_ask,
             policy_cache=policy_cache,
         )
     )
@@ -272,15 +275,15 @@ def main(args=None):
 
 # pylint: disable=too-many-arguments,too-many-locals
 async def handle_request(
-    domain_id,
-    source,
-    intended_target,
-    service_and_arg,
-    process_ident,
+    domain_id: str,
+    source: str,
+    intended_target: str,
+    service_and_arg: str,
+    process_ident: str,
     log,
-    just_evaluate=False,
-    assume_yes_for_ask=False,
-    allow_resolution_type=None,
+    just_evaluate: bool = False,
+    assume_yes_for_ask: bool = False,
+    allow_resolution_type: Optional[type]=None,
     policy_cache=None,
     system_info=None,
 ):
@@ -306,6 +309,7 @@ async def handle_request(
         else:
             policy = parser.FilePolicy(policy_path=POLICYPATH)
 
+        allow_resolution_class: Type[parser.AllowResolution]
         if allow_resolution_type is None:
             allow_resolution_class = LogAllowedResolution
         else:

@@ -95,7 +95,7 @@ SYSTEM_INFO = {
             "template_for_dispvms": False,
             "power_state": "Halted",
         },
-    }
+    },
 }
 
 # a generic request helper

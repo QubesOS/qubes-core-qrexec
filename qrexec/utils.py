@@ -18,15 +18,17 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
 import json
 import socket
 import subprocess
+from typing import Set, Optional, TypedDict, List, Dict, cast, TypeAlias
 
 from . import QUBESD_SOCK, QUBESD_INTERNAL_SOCK
 from .exc import QubesMgmtException
 
 
-def _sanitize_char(input_char, extra_allowed_characters):
+def _sanitize_char(input_char: str, extra_allowed_characters: Set[str]) -> str:
     input_char_ord = ord(input_char)
 
     if (
@@ -49,7 +51,8 @@ def _sanitize_char(input_char, extra_allowed_characters):
 # See https://github.com/QubesOS/qubes-core-admin-linux/blob/
 #  4f0878ccbf8a95f8264b54d2b6f4dc433ca0793a/qrexec/qrexec-daemon.c#L627-L646
 #
-def _sanitize_name(input_string, extra_allowed_characters, assert_sanitized):
+def _sanitize_name(input_string: str, extra_allowed_characters: Set[str],
+                   assert_sanitized: bool) -> str:
     result = "".join(
         _sanitize_char(character, extra_allowed_characters)
         for character in input_string
@@ -62,15 +65,16 @@ def _sanitize_name(input_string, extra_allowed_characters, assert_sanitized):
     return result
 
 
-def sanitize_domain_name(input_string, assert_sanitized=False):
-    return _sanitize_name(input_string, {}, assert_sanitized)
+def sanitize_domain_name(input_string: str, assert_sanitized:bool=False) -> str:
+    return _sanitize_name(input_string, set(), assert_sanitized)
 
 
-def sanitize_service_name(input_string, assert_sanitized=False):
+def sanitize_service_name(input_string:str, assert_sanitized:bool=False) -> str:
     return _sanitize_name(input_string, {"+"}, assert_sanitized)
 
 
-def qubesd_call(dest, method, arg=None, payload=None):
+def qubesd_call(dest: str, method: str, arg: Optional[str]=None,
+                payload:Optional[bytes]=None) -> bytes:
     if method.startswith("internal."):
         socket_path = QUBESD_INTERNAL_SOCK
     else:
@@ -101,8 +105,21 @@ def qubesd_call(dest, method, arg=None, payload=None):
         raise QubesMgmtException(exc_type.decode("ascii"))
     raise AssertionError("invalid qubesd response: {!r}".format(return_data))
 
+class SystemInfoEntry(TypedDict):
+    tags: List[str]
+    type: str
+    template_for_dispvms: bool
+    default_dispvm: Optional[str]
+    power_state: str
+    icon: str
+    guivm: Optional[str]
 
-def get_system_info():
+SystemInfo: TypeAlias = Dict[str, SystemInfoEntry]
+
+class FullSystemInfo(TypedDict):
+    domains: SystemInfo
+
+def get_system_info() -> FullSystemInfo:
     """Get system information
 
     This retrieve information necessary to process qrexec policy. Returned
@@ -117,12 +134,12 @@ def get_system_info():
     """
 
     system_info = qubesd_call("dom0", "internal.GetSystemInfo")
-    return json.loads(system_info.decode("utf-8"))
+    return cast(SystemInfo, json.loads(system_info.decode("utf-8")))
 
 
-def prepare_subprocess_kwds(input):
+def prepare_subprocess_kwds(input: object) -> Dict[str, object]:
     """Prepare kwds for :py:func:`subprocess.run` for given input"""  # pylint: disable=redefined-builtin
-    kwds = {}
+    kwds: Dict[str, object] = {}
     if input is None:
         kwds["stdin"] = subprocess.DEVNULL
     elif isinstance(input, bytes):

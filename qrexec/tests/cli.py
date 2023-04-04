@@ -130,7 +130,7 @@ def system_info():
                 "template_for_dispvms": False,
                 "guivm": None,
             },
-        }
+        },
     }
     with mock.patch("qrexec.utils.get_system_info") as mock_system_info:
         mock_system_info.return_value = system_info
