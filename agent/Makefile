@@ -38,8 +38,8 @@ install: all
 	install qrexec-client-vm $(DESTDIR)/usr/bin
 	install -d $(DESTDIR)/usr/share/man/man1
 	install qrexec-client-vm.1.gz $(DESTDIR)/usr/share/man/man1
-	ln -s ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec-client-vm
-	ln -s ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec_client_vm
+	ln -sf ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec-client-vm
+	ln -sf ../../bin/qrexec-client-vm $(DESTDIR)/usr/lib/qubes/qrexec_client_vm
 	install qrexec-fork-server $(DESTDIR)/usr/bin
 ifeq ($(os), Debian)
 	install -D -m 0644 qrexec.pam.debian $(DESTDIR)/etc/pam.d/qrexec
