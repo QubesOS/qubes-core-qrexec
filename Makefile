@@ -27,12 +27,12 @@ all-base:
 install-base: all-base
 	+$(MAKE) install -C libqrexec
 	$(PYTHON) setup.py install -O1 $(PYTHON_PREFIX_ARG) --skip-build --root $(DESTDIR)
-	ln -s qrexec-policy-exec $(DESTDIR)/usr/bin/qrexec-policy
+	ln -sf qrexec-policy-exec $(DESTDIR)/usr/bin/qrexec-policy
 	install -d $(DESTDIR)/usr/lib/qubes -m 755
 	install -t $(DESTDIR)/usr/lib/qubes -m 755 lib/*
 	install -d $(DESTDIR)/etc/qubes-rpc -m 755
-	ln -s /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Ask
-	ln -s /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Notify
+	ln -sf /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Ask
+	ln -sf /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Notify
 	install -d $(DESTDIR)/etc/xdg/autostart -m 755
 	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
 		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
@@ -51,7 +51,7 @@ install-dom0: all-dom0
 	for RPCNAME in \
 		policy.List policy.Get policy.Replace policy.Remove \
 		policy.include.List policy.include.Get policy.include.Replace policy.include.Remove; \
-	do ln -s /usr/bin/qubes-policy-admin $(DESTDIR)/etc/qubes-rpc/$$RPCNAME; \
+	do ln -sf /usr/bin/qubes-policy-admin $(DESTDIR)/etc/qubes-rpc/$$RPCNAME; \
 	done
 
 	install -d $(DESTDIR)/etc/qubes-rpc/policy -m 775
