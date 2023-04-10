@@ -12,7 +12,7 @@ MAKEFLAGS := -r
 
 all: qrexec-daemon qrexec-client
 clean:
-	rm -f *.o *~ qrexec-daemon qrexec-client *.o.dep
+	rm -f *.o *~ qrexec-daemon qrexec-client *.o.dep *.gcda *.gcno
 install: all
 	install -d $(DESTDIR)/usr/sbin $(DESTDIR)/usr/bin
 	install -t $(DESTDIR)/usr/sbin -m 755 qrexec-daemon
