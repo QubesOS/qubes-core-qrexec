@@ -27,7 +27,7 @@ libqrexec-utils.so: libqrexec-utils.so.$(SO_VER)
 %.a:
 	$(AR) rcs $@ $^
 clean:
-	rm -f *.o *~ *.a *.so *.so.* *.o.dep
+	rm -f *.o *~ *.a *.so *.so.* *.o.dep *.gcda *.gcno
 
 install:
 	install -d -m 0755 $(DESTDIR)$(LIBDIR)

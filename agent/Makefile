@@ -16,7 +16,7 @@ override LDLIBS=-lqrexec-utils $(shell pkg-config --libs $(VCHAN_PKG)) $(if $(HA
 .PHONY: all clean install
 
 override remove_generated := \
-	rm -f -- *.o *~ qrexec-agent qrexec-client-vm *.o.dep
+	rm -f -- *.o *~ qrexec-agent qrexec-client-vm *.o.dep *.gcda *.gcno
 
 all: qrexec-agent qrexec-client-vm qrexec-fork-server qrexec-client-vm.1.gz
 .PHONY: all clean install .PHONY
