@@ -1219,7 +1219,10 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
 
 #define ENSURE_NULL_TERMINATED(x) x[sizeof(x)-1] = 0
 
-static void handle_message_from_agent(void)
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+static
+#endif
+void handle_message_from_agent(void)
 {
     struct msg_header hdr, untrusted_hdr;
     struct trigger_service_params untrusted_params, params;
@@ -1266,11 +1269,15 @@ static void handle_message_from_agent(void)
                 handle_vchan_error("malloc(service_name)");
 
             if (libvchan_recv(vchan, &untrusted_params3, sizeof(untrusted_params3))
-                    != sizeof(untrusted_params3))
+                    != sizeof(untrusted_params3)) {
+                free(untrusted_service_name);
                 handle_vchan_error("recv params3");
+            }
             if (libvchan_recv(vchan, untrusted_service_name, service_name_len)
-                    != (int)service_name_len)
+                    != (int)service_name_len) {
+                free(untrusted_service_name);
                 handle_vchan_error("recv params3(service_name)");
+            }
 
             /* sanitize start */
             ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
