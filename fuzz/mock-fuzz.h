@@ -20,4 +20,10 @@
 #define read fuzz_read
 #define write fuzz_write
 
+/* follow just parent */
+#define fork() 1
+
+#define main fuzz_main
+#define exit fuzz_exit
+
 #endif

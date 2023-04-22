@@ -16,10 +16,10 @@ CXXFLAGS += -O1 -fno-omit-frame-pointer -gline-tables-only \
 		-fsanitize-address-use-after-scope -fsanitize=fuzzer
 endif
 
-_LIBQREXEC_OBJS = remote.o write-stdin.o ioall.o txrx-vchan.o buffer.o replace.o exec.o log.o
+_LIBQREXEC_OBJS = remote.o write-stdin.o ioall.o txrx-vchan.o buffer.o replace.o exec.o log.o unix-server.o
 LIBQREXEC_OBJS = $(patsubst %.o,libqrexec-%.o,$(_LIBQREXEC_OBJS))
 
-FUZZERS = qubesrpc_parse_fuzzer qrexec_remote_fuzzer
+FUZZERS = qubesrpc_parse_fuzzer qrexec_remote_fuzzer qrexec_daemon_fuzzer
 SEEDS = $(patsubst %,%_seed_corpus.zip,$(FUZZERS))
 
 .PHONY: all
@@ -38,6 +38,8 @@ test-%: % %_seed_corpus.zip
 	unzip $<_seed_corpus.zip
 	./$< $<_seed_corpus -runs=100000
 
+qrexec_daemon_fuzzer: qrexec_daemon_fuzzer.o fuzz.o $(LIBQREXEC_OBJS) daemon-qrexec-daemon.o
+
 %_fuzzer: %_fuzzer.o fuzz.o $(LIBQREXEC_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LIB_FUZZING_ENGINE)
 
@@ -48,6 +50,9 @@ fuzz.o: fuzz.c
 	$(CC) $(CFLAGS) -o $@ -c $^
 
 libqrexec-%.o: ../libqrexec/%.c
+	$(CC) $(CFLAGS) -o $@ -c $^
+
+daemon-%.o: ../daemon/%.c
 	$(CC) $(CFLAGS) -o $@ -c $^
 
 .PHONY: clean

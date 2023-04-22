@@ -26,6 +26,10 @@
 
 #include "libqrexec-utils.h"
 
+void _Noreturn fuzz_exit(int status) {
+    abort();
+}
+
 void LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     char *cmdline = malloc(size+1);
     if (!cmdline)

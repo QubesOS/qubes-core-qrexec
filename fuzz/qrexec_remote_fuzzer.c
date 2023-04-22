@@ -7,6 +7,9 @@
 #include "libqrexec-utils.h"
 #include "fuzz.h"
 
+void _Noreturn fuzz_exit(int status) {
+    abort();
+}
 
 void LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     fuzz_file_t *vchan_file, *stdin_file, *local_stderr_file;
