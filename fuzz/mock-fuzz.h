@@ -15,6 +15,7 @@
 #define libvchan_is_open fuzz_libvchan_is_open
 #define libvchan_data_ready fuzz_libvchan_data_ready
 #define libvchan_buffer_space fuzz_libvchan_buffer_space
+#define libvchan_client_init fuzz_libvchan_client_init
 
 #define read fuzz_read
 #define write fuzz_write

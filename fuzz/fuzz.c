@@ -139,3 +139,8 @@ ssize_t fuzz_write(int fd, const void *buf, size_t count) {
 
     return count;
 }
+
+fuzz_file_t *fuzz_libvchan_client_init(int domain, int port) {
+    /* not implemented yet */
+    abort();
+}
