@@ -1,0 +1,59 @@
+# Maintainer: Frédéric Pierret (fepitre) <frederic@invisiblethingslab.com>
+
+pkgname=qubes-vm-qrexec
+pkgver=@VERSION@
+pkgrel=@REL@
+pkgdesc="The Qubes qrexec files (qube side)"
+arch=("x86_64")
+url="http://qubes-os.org/"
+license=('GPL')
+depends=(
+    bash
+    glibc
+    python
+    python-setuptools
+    pam
+    qubes-libvchan
+)
+makedepends=(
+    gcc
+    make
+    pkg-config
+    pandoc
+    python-setuptools
+    lsb-release
+    qubes-libvchan
+)
+provides=('qubes-vm-qrexec')
+install=archlinux/PKGBUILD.install
+_pkgnvr="${pkgname}-${pkgver}-${pkgrel}"
+source=("${_pkgnvr}.tar.gz")
+sha256sums=(SKIP)
+
+
+build() {
+    cd "${_pkgnvr}"
+    make all-base
+    make all-vm
+}
+
+package() {
+    cd "${_pkgnvr}"
+    make install-base \
+        DESTDIR="$pkgdir" \
+        SBINDIR=/usr/bin \
+        LIBDIR=/usr/lib \
+        SYSLIBDIR=/usr/lib \
+        SYSTEM_DROPIN_DIR=/usr/lib/systemd/system \
+        USER_DROPIN_DIR=/usr/lib/systemd/user
+    make install-vm \
+        DESTDIR="$pkgdir" \
+        SBINDIR=/usr/bin \
+        LIBDIR=/usr/lib \
+        SYSLIBDIR=/usr/lib \
+        SYSTEM_DROPIN_DIR=/usr/lib/systemd/system \
+        USER_DROPIN_DIR=/usr/lib/systemd/user
+}
+
+# vim:set ts=2 sw=2 et:
+
