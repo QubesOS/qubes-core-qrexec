@@ -25,11 +25,17 @@ import socket
 from unittest import mock
 
 import pytest
+import pytest_asyncio
 
 from ..server import SocketService, call_socket_service_local
 
 # Disable warnings that conflict with Pytest's use of fixtures.
 # pylint: disable=redefined-outer-name, unused-argument
+
+try:
+    asyncio_fixture = pytest_asyncio.fixture
+except AttributeError:
+    asyncio_fixture = pytest.fixture
 
 
 class TestService(SocketService):
@@ -52,7 +58,7 @@ def temp_dir():
         shutil.rmtree(temp_dir)
 
 
-@pytest.fixture
+@asyncio_fixture
 async def server(temp_dir):
     socket_path = os.path.join(temp_dir, "Service")
 
