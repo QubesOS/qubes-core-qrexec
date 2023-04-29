@@ -22,6 +22,7 @@ import asyncio
 from contextlib import suppress
 
 import pytest
+import pytest_asyncio
 from unittest.mock import Mock, AsyncMock
 import functools
 
@@ -35,6 +36,11 @@ import logging
 
 log = logging.getLogger("policy")
 log.setLevel(logging.INFO)
+
+try:
+    asyncio_fixture = pytest_asyncio.fixture
+except AttributeError:
+    asyncio_fixture = pytest.fixture
 
 
 class TestPolicyDaemon:
@@ -64,7 +70,7 @@ class TestPolicyDaemon:
         )
         return mock_system
 
-    @pytest.fixture
+    @asyncio_fixture
     async def async_server(self, tmp_path, request):
         server = await asyncio.start_unix_server(
             functools.partial(
@@ -77,7 +83,7 @@ class TestPolicyDaemon:
 
         server.close()
 
-    @pytest.fixture
+    @asyncio_fixture
     async def qrexec_server(self, tmp_path, request):
         mock_policy = Mock()
         eval_server = await asyncio.start_unix_server(
