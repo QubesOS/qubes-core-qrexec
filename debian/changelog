@@ -1,3 +1,33 @@
+qubes-core-qrexec (4.2.5-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Check the return value of strdup()
+  * Use close_range(2) instead of manual close loop
+  * Check return value of snprintf()
+  * Fix signal handling bugs
+  * Ignore stopped or continued children
+  * Ensure all data is sent to policy daemon
+  * Avoid K&R function declarations
+  * Fix reserved identifier violations
+  * Slightly better validation of data from dom0
+  * Correctly detect SOCK_CLOEXEC
+  * More consistency checks in buffer code
+  * Add a missing #include
+  * Add missing static
+  * Avoid option injection for usernames starting with "-"
+  * Forcibly rebuild C code for socket tests
+  * Fix some mypy errors
+  * Fix make install when already installed
+  * Clean up gcov cruft in 'make clean'
+  * avoid option injection in 'make clean'
+  * Add new utility functions to libqrexec
+  * qrexec-client: Allow killing the VM before exiting
+  * Add types to Python code
+  * Use pytest_asyncio.fixture() for async test fixtures
+  * Avoid having qrexec-policy-daemon handle connections
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 03 May 2023 02:52:09 +0200
+
 qubes-core-qrexec (4.2.4-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
