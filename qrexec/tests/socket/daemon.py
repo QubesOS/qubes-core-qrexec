@@ -157,6 +157,52 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
         self.assertEqual(data, struct.pack("<32s", ident.encode()))
 
+    def test_bad_request_id_1(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        target_domain_name = "target_domain"
+        ident = "\1\2\3"
+
+        self.send_trigger_service(
+            agent, target_domain_name, "qubes.Service", ident
+        )
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
+        self.assertEqual(data, struct.pack("<32s", ident.encode()))
+
+    def test_bad_request_id_empty(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        target_domain_name = "target_domain"
+        ident = ""
+
+        self.send_trigger_service(
+            agent, target_domain_name, "qubes.Service", ident
+        )
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
+        self.assertEqual(data, struct.pack("<32s", ident.encode()))
+
+    def test_bad_request_id_bad_byte_after_nul_terminator(self):
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        target_domain_name = "target_domain"
+        ident = "a\0b"
+
+        self.set_policy_params(1, 0)
+
+        self.send_trigger_service(
+            agent, target_domain_name, "qubes.Service", ident
+        )
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
+        self.assertEqual(len(data), 32)
+        self.assertEqual(data[:4], b"a\0b\0")
+        self.assertEqual(data[4:], b"\0" * 28)
+
     def send_trigger_service(
         self, agent, target_domain_name: str, service_name: str, ident: str
     ):
