@@ -22,7 +22,6 @@
 
 """Qrexec policy parser and evaluator"""
 
-from __future__ import annotations
 import abc
 import collections
 import collections.abc
@@ -232,7 +231,7 @@ class VMToken(str, metaclass=VMTokenMeta):
     """
 
     def __new__(cls, token: str, *, filepath: Optional[pathlib.Path]=None,
-                lineno: Optional[int]=None) -> VMToken:
+                lineno: Optional[int]=None) -> "VMToken":
         orig_token = token
 
         # first, adjust some aliases
@@ -304,7 +303,7 @@ class VMToken(str, metaclass=VMTokenMeta):
         other: Optional[str],
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional["VMToken"]=None
     ) -> bool:
         """Check if this token matches opposite token"""
         # pylint: disable=unused-argument
@@ -340,7 +339,7 @@ class Redirect(_BaseTarget):
         *,
         filepath: Optional[pathlib.Path]=None,
         lineno: Optional[int]=None,
-    ) -> Redirect:
+    ) -> "Redirect":
         if value is None:
             return None # type: ignore
         return super().__new__(cls, value, filepath=filepath, lineno=lineno) # type: ignore
@@ -414,10 +413,10 @@ class AdminVM(Source, Target, Redirect, IntendedTarget):
     # pylint: disable=missing-docstring,unused-argument
     EXACT = "@adminvm"
 
-    def expand(self, *, system_info: FullSystemInfo) -> Iterable[AdminVM]:
+    def expand(self, *, system_info: FullSystemInfo) -> Iterable["AdminVM"]:
         yield self
 
-    def verify(self, *, system_info: FullSystemInfo) -> AdminVM:
+    def verify(self, *, system_info: FullSystemInfo) -> "AdminVM":
         return self
 
 
@@ -450,7 +449,7 @@ class DefaultVM(Target, IntendedTarget):
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[NoReturn]:
         yield from ()
 
-    def verify(self, *, system_info: FullSystemInfo) -> DefaultVM:
+    def verify(self, *, system_info: FullSystemInfo) -> "DefaultVM":
         return self
 
 
@@ -513,10 +512,10 @@ class DispVM(Target, Redirect, IntendedTarget):
     ) -> bool:
         return self == other
 
-    def expand(self, *, system_info: FullSystemInfo) -> Iterable[DispVM]:
+    def expand(self, *, system_info: FullSystemInfo) -> Iterable["DispVM"]:
         yield self
 
-    def verify(self, *, system_info: FullSystemInfo) -> DispVM:
+    def verify(self, *, system_info: FullSystemInfo) -> "DispVM":
         return self
 
     @staticmethod
@@ -524,7 +523,7 @@ class DispVM(Target, Redirect, IntendedTarget):
         source: str,
         *,
         system_info: FullSystemInfo,
-    ) -> Optional[DispVMTemplate]:
+    ) -> Optional["DispVMTemplate"]:
         """Given source, get appropriate template for DispVM. Maybe None."""
         _system_info = system_info["domains"]
         if source not in _system_info:
@@ -551,12 +550,12 @@ class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
             )
         return self == other
 
-    def expand(self, *, system_info: FullSystemInfo) -> Iterable[DispVMTemplate]:
+    def expand(self, *, system_info: FullSystemInfo) -> Iterable["DispVMTemplate"]:
         if system_info["domains"][self.value]["template_for_dispvms"]:
             yield self
         # else: log a warning?
 
-    def verify(self, *, system_info: FullSystemInfo) -> DispVMTemplate:
+    def verify(self, *, system_info: FullSystemInfo) -> "DispVMTemplate":
         _system_info = system_info["domains"]
         if (
             self.value not in _system_info
@@ -612,7 +611,7 @@ class AbstractResolution(metaclass=abc.ABCMeta):
     either ask or allow action"""
 
     notify: bool
-    def __init__(self, rule: Rule, request: Request, *, user: Optional[str]):
+    def __init__(self, rule: "Rule", request: "Request", *, user: Optional[str]):
 
         #: policy rule from which this action is derived
         self.rule = rule
@@ -641,8 +640,8 @@ class AllowResolution(AbstractResolution):
 
     def __init__(
         self,
-        rule: Rule,
-        request: Request,
+        rule: "Rule",
+        request: "Request",
         *,
         user: Optional[str],
         target: str,
@@ -655,7 +654,12 @@ class AllowResolution(AbstractResolution):
         assert isinstance(self.autostart,bool)
 
     @classmethod
-    def from_ask_resolution(cls, ask_resolution: AskResolution, *, target: str) -> AllowResolution:
+    def from_ask_resolution(
+        cls,
+        ask_resolution: "AskResolution",
+        *,
+        target: str
+    ) -> "AllowResolution":
         """This happens after user manually approved the call"""
         if target.startswith("@dispvm:"):
             target = DispVMTemplate(target)
@@ -700,8 +704,8 @@ class AskResolution(AbstractResolution):
     """
     # pylint: disable=too-many-arguments
     def __init__(self,
-                 rule: Rule,
-                 request: Request,
+                 rule: "Rule",
+                 request: "Request",
                  # targets for the user to choose from
                  targets_for_ask: Sequence[str],
                  # default target, or None
@@ -840,7 +844,7 @@ class ActionType(metaclass=abc.ABCMeta):
     """
 
     target: Optional[_BaseTarget]
-    def __init__(self, rule: Rule):
+    def __init__(self, rule: "Rule"):
         #: the rule that holds this action
         self.rule = rule
         self.target = None
@@ -892,7 +896,7 @@ class ActionType(metaclass=abc.ABCMeta):
 
 class Deny(ActionType):
     # pylint: disable=missing-docstring
-    def __init__(self, rule: Rule, notify: Optional[bool]=None):
+    def __init__(self, rule: "Rule", notify: Optional[bool]=None):
         super().__init__(rule)
         self.notify = True if notify is None else notify
 
@@ -928,7 +932,7 @@ class Allow(ActionType):
     target: Redirect
     def __init__(
         self,
-        rule: Rule,
+        rule: "Rule",
         target: Optional[str]=None,
         user: Optional[str] = None,
         notify: bool = False,
@@ -1011,7 +1015,7 @@ class Ask(ActionType):
     # pylint: disable=missing-docstring,too-many-arguments
     def __init__(
         self,
-        rule: Rule,
+        rule: "Rule",
         target: Optional[str]=None,
         default_target: Optional[str]=None,
         user: Optional[str] = None,
@@ -1130,7 +1134,7 @@ class Rule:
         action: str,
         params: List[str],
         *,
-        policy: AbstractPolicy,
+        policy: "AbstractPolicy",
         filepath: pathlib.Path,
         lineno: Optional[int],
     ):
