@@ -1,3 +1,9 @@
+qubes-core-qrexec (4.1.21-1) unstable; urgency=medium
+
+  * daemon: fix off-by-one in MSG_TRIGGER_SERVICE3 validation
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Thu, 11 May 2023 15:31:58 +0200
+
 qubes-core-qrexec (4.1.20-1) unstable; urgency=medium
 
   [ Frédéric Pierret (fepitre) ]
