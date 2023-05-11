@@ -923,7 +923,7 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
                     "although it uses protocol %d", protocol_version);
                 exit(1);
             }
-            if (untrusted_header->len < sizeof(struct trigger_service_params3)) {
+            if (untrusted_header->len <= sizeof(struct trigger_service_params3)) {
                 LOG(ERROR, "agent sent invalid MSG_TRIGGER_SERVICE3 packet");
                 exit(1);
             }
