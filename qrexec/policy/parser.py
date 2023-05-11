@@ -309,6 +309,23 @@ class VMToken(str, metaclass=VMTokenMeta):
         # pylint: disable=unused-argument
         return self == other
 
+    def is_special_value(self) -> bool:
+        """Check if the token specification is special (keyword) value"""
+        return self.startswith("@") or self == "*"
+
+    @property
+    def type(self) -> str:
+        """Type of the token
+
+        ``'keyword'`` for special values, ``'name'`` for qube name
+        """
+        return "keyword" if self.is_special_value() else "name"
+
+    @property
+    def text(self) -> str:
+        """Text of the token, without possibly '@' prefix"""
+        return self.lstrip("@")
+
 
 class Source(VMToken):
     # pylint: disable=missing-docstring
