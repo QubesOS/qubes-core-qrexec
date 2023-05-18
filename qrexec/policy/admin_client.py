@@ -57,13 +57,13 @@ class PolicyClient:
         self.call("policy.Replace", name, token + "\n" + content)
 
     def policy_include_replace(self, name: str, content: str, token="any"):
-        self.call("policy.Replace", name, token + "\n" + content)
+        self.call("policy.include.Replace", name, token + "\n" + content)
 
     def policy_remove(self, name: str, token="any"):
         self.call("policy.Remove", name, token)
 
     def policy_include_remove(self, name: str, token="any"):
-        self.call("policy.Remove", name, token)
+        self.call("policy.include.Remove", name, token)
 
     def policy_get_files(self, name: str):
         result = self.call("policy.GetFiles", name)
