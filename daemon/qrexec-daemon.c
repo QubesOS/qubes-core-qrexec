@@ -1027,6 +1027,7 @@ static void handle_execute_service(
         const char *service_name,
         const struct service_params *request_id)
 {
+    int i;
     int policy_pending_slot;
     pid_t pid;
 
@@ -1049,8 +1050,9 @@ static void handle_execute_service(
             policy_pending[policy_pending_slot].response_sent = RESPONSE_PENDING;
             return;
     }
-    if (close_range(3, ~0U, 0))
-        abort(); /* cannot happen */
+
+    for (i = 3; i < MAX_FDS; i++)
+        close(i);
 
     char *user, *target, *requested_target;
     int autostart;
