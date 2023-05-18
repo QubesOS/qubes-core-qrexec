@@ -70,7 +70,7 @@ static void sigusr1_handler(int __attribute__((__unused__))x)
     signal(SIGUSR1, SIG_IGN);
 }
 
-void prepare_child_env() {
+void prepare_child_env(void) {
     char pid_s[10];
 
     signal(SIGCHLD, sigchld_handler);

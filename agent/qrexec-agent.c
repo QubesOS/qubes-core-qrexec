@@ -873,7 +873,7 @@ struct option longopts[] = {
     { NULL, 0, 0, 0 },
 };
 
-_Noreturn void usage(const char *argv0)
+static _Noreturn void usage(const char *argv0)
 {
     fprintf(stderr, "usage: %s [options]\n", argv0);
     fprintf(stderr, "Options:\n");

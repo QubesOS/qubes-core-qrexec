@@ -121,14 +121,14 @@ volatile int terminate_requested;
 libvchan_t *vchan;
 int protocol_version;
 
-void sigusr1_handler(int UNUSED(x))
+static void sigusr1_handler(int UNUSED(x))
 {
     if (!opt_quiet)
         LOG(INFO, "Connected to VM");
     exit(0);
 }
 
-void sigchld_parent_handler(int UNUSED(x))
+static void sigchld_parent_handler(int UNUSED(x))
 {
     children_count--;
     /* starting value is 0 so we see dead real qrexec-daemon as -1 */
@@ -142,7 +142,7 @@ void sigchld_parent_handler(int UNUSED(x))
 char *remote_domain_name;	// guess what
 int remote_domain_id;
 
-void unlink_qrexec_socket(void)
+static void unlink_qrexec_socket(void)
 {
     char socket_address[40];
     char link_to_socket_name[strlen(remote_domain_name) + sizeof(socket_address)];
@@ -159,14 +159,14 @@ void unlink_qrexec_socket(void)
     unlink(link_to_socket_name);
 }
 
-void handle_vchan_error(const char *op)
+static void handle_vchan_error(const char *op)
 {
     LOG(ERROR, "Error while vchan %s, exiting", op);
     exit(1);
 }
 
 
-int create_qrexec_socket(int domid, const char *domname)
+static int create_qrexec_socket(int domid, const char *domname)
 {
     char socket_address[40];
     char link_to_socket_name[strlen(domname) + sizeof(socket_address)];
@@ -212,7 +212,7 @@ static void incompatible_protocol_error_message(
     ret = system(text);
 }
 
-int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
+static int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 {
     struct msg_header hdr;
     struct peer_info info;
@@ -264,7 +264,7 @@ int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 static void signal_handler(int sig);
 
 /* do the preparatory tasks, needed before entering the main event loop */
-void init(int xid)
+static void init(int xid)
 {
     char qrexec_error_log_name[256];
     int logfd;
@@ -1388,7 +1388,7 @@ struct option longopts[] = {
     { NULL, 0, 0, 0 },
 };
 
-_Noreturn void usage(const char *argv0)
+static _Noreturn void usage(const char *argv0)
 {
     fprintf(stderr, "usage: %s [options] domainid domain-name [default user]\n", argv0);
     fprintf(stderr, "Options:\n");

@@ -19,6 +19,8 @@
  *
  */
 
+#include "libqrexec-utils.h"
+
 void do_replace_chars(char *buf, int len) {
     int i;
     unsigned char c;

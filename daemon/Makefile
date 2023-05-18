@@ -1,9 +1,10 @@
 CC ?=gcc
 VCHAN_PKG = $(if $(BACKEND_VMM),vchan-$(BACKEND_VMM),vchan)
-override QUBES_CFLAGS:=-I../libqrexec -g -O2 -Wall -Wextra -Werror -pie -fPIC \
+override QUBES_CFLAGS:=-I../libqrexec -g -O2 -Wall -Wextra -Werror -fPIC \
    $(shell pkg-config --cflags $(VCHAN_PKG)) -fstack-protector \
    -D_FORTIFY_SOURCE=2 -fstack-protector-strong -std=gnu11 -D_POSIX_C_SOURCE=200809L \
-   -D_GNU_SOURCE $(CFLAGS)
+   -D_GNU_SOURCE $(CFLAGS) \
+   -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations
 override LDFLAGS += -pie -Wl,-z,relro,-z,now -L../libqrexec
 override LDLIBS += $(shell pkg-config --libs $(VCHAN_PKG)) -lqrexec-utils
 

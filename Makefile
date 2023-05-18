@@ -1,7 +1,8 @@
 MAKEFLAGS=-r
 CC ?= gcc
+CFLAGS += -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-declarations -Werror=missing-prototypes
 PYTHON ?= python3
-export PYTHON GCC MAKEFLAGS
+export PYTHON CC MAKEFLAGS CFLAGS
 
 SYSLIBDIR ?= /lib
 
