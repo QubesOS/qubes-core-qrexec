@@ -40,9 +40,6 @@ from typing import (
     Tuple,
     Dict,
     Optional,
-    Set,
-    Union,
-    Type,
 )
 
 from .. import QREXEC_CLIENT, POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
@@ -92,7 +89,7 @@ def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
     return filepaths
 
 
-def parse_service_and_argument(rpcname: Union[str, pathlib.PurePath], *, no_arg: str ="+"):
+def parse_service_and_argument(rpcname, *, no_arg="+"):
     """Parse service and argument string.
 
     Parse ``SERVICE+ARGUMENT``. Argument may be empty (single ``+`` at the end)
@@ -187,8 +184,8 @@ def validate_service_and_argument(service, argument, *, filepath, lineno):
 
 class VMTokenMeta(abc.ABCMeta):
     # pylint: disable=missing-docstring
-    exacts: collections.OrderedDict[str, Type[str]] = collections.OrderedDict()
-    prefixes: collections.OrderedDict[str, Type[str]] = collections.OrderedDict()
+    exacts = collections.OrderedDict()
+    prefixes = collections.OrderedDict()
 
     def __init__(cls, name, bases, dict_):
         super().__init__(name, bases, dict_)
@@ -565,7 +562,7 @@ class AbstractResolution(metaclass=abc.ABCMeta):
         self.notify = rule.action.notify
 
     @abc.abstractmethod
-    async def execute(self, caller_ident: str) -> str:
+    async def execute(self, caller_ident):
         """
         Execute the action. For allow, this runs the qrexec. For ask, it asks
         user and then (depending on verdict) runs the call.
@@ -755,7 +752,7 @@ class AskResolution(AbstractResolution):
         # pylint: disable=no-self-use
         raise AccessDenied("invalid response")
 
-    async def execute(self, caller_ident: str) -> str:
+    async def execute(self, caller_ident):
         """Ask the user for permission.
 
         This method should be overloaded in children classes. This
@@ -1569,7 +1566,7 @@ class AbstractPolicy(AbstractParser):
         Word 'targets' is used intentionally instead of 'domains', because it
         can also contains @dispvm like keywords.
         """
-        targets: Set[str] = set()
+        targets = set()
 
         # iterate over rules in reversed order to easier handle 'deny'
         # actions - simply remove matching domains from allowed set
@@ -1632,23 +1629,22 @@ class AbstractFileLoader(AbstractParser):
         Raises:
             qrexec.exc.PolicySyntaxError: when the path does not point to a file
         """
-        resolved_included_path: pathlib.Path = self.resolve_path(included_path)
-        if not resolved_included_path.is_file():
+        included_path = self.resolve_path(included_path)
+        if not included_path.is_file():
             raise exc.PolicySyntaxError(
-                filepath, lineno, "not a file: {}".format(resolved_included_path)
+                filepath, lineno, "not a file: {}".format(included_path)
             )
         # pylint: disable=consider-using-with
-        return (open(str(resolved_included_path), encoding='utf-8'),
-                pathlib.PurePath(resolved_included_path))
+        return open(str(included_path), encoding='utf-8'), included_path
 
     def handle_include(
         self, included_path: pathlib.PurePosixPath, *, filepath, lineno
     ):
-        file, resolved_included_path = self.resolve_filepath(
+        file, included_path = self.resolve_filepath(
             included_path, filepath=filepath, lineno=lineno
         )
         with file:
-            self.load_policy_file(file, resolved_included_path)
+            self.load_policy_file(file, pathlib.PurePosixPath(included_path))
 
     def handle_include_service(
         self,
@@ -1662,12 +1658,12 @@ class AbstractFileLoader(AbstractParser):
         service, argument = validate_service_and_argument(
             service, argument, filepath=filepath, lineno=lineno
         )
-        file, resolved_included_path = self.resolve_filepath(
+        file, included_path = self.resolve_filepath(
             included_path, filepath=filepath, lineno=lineno
         )
         with file:
             self.load_policy_file_service(
-                service, argument, file, resolved_included_path
+                service, argument, file, pathlib.PurePosixPath(included_path)
             )
 
 
@@ -1685,20 +1681,20 @@ class AbstractDirectoryLoader(AbstractFileLoader):
             qrexec.exc.PolicySyntaxError: when the path does not point to
                 a directory
         """
-        resolved_included_path = self.resolve_path(included_path)
-        if not resolved_included_path.is_dir():
+        included_path = self.resolve_path(included_path)
+        if not included_path.is_dir():
             raise exc.PolicySyntaxError(
-                filepath, lineno, "not a directory: {}".format(resolved_included_path)
+                filepath, lineno, "not a directory: {}".format(included_path)
             )
-        return resolved_included_path
+        return included_path
 
     def handle_include_dir(
         self, included_path: pathlib.PurePosixPath, *, filepath, lineno
     ):
-        resolved_included_path = self.resolve_dirpath(
+        included_path = self.resolve_dirpath(
             included_path, filepath=filepath, lineno=lineno
         )
-        self.load_policy_dir(resolved_included_path)
+        self.load_policy_dir(included_path)
 
     def load_policy_dir(self, dirpath):
         """Load all files in the directory (``!include-dir``)
@@ -1906,7 +1902,7 @@ class ToposortMixIn:
             filepath,
         )
         self.save_included_path(included_path, filepath=filepath, lineno=lineno)
-        super().handle_include(included_path, filepath=filepath, lineno=lineno) # type: ignore
+        super().handle_include(included_path, filepath=filepath, lineno=lineno)
 
     def handle_include_service(
         self,
@@ -1924,7 +1920,7 @@ class ToposortMixIn:
             filepath,
         )
         self.save_included_path(included_path, filepath=filepath, lineno=lineno)
-        super().handle_include_service( # type: ignore
+        super().handle_include_service(
             service, argument, included_path, filepath=filepath, lineno=lineno
         )
 
@@ -1949,13 +1945,7 @@ class TestLoader(AbstractFileLoader):
         super().__init__(*args, **kwds)
         self.policy = policy
 
-    def resolve_filepath(
-        self,
-        included_path,
-        *,
-        filepath,
-        lineno,
-    ) -> Tuple[TextIO, pathlib.PurePath]:
+    def resolve_filepath(self, included_path, *, filepath, lineno):
         """
         Raises:
             qrexec.exc.PolicySyntaxError: when wrong path is included
