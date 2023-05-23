@@ -1196,6 +1196,7 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
                     "although it uses protocol %d", protocol_version);
                 exit(1);
             }
+            /* add 1 for NUL terminator */
             if (untrusted_header->len <= sizeof(struct trigger_service_params3)) {
                 LOG(ERROR, "agent sent invalid MSG_TRIGGER_SERVICE3 packet");
                 exit(1);
@@ -1218,6 +1219,12 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
             exit(1);
     }
 }
+
+#ifdef __OPTIMIZE__
+extern void check_not_reached(void) __attribute__((error("Must not be reachable")));
+#else
+static void check_not_reached(void) {}
+#endif
 
 #define ENSURE_NULL_TERMINATED(x) x[sizeof(x)-1] = 0
 
@@ -1265,7 +1272,11 @@ void handle_message_from_agent(void)
                     &params.request_id);
             return;
         case MSG_TRIGGER_SERVICE3:
+            if (hdr.len < sizeof(untrusted_params3) + 1)
+                check_not_reached();
             service_name_len = hdr.len - sizeof(untrusted_params3);
+            if (service_name_len < 1 || service_name_len > MAX_SERVICE_NAME_LEN)
+                check_not_reached();
             untrusted_service_name = malloc(service_name_len);
             if (!untrusted_service_name)
                 handle_vchan_error("malloc(service_name)");
