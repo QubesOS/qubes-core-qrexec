@@ -1,3 +1,51 @@
+qubes-core-qrexec (4.1.22-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Zero-initialize some stack variables
+  * Add some error checking
+  * More error checking
+  * qrexec-client-vm: add --help
+  * Remove the connect_existing variable
+
+  [ Marek Marczykowski-Górecki ]
+  * Wrap coroutine in a task before passing to asyncio.wait
+  * Do not call asyncio.get_event_loop() before creating one
+  * Make pylint happy
+
+  [ Demi Marie Obenour ]
+  * Check the return value of strdup()
+  * Check return value of snprintf()
+  * Fix signal handling bugs
+  * Ignore stopped or continued children
+  * Ensure all data is sent to policy daemon
+  * Avoid K&R function declarations
+  * Fix reserved identifier violations
+  * Slightly better validation of data from dom0
+  * Correctly detect SOCK_CLOEXEC
+  * More consistency checks in buffer code
+  * Add a missing #include
+  * Add missing static
+  * Avoid option injection for usernames starting with "-"
+  * Forcibly rebuild C code for socket tests
+  * Fix some mypy errors
+  * Fix make install when already installed
+  * Clean up gcov cruft in 'make clean'
+  * avoid option injection in 'make clean'
+
+  [ Marek Marczykowski-Górecki ]
+  * Do not use 'annotation' future extension (R4.1)
+
+  [ Demi Marie Obenour ]
+  * Use pytest_asyncio.fixture() for async test fixtures
+
+  [ Marek Marczykowski-Górecki ]
+  * Revert "Fix some mypy errors"
+
+  [ Ben Grande ]
+  * Fix missing include in RPC names in admin_client
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Tue, 23 May 2023 02:12:51 +0200
+
 qubes-core-qrexec (4.1.21-1) unstable; urgency=medium
 
   * daemon: fix off-by-one in MSG_TRIGGER_SERVICE3 validation
