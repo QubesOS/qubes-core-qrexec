@@ -21,7 +21,9 @@
 import json
 import socket
 import subprocess
-from typing import Set, Optional, TypedDict, List, Dict, cast, TypeAlias
+from typing import Set, Optional, TypedDict, List, Dict, cast, TYPE_CHECKING
+if TYPE_CHECKING:
+    from typing import TypeAlias
 
 from . import QUBESD_SOCK, QUBESD_INTERNAL_SOCK
 from .exc import QubesMgmtException
@@ -113,7 +115,7 @@ class SystemInfoEntry(TypedDict):
     icon: str
     guivm: Optional[str]
 
-SystemInfo: TypeAlias = Dict[str, SystemInfoEntry]
+SystemInfo: 'TypeAlias' = Dict[str, SystemInfoEntry]
 
 class FullSystemInfo(TypedDict):
     domains: SystemInfo
