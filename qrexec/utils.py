@@ -25,6 +25,7 @@ from typing import Set, Optional, TypedDict, List, Dict, cast, TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import TypeAlias
 
+# pylint: disable=wrong-import-position
 from . import QUBESD_SOCK, QUBESD_INTERNAL_SOCK
 from .exc import QubesMgmtException
 
