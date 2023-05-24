@@ -122,7 +122,7 @@ ssize_t fuzz_read(int fd, void *buf, size_t count) {
     return count;
 }
 
-volatile char output[256];
+static volatile char output[256];
 
 ssize_t fuzz_write(int fd, const void *buf, size_t count) {
     if (!files[fd].allocated || !files[fd].open_write)

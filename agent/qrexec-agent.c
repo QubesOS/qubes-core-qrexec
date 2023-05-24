@@ -865,7 +865,7 @@ static void handle_terminated_fork_client(int id) {
     release_connection(id);
 }
 
-struct option longopts[] = {
+static struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
     { "agent-socket", required_argument, 0, 'a' },
     { "fork-server-socket", optional_argument, 0, 's' },

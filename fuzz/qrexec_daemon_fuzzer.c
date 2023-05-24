@@ -7,11 +7,7 @@
 #include "libqrexec-utils.h"
 #include "fuzz.h"
 
-extern fuzz_file_t *vchan;
-extern int protocol_version;
-extern void handle_message_from_agent(void);
-
-jmp_buf exit_jmp;
+static jmp_buf exit_jmp;
 
 void _Noreturn fuzz_exit(int status) {
     longjmp(exit_jmp, status);

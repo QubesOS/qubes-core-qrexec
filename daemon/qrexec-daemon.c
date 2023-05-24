@@ -81,32 +81,32 @@ struct _policy_pending {
    */
 
 #define MAX_CLIENTS MAX_FDS
-struct _client clients[MAX_CLIENTS];	// data on all qrexec_client connections
+static struct _client clients[MAX_CLIENTS];	// data on all qrexec_client connections
 
-struct _policy_pending policy_pending[MAX_CLIENTS];
-int policy_pending_max = -1;
+static struct _policy_pending policy_pending[MAX_CLIENTS];
+static int policy_pending_max = -1;
 
 /* indexed with vchan port number relative to VCHAN_BASE_DATA_PORT; stores
  * either VCHAN_PORT_* or remote domain id for used port */
-int used_vchan_ports[MAX_CLIENTS];
+static int used_vchan_ports[MAX_CLIENTS];
 
 /* notify client (close its connection) when connection initiated by it was
  * terminated - used by qrexec-policy to cleanup (disposable) VM; indexed with
  * vchan port number relative to VCHAN_BASE_DATA_PORT; stores fd of given
  * client or -1 if none requested */
-int vchan_port_notify_client[MAX_CLIENTS];
+static int vchan_port_notify_client[MAX_CLIENTS];
 
-int max_client_fd = -1;		// current max fd of all clients; so that we need not to scan all the "clients" table
-int qrexec_daemon_unix_socket_fd;	// /var/run/qubes/qrexec.xid descriptor
-const char *default_user = "user";
-const char default_user_keyword[] = "DEFAULT:";
+static int max_client_fd = -1;		// current max fd of all clients; so that we need not to scan all the "clients" table
+static int qrexec_daemon_unix_socket_fd;	// /var/run/qubes/qrexec.xid descriptor
+static const char *default_user = "user";
+static const char default_user_keyword[] = "DEFAULT:";
 #define default_user_keyword_len_without_colon (sizeof(default_user_keyword)-2)
 
-int opt_quiet = 0;
-int opt_direct = 0;
+static int opt_quiet = 0;
+static int opt_direct = 0;
 
-const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
-const char *policy_program = QREXEC_POLICY_PROGRAM;
+static const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
+static const char *policy_program = QREXEC_POLICY_PROGRAM;
 
 #ifdef __GNUC__
 #  define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
@@ -114,11 +114,19 @@ const char *policy_program = QREXEC_POLICY_PROGRAM;
 #  define UNUSED(x) UNUSED_ ## x
 #endif
 
-volatile int children_count;
-volatile int child_exited;
-volatile int terminate_requested;
+static volatile int children_count;
+static volatile int child_exited;
+static volatile int terminate_requested;
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#include "../fuzz/fuzz.h"
+#else
+static
+#endif
 libvchan_t *vchan;
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+static
+#endif
 int protocol_version;
 
 static void sigusr1_handler(int UNUSED(x))
@@ -139,8 +147,8 @@ static void sigchld_parent_handler(int UNUSED(x))
 }
 
 
-char *remote_domain_name;	// guess what
-int remote_domain_id;
+static char *remote_domain_name;	// guess what
+static int remote_domain_id;
 
 static void unlink_qrexec_socket(void)
 {
@@ -1379,7 +1387,7 @@ static int handle_agent_restart(int xid) {
     return 0;
 }
 
-struct option longopts[] = {
+static struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
     { "quiet", no_argument, 0, 'q' },
     { "socket-dir", required_argument, 0, 'd' + 128 },
