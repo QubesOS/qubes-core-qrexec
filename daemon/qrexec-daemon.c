@@ -690,18 +690,18 @@ static void signal_handler(int sig)
     }
 }
 
-static void send_service_refused(libvchan_t *vchan, const struct service_params *params) {
+static void send_service_refused(libvchan_t *vchan, const struct service_params *untrusted_params) {
     struct msg_header hdr;
 
     hdr.type = MSG_SERVICE_REFUSED;
-    hdr.len = sizeof(*params);
+    hdr.len = sizeof(*untrusted_params);
 
     if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
         LOG(ERROR, "Failed to send MSG_SERVICE_REFUSED hdr to agent");
         exit(1);
     }
 
-    if (libvchan_send(vchan, params, sizeof(*params)) != sizeof(*params)) {
+    if (libvchan_send(vchan, untrusted_params, sizeof(*untrusted_params)) != sizeof(*untrusted_params)) {
         LOG(ERROR, "Failed to send MSG_SERVICE_REFUSED to agent");
         exit(1);
     }
@@ -1219,6 +1219,38 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
     }
 }
 
+static bool validate_request_id(struct service_params *untrusted_params, const char *msg)
+{
+    for (size_t i = 0; i < sizeof(untrusted_params->ident); ++i) {
+        switch (untrusted_params->ident[i]) {
+        case '0' ... '9':
+        case 'A' ... 'Z':
+        case 'a' ... 'z':
+        case '_':
+        case '-':
+        case '.':
+        case ' ':
+            continue;
+        case '\0':
+            size_t terminator_offset = i;
+            /* Ensure that nothing non-NUL follows the terminator */
+            for (i++; i < sizeof(untrusted_params->ident); i++) {
+                if (untrusted_params->ident[i]) {
+                    LOG(ERROR, "Non-NUL byte %u at offset %zu follows NUL terminator at offset %zu in message %s",
+                        untrusted_params->ident[i], i, terminator_offset, msg);
+                    return false;
+                }
+            }
+            return true;
+        default:
+            LOG(ERROR, "Bad byte %u at offset %zu for message %s", untrusted_params->ident[i], i, msg);
+            return false;
+        }
+    }
+    LOG(ERROR, "No NUL terminator in message %s", msg);
+    return false; // no NUL terminator
+}
+
 #define ENSURE_NULL_TERMINATED(x) x[sizeof(x)-1] = 0
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -1227,8 +1259,6 @@ static
 void handle_message_from_agent(void)
 {
     struct msg_header hdr, untrusted_hdr;
-    struct trigger_service_params untrusted_params, params;
-    struct trigger_service_params3 untrusted_params3, params3;
     char *untrusted_service_name = NULL, *service_name = NULL;
     size_t service_name_len;
 
@@ -1244,7 +1274,8 @@ void handle_message_from_agent(void)
     //              hdr.len);
 
     switch (hdr.type) {
-        case MSG_TRIGGER_SERVICE:
+        case MSG_TRIGGER_SERVICE: {
+            struct trigger_service_params untrusted_params, params;
             if (libvchan_recv(vchan, &untrusted_params, sizeof(untrusted_params))
                     != sizeof(untrusted_params))
                 handle_vchan_error("recv params");
@@ -1252,10 +1283,12 @@ void handle_message_from_agent(void)
             /* sanitize start */
             ENSURE_NULL_TERMINATED(untrusted_params.service_name);
             ENSURE_NULL_TERMINATED(untrusted_params.target_domain);
-            ENSURE_NULL_TERMINATED(untrusted_params.request_id.ident);
             sanitize_name(untrusted_params.service_name, "+");
             sanitize_name(untrusted_params.target_domain, "@:");
-            sanitize_name(untrusted_params.request_id.ident, " ");
+            if (!validate_request_id(&untrusted_params.request_id, "MSG_TRIGGER_SERVICE")) {
+                send_service_refused(vchan, &untrusted_params.request_id);
+                return;
+            }
             params = untrusted_params;
             /* sanitize end */
 
@@ -1264,7 +1297,9 @@ void handle_message_from_agent(void)
                     params.service_name,
                     &params.request_id);
             return;
-        case MSG_TRIGGER_SERVICE3:
+        }
+        case MSG_TRIGGER_SERVICE3: {
+            struct trigger_service_params3 untrusted_params3, params3;
             service_name_len = hdr.len - sizeof(untrusted_params3);
             untrusted_service_name = malloc(service_name_len);
             if (!untrusted_service_name)
@@ -1283,11 +1318,13 @@ void handle_message_from_agent(void)
 
             /* sanitize start */
             ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
-            ENSURE_NULL_TERMINATED(untrusted_params3.request_id.ident);
             untrusted_service_name[service_name_len-1] = 0;
             sanitize_name(untrusted_params3.target_domain, "@:");
-            sanitize_name(untrusted_params3.request_id.ident, " ");
             sanitize_name(untrusted_service_name, "+");
+            if (!validate_request_id(&untrusted_params3.request_id, "MSG_TRIGGER_SERVICE3")) {
+                send_service_refused(vchan, &untrusted_params3.request_id);
+                return;
+            }
             params3 = untrusted_params3;
             service_name = untrusted_service_name;
             untrusted_service_name = NULL;
@@ -1299,6 +1336,7 @@ void handle_message_from_agent(void)
                     &params3.request_id);
             free(service_name);
             return;
+        }
         case MSG_CONNECTION_TERMINATED:
             handle_connection_terminated();
             return;
