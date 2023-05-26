@@ -1323,6 +1323,7 @@ void handle_message_from_agent(void)
             sanitize_name(untrusted_params3.target_domain, "@:");
             sanitize_name(untrusted_service_name, "+");
             if (!validate_request_id(&untrusted_params3.request_id, "MSG_TRIGGER_SERVICE3")) {
+                free(untrusted_service_name);
                 send_service_refused(vchan, &untrusted_params3.request_id);
                 return;
             }
