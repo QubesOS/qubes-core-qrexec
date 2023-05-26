@@ -1340,21 +1340,26 @@ void handle_message_from_agent(void)
                 LOG(ERROR, "Service name contains NUL byte at offset %zu", nul_offset);
                 goto fail;
             }
-            if (service_name_len < 1) {
+            switch (untrusted_service_name[0]) {
+            case '\0':
                 LOG(ERROR, "Empty service name not allowed");
                 goto fail;
-            }
-            sanitize_name(untrusted_service_name, "+");
-            service_name = untrusted_service_name;
-            untrusted_service_name = NULL;
-            /* sanitize end */
+            case '+':
+                LOG(ERROR, "Service name must not start with '+'");
+                goto fail;
+            default:
+                sanitize_name(untrusted_service_name, "+");
+                service_name = untrusted_service_name;
+                untrusted_service_name = NULL;
+                /* sanitize end */
 
-            handle_execute_service(remote_domain_id, remote_domain_name,
-                    params3.target_domain,
-                    service_name,
-                    &params3.request_id);
-            free(service_name);
-            return;
+                handle_execute_service(remote_domain_id, remote_domain_name,
+                        params3.target_domain,
+                        service_name,
+                        &params3.request_id);
+                free(service_name);
+                return;
+            }
 fail:
             send_service_refused(vchan, &untrusted_params3.request_id);
             free(untrusted_service_name);
