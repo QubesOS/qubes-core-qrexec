@@ -1956,15 +1956,14 @@ class ToposortMixIn:
         if "/" in key and (
             not key.startswith("include/") or key.count("/") > 1
         ):
-            # TODO make this an error, since we shouldn't accept this anyway
-            logging.warning(
-                "ignoring path %r included in %s on line %d; "
-                "expect problems with import order",
-                included_path,
+            raise PolicySyntaxError(
                 filepath,
                 lineno,
+                "invalid path {}, only paths inside the directories {policypath} and "
+                "{policypath}/include are considered".format(
+                    included_path, policypath=POLICYPATH
+                ),
             )
-            return
 
         self.included_paths[key].add(included_path)
 
