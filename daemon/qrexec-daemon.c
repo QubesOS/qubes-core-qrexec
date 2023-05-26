@@ -1231,7 +1231,7 @@ static bool validate_request_id(struct service_params *untrusted_params, const c
         case '.':
         case ' ':
             continue;
-        case '\0':
+        case '\0': {
             size_t terminator_offset = i;
             /* Ensure that nothing non-NUL follows the terminator */
             for (i++; i < sizeof(untrusted_params->ident); i++) {
@@ -1242,6 +1242,7 @@ static bool validate_request_id(struct service_params *untrusted_params, const c
                 }
             }
             return true;
+        }
         default:
             LOG(ERROR, "Bad byte %u at offset %zu for message %s", untrusted_params->ident[i], i, msg);
             return false;
