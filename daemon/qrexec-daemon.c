@@ -1307,7 +1307,7 @@ void handle_message_from_agent(void)
         }
         case MSG_TRIGGER_SERVICE3: {
             struct trigger_service_params3 untrusted_params3, params3;
-            size_t service_name_len = hdr.len - sizeof(untrusted_params3);
+            size_t service_name_len = hdr.len - sizeof(untrusted_params3), nul_offset;
             char *untrusted_service_name = malloc(service_name_len), *service_name = NULL;
 
             if (!untrusted_service_name)
@@ -1323,18 +1323,28 @@ void handle_message_from_agent(void)
                 free(untrusted_service_name);
                 handle_vchan_error("recv params3(service_name)");
             }
+            service_name_len -= 1;
 
             /* sanitize start */
             ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
-            untrusted_service_name[service_name_len-1] = 0;
             sanitize_name(untrusted_params3.target_domain, "@:");
-            sanitize_name(untrusted_service_name, "+");
-            if (!validate_request_id(&untrusted_params3.request_id, "MSG_TRIGGER_SERVICE3")) {
-                free(untrusted_service_name);
-                send_service_refused(vchan, &untrusted_params3.request_id);
-                return;
-            }
+            if (!validate_request_id(&untrusted_params3.request_id, "MSG_TRIGGER_SERVICE3"))
+                goto fail;
             params3 = untrusted_params3;
+            if (untrusted_service_name[service_name_len] != 0) {
+                LOG(ERROR, "Service name not NUL-terminated");
+                goto fail;
+            }
+            nul_offset = strlen(untrusted_service_name);
+            if (nul_offset != service_name_len) {
+                LOG(ERROR, "Service name contains NUL byte at offset %zu", nul_offset);
+                goto fail;
+            }
+            if (service_name_len < 1) {
+                LOG(ERROR, "Empty service name not allowed");
+                goto fail;
+            }
+            sanitize_name(untrusted_service_name, "+");
             service_name = untrusted_service_name;
             untrusted_service_name = NULL;
             /* sanitize end */
@@ -1344,6 +1354,10 @@ void handle_message_from_agent(void)
                     service_name,
                     &params3.request_id);
             free(service_name);
+            return;
+fail:
+            send_service_refused(vchan, &untrusted_params3.request_id);
+            free(untrusted_service_name);
             return;
         }
         case MSG_CONNECTION_TERMINATED:
