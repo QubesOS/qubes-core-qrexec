@@ -18,9 +18,10 @@ Homepage: https://www.qubes-os.org
 
 Package: qubes-core-qrexec
 Architecture: any
-Depends: 
+Depends:
  libqrexec-utils2 (= ${binary:Version}),
- ${shlibs:Depends}, 
+ python3-qrexec,
+ ${shlibs:Depends},
  ${misc:Depends}
 Replaces: qubes-core-agent-qrexec (<< 4.1.0-1)
 Breaks:
