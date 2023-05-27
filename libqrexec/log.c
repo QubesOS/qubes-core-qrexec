@@ -31,7 +31,7 @@
 
 static const char *qrexec_program_name = "qrexec";
 
-static void log_time() {
+static void log_time(void) {
     const size_t buf_len = 32;
     char buf[buf_len];
     struct tm tm_buf;

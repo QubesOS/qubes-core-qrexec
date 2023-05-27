@@ -37,4 +37,8 @@ ssize_t fuzz_write(int fd, const void *buf, size_t count);
 
 void _Noreturn fuzz_exit(int status);
 
+extern fuzz_file_t *vchan;
+extern int protocol_version;
+void handle_message_from_agent(void);
+
 #endif

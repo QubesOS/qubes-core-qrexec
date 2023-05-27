@@ -865,7 +865,7 @@ static void handle_terminated_fork_client(int id) {
     release_connection(id);
 }
 
-struct option longopts[] = {
+static struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
     { "agent-socket", required_argument, 0, 'a' },
     { "fork-server-socket", optional_argument, 0, 's' },
@@ -873,7 +873,7 @@ struct option longopts[] = {
     { NULL, 0, 0, 0 },
 };
 
-_Noreturn void usage(const char *argv0)
+static _Noreturn void usage(const char *argv0)
 {
     fprintf(stderr, "usage: %s [options]\n", argv0);
     fprintf(stderr, "Options:\n");
