@@ -1268,8 +1268,6 @@ static
 void handle_message_from_agent(void)
 {
     struct msg_header hdr, untrusted_hdr;
-    char *untrusted_service_name = NULL, *service_name = NULL;
-    size_t service_name_len;
 
     if (libvchan_recv(vchan, &untrusted_hdr, sizeof(untrusted_hdr))
             != sizeof(untrusted_hdr))
@@ -1309,8 +1307,9 @@ void handle_message_from_agent(void)
         }
         case MSG_TRIGGER_SERVICE3: {
             struct trigger_service_params3 untrusted_params3, params3;
-            service_name_len = hdr.len - sizeof(untrusted_params3);
-            untrusted_service_name = malloc(service_name_len);
+            size_t service_name_len = hdr.len - sizeof(untrusted_params3);
+            char *untrusted_service_name = malloc(service_name_len), *service_name = NULL;
+
             if (!untrusted_service_name)
                 handle_vchan_error("malloc(service_name)");
 
