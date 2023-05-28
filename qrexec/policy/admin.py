@@ -19,6 +19,8 @@
 
 from typing import Optional
 from pathlib import Path
+from pwd import getpwnam
+from grp import getgrnam
 import contextlib
 import fcntl
 import os
@@ -201,6 +203,13 @@ class PolicyAdmin:
 
         temp_path = path.with_name(RENAME_PREFIX + path.name)
         temp_path.write_bytes(data)
+        temp_path.chmod(0o664)
+        uid = getpwnam("root").pw_uid
+        gid = getgrnam("qubes").gr_gid
+        try:
+            os.chown(temp_path, uid, gid)
+        except PermissionError:
+            pass
         temp_path.rename(path)
 
     # Remove
