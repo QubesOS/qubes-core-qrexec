@@ -1,3 +1,39 @@
+qubes-core-qrexec (4.2.7-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Restore VMToken properties/methods
+  * daemon: add missing return to the main() function
+  * daemon: prepare handle_message_from_agent() for fuzzing
+  * fuzz: add mockup of libvchan_client_init()
+  * fuzz: fix generating seed corpus
+  * fuzz: daemon->handle_message_from_agent()
+  * Revert "Use close_range(2) instead of manual close loop"
+
+  [ Ben Grande ]
+  * Fix missing include in RPC names in admin_client
+
+  [ Demi Marie Obenour ]
+  * Support Debian 11
+  * Shut up pylint
+  * Reject requests with invalid request ID
+  * Fix header validation by qrexec agent
+
+  [ Marek Marczykowski-Górecki ]
+  * daemon: add missing brackets in validate_request_id
+  * daemon: fix memory leak
+
+  [ Ben Grande ]
+  * Fix python3-qrexec missing on qubes-core-qrexec
+
+  [ Demi Marie Obenour ]
+  * Banish old-style function declarations
+  * Ensure that all external variables are type-checked
+  * Move variables into MSG_TRIGGER_SERVICE3 block
+  * Reject interior NUL bytes in service name
+  * Reject service names that start with +
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 02 Jul 2023 04:06:22 +0200
+
 qubes-core-qrexec (4.2.6-1) unstable; urgency=medium
 
   * daemon: fix off-by-one in MSG_TRIGGER_SERVICE3 validation
