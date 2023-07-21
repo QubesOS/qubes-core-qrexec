@@ -1,3 +1,9 @@
+qubes-core-qrexec (4.2.8-1) unstable; urgency=medium
+
+  * Make policy.RegisterArgument use new policy format
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 21 Jul 2023 05:17:11 +0200
+
 qubes-core-qrexec (4.2.7-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
