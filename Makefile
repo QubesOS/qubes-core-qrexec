@@ -69,7 +69,7 @@ install-dom0: all-dom0
 .PHONY: install-dom0
 
 
-all-vm:
+all-vm: all-base
 	+$(MAKE) all -C agent
 all-vm-selinux:
 	+$(MAKE) -f /usr/share/selinux/devel/Makefile -C selinux qubes-core-qrexec.pp
