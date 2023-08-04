@@ -19,6 +19,7 @@
  *
  */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -63,15 +64,37 @@ _Noreturn void handle_vchan_error(const char *op)
 }
 
 static void handle_single_command(int fd, struct qrexec_cmd_info *info) {
-    char cmdline[info->cmdline_len+1];
-
-    if (!read_all(fd, cmdline, info->cmdline_len))
+    unsigned int cmdline_len = info->cmdline_len;
+    if (cmdline_len > (unsigned int)INT_MAX) {
+        LOG(ERROR, "Overly long cmdline (%u bytes) recieved!", cmdline_len);
         return;
-    cmdline[info->cmdline_len] = 0;
+    }
+    if (cmdline_len < 1) {
+        LOG(ERROR, "Command line is empty, refusing!");
+        return;
+    }
+    char *cmdline = malloc(cmdline_len);
+    if (cmdline == NULL) {
+        PERROR("Error allocating %u bytes!", cmdline_len);
+        goto fail;
+    }
+    if (!read_all(fd, cmdline, cmdline_len)) {
+        goto fail;
+    }
+    if (cmdline[cmdline_len - 1] != 0) {
+        LOG(ERROR, "Command line not NUL terminated, refusing!");
+        goto fail;
+    }
+    if (strlen(cmdline) != cmdline_len - 1) {
+        LOG(ERROR, "Command line has a NUL byte, refusing!");
+        goto fail;
+    }
 
     handle_new_process(info->type, info->connect_domain,
             info->connect_port,
-            cmdline, info->cmdline_len);
+            cmdline, cmdline_len);
+fail:
+    free(cmdline);
 }
 
 int main(int argc, char **argv) {
