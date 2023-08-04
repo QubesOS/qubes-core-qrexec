@@ -363,7 +363,11 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         with open(
             os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
         ) as f:
-            f.write("wait-for-session=1")
+            f.write("""\
+
+# Test TOML file
+wait-for-session = 1 # line comment
+""")
         user = getpass.getuser()
 
         target = self.execute_qubesrpc("qubes.Service+arg", "domX")

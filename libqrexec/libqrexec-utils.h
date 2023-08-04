@@ -91,7 +91,7 @@ void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
  *  -1 - other error
  */
 int load_service_config(const struct qrexec_parsed_command *cmd_name,
-                        int *wait_for_session);
+                        int *wait_for_session, char **user);
 
 typedef void (do_exec_t)(const char *cmdline, const char *user);
 void register_exec_func(do_exec_t *func);
@@ -303,6 +303,7 @@ void qrexec_log(int level, int errnoval, const char *file, int line,
                 const char *func, const char *fmt, ...) __attribute__((format(printf, 6, 7)));
 
 void setup_logging(const char *program_name);
+int qubes_toml_config_parse(const char *config_full_path, int *wait_for_session, char **user);
 
 /**
  * Make an Admin API call to qubesd.  The returned buffer must be released by

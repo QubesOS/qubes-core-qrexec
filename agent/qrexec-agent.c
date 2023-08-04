@@ -593,10 +593,16 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
         /* load service config only for service requests */
         if (cmd->service_descriptor) {
             int wait_for_session = 0;
+            char *user = NULL;
 
-            if (load_service_config(cmd, &wait_for_session) < 0) {
+            if (load_service_config(cmd, &wait_for_session, &user) < 0) {
                 LOG(ERROR, "Could not load config for command %s", buf);
                 return;
+            }
+
+            if (user != NULL) {
+                free(cmd->username);
+                cmd->username = user;
             }
 
             /* "nogui:" prefix has priority */
