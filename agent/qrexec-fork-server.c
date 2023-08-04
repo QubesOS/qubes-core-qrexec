@@ -90,9 +90,13 @@ static void handle_single_command(int fd, struct qrexec_cmd_info *info) {
         goto fail;
     }
 
+    struct qrexec_parsed_command *cmd = parse_qubes_rpc_command(cmdline, false);
+    if (cmd == NULL)
+        goto fail;
+
     handle_new_process(info->type, info->connect_domain,
-            info->connect_port,
-            cmdline, cmdline_len);
+                       info->connect_port, cmd);
+    destroy_qrexec_parsed_command(cmd);
 fail:
     free(cmdline);
 }

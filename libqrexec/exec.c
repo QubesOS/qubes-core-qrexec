@@ -204,7 +204,7 @@ out:
     return result;
 }
 
-static int execute_parsed_qubes_rpc_command(
+static int execute_qrexec_service(
     const struct qrexec_parsed_command *cmd,
     int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd,
     struct buffer *stdin_buffer);
@@ -409,6 +409,8 @@ err:
 }
 
 void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd) {
+    if (cmd == NULL)
+        return;
     if (cmd->username)
         free(cmd->username);
     if (cmd->service_descriptor)
@@ -431,21 +433,28 @@ int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
         return -1;
     }
 
-    if (cmd->service_descriptor) {
-        // Proper Qubes RPC call
-        ret = execute_parsed_qubes_rpc_command(
-            cmd, pid, stdin_fd, stdout_fd, stderr_fd, stdin_buffer);
-    } else {
-        // Legacy qrexec behavior: spawn shell directly
-        ret = do_fork_exec(cmd->username, cmd->command,
-                           pid, stdin_fd, stdout_fd, stderr_fd);
-    }
+    ret = execute_parsed_qubes_rpc_command(cmd, pid, stdin_fd,
+                                           stdout_fd, stderr_fd, stdin_buffer);
 
     destroy_qrexec_parsed_command(cmd);
     return ret;
 }
 
-static int execute_parsed_qubes_rpc_command(
+int execute_parsed_qubes_rpc_command(
+        const struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
+        int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer) {
+    if (cmd->service_descriptor) {
+        // Proper Qubes RPC call
+        return execute_qrexec_service(
+            cmd, pid, stdin_fd, stdout_fd, stderr_fd, stdin_buffer);
+    } else {
+        // Legacy qrexec behavior: spawn shell directly
+        return do_fork_exec(cmd->username, cmd->command,
+                           pid, stdin_fd, stdout_fd, stderr_fd);
+    }
+}
+
+static int execute_qrexec_service(
         const struct qrexec_parsed_command *cmd,
         int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd,
         struct buffer *stdin_buffer) {
