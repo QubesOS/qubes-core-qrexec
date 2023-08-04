@@ -572,7 +572,7 @@ static int wait_for_session_maybe(char *cmdline) {
             dup2(stdin_pipe[0], 0);
             exec_wait_for_session(cmd->source_domain);
             PERROR("exec");
-            exit(1);
+            _exit(1);
         case -1:
             PERROR("fork");
             goto out;
