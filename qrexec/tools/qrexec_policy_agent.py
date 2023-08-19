@@ -210,9 +210,10 @@ class VMListModeler:
                 destination_object.pack_start(text_column, False)
                 destination_object.add_attribute(text_column, "text", 1)
 
-            changed_function = lambda combo: self._combo_change(
-                selection_trigger, combo, entry_box, vm_list
-            )
+            def changed_function(combo, self=self):
+                return self._combo_change(
+                    selection_trigger, combo, entry_box, vm_list
+                )
 
             destination_object.connect("changed", changed_function)
             changed_function(destination_object)
@@ -544,7 +545,7 @@ class PolicyAgent(SocketService):
             return await self.handle_ask(params)
         if service == "policy.Notify":
             return await self.handle_notify(params)
-        raise Exception("unknown service name: {}".format(service))
+        raise ValueError("unknown service name: {}".format(service))
 
     @staticmethod
     async def handle_ask(params):
