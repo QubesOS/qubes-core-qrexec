@@ -205,10 +205,10 @@ class PolicyAdmin:
         temp_path.write_bytes(data)
         temp_path.chmod(0o664)
         uid = getpwnam("root").pw_uid
-        gid = getgrnam("qubes").gr_gid
         try:
+            gid = getgrnam("qubes").gr_gid
             os.chown(temp_path, uid, gid)
-        except PermissionError:
+        except (PermissionError, KeyError):
             pass
         temp_path.rename(path)
 
