@@ -1,3 +1,16 @@
+qubes-core-qrexec (4.2.9-1) unstable; urgency=medium
+
+  [ Ben Grande ]
+  * Fix policy.Replace changing mode and owners
+  * parser: Change warning of invalid path to error
+
+  [ Marek Marczykowski-Górecki ]
+  * cleanup pylintrc
+  * Fix issues in qrexec-policy-agent found by pylint
+  * policy/admin: fix handling missing 'qubes' group
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 27 Aug 2023 00:13:29 +0200
+
 qubes-core-qrexec (4.2.8-1) unstable; urgency=medium
 
   * Make policy.RegisterArgument use new policy format
