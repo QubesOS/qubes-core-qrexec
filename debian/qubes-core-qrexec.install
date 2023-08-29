@@ -6,6 +6,7 @@ etc/xdg/autostart/qrexec-policy-agent.desktop
 lib/systemd/system/qubes-qrexec-agent.service
 usr/bin/qrexec-client-vm
 usr/bin/qrexec-fork-server
+usr/bin/qrexec-legacy-convert
 usr/bin/qrexec-policy-graph
 usr/bin/qrexec-policy-restore
 usr/bin/qrexec-policy-exec
