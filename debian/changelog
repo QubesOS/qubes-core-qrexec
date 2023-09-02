@@ -1,3 +1,13 @@
+qubes-core-qrexec (4.2.10-1) unstable; urgency=medium
+
+  [ Ben Grande ]
+  * Add lint and editor policy tools
+
+  [ Marek Marczykowski-Górecki ]
+  * Add connection timeout on the VM side too
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 02 Sep 2023 23:55:36 +0200
+
 qubes-core-qrexec (4.2.9-1) unstable; urgency=medium
 
   [ Ben Grande ]
