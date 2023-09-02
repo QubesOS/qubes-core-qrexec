@@ -32,6 +32,7 @@
 #include <stddef.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -159,6 +160,70 @@ static int handle_just_exec(char *cmdline)
     return 0;
 }
 
+static const long BILLION_NANOSECONDS = 1000000000L;
+
+static int wait_for_vchan_connection_with_timeout(
+        libvchan_t *conn, int wait_fd, bool is_server, time_t timeout) {
+    struct timespec end_tp, now_tp, timeout_tp;
+
+    if (timeout && clock_gettime(CLOCK_MONOTONIC, &end_tp)) {
+        PERROR("clock_gettime");
+        return -1;
+    }
+    assert(end_tp.tv_nsec >= 0 && end_tp.tv_nsec < BILLION_NANOSECONDS);
+    end_tp.tv_sec += timeout;
+    while (true) {
+        bool did_timeout = true;
+        struct pollfd fds = { .fd = wait_fd, .events = POLLIN | POLLHUP, .revents = 0 };
+
+        /* calculate how much time left until connection timeout expire */
+        if (clock_gettime(CLOCK_MONOTONIC, &now_tp)) {
+            PERROR("clock_gettime");
+            return -1;
+        }
+        assert(now_tp.tv_nsec >= 0 && now_tp.tv_nsec < BILLION_NANOSECONDS);
+        if (now_tp.tv_sec <= end_tp.tv_sec) {
+            timeout_tp.tv_sec = end_tp.tv_sec - now_tp.tv_sec;
+            timeout_tp.tv_nsec = end_tp.tv_nsec - now_tp.tv_nsec;
+            if (timeout_tp.tv_nsec < 0) {
+                timeout_tp.tv_nsec += BILLION_NANOSECONDS;
+                timeout_tp.tv_sec--;
+            }
+            did_timeout = timeout_tp.tv_sec < 0;
+        }
+        switch (did_timeout ? 0 : ppoll(&fds, 1, &timeout_tp, NULL)) {
+            case -1:
+                if (errno == EINTR)
+                    break;
+                LOG(ERROR, "vchan connection error");
+                return -1;
+            case 0:
+                LOG(ERROR, "vchan connection timeout");
+                return -1;
+            case 1:
+                break;
+            default:
+                abort();
+        }
+        if (fds.revents & POLLIN) {
+            if (is_server) {
+                libvchan_wait(conn);
+                return 0;
+            } else {
+                int connect_ret = libvchan_client_init_async_finish(conn, true);
+
+                if (connect_ret < 0) {
+                    LOG(ERROR, "vchan connection error");
+                    return -1;
+                } else if (connect_ret == 0) {
+                    return 0;
+                }
+            }
+        }
+    }
+}
+
+
 /* Behaviour depends on type parameter:
  *  MSG_JUST_EXEC - connect to vchan server, fork+exec process given by cmdline
  *    parameter, send artificial exit code "0" (local process can still be
@@ -181,7 +246,12 @@ static int handle_new_process_common(
     struct buffer stdin_buf;
     struct process_io_request req = { 0 };
     int stdin_fd, stdout_fd, stderr_fd;
+    int wait_fd;
     pid_t pid;
+    /* TODO: consider env variable / cmdline option for this, until then make
+     * the timeout generous as for example fresh DispVM may need some more time.
+     */
+    int connection_timeout = 120;
 
     assert(type != MSG_SERVICE_CONNECT);
 
@@ -200,8 +270,12 @@ static int handle_new_process_common(
         abort();
     }
     cmdline[cmdline_len-1] = 0;
-    data_vchan = libvchan_client_init(connect_domain, connect_port);
+    data_vchan = libvchan_client_init_async(connect_domain, connect_port, &wait_fd);
     if (!data_vchan) {
+        LOG(ERROR, "Data vchan connection failed");
+        exit(1);
+    }
+    if (wait_for_vchan_connection_with_timeout(data_vchan, wait_fd, false, connection_timeout) < 0) {
         LOG(ERROR, "Data vchan connection failed");
         exit(1);
     }
@@ -313,6 +387,10 @@ int handle_data_client(
     libvchan_t *data_vchan;
     struct process_io_request req = { 0 };
     struct buffer stdin_buf;
+    /* TODO: consider env variable / cmdline option for this, until then make
+     * the timeout generous as for example fresh DispVM may need some more time.
+     */
+    int connection_timeout = 120;
 
     assert(type == MSG_SERVICE_CONNECT);
     if (buffer_size == 0)
@@ -324,7 +402,11 @@ int handle_data_client(
         LOG(ERROR, "Data vchan connection failed");
         exit(1);
     }
-    libvchan_wait(data_vchan);
+    if (wait_for_vchan_connection_with_timeout(
+            data_vchan, libvchan_fd_for_select(data_vchan), true, connection_timeout) < 0) {
+        LOG(ERROR, "Data vchan connection failed");
+        exit(1);
+    }
     data_protocol_version = handle_handshake(data_vchan);
     if (data_protocol_version < 0) {
         exit(1);
