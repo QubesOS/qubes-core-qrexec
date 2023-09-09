@@ -1,3 +1,10 @@
+qubes-core-qrexec (4.2.11-1) unstable; urgency=medium
+
+  [ Frédéric Pierret (fepitre) ]
+  * Support for Fedora 39
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 09 Sep 2023 11:39:19 +0200
+
 qubes-core-qrexec (4.2.10-1) unstable; urgency=medium
 
   [ Ben Grande ]
