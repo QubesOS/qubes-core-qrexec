@@ -1,3 +1,14 @@
+qubes-core-qrexec (4.1.23-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Do not exit successfully if local process failed
+
+  [ Marek Marczykowski-Górecki ]
+  * cleanup pylintrc
+  * Fix issues in qrexec-policy-agent found by pylint
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 18 Sep 2023 03:51:15 +0200
+
 qubes-core-qrexec (4.1.22-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
