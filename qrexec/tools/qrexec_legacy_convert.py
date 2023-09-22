@@ -40,7 +40,6 @@ SERVICE_TO_FILE = {
     'qubes.UpdatesProxy': '50-config-updates',
     'qubes.OpenInVM': '50-config-openinvm',
     'qubes.OpenURL': '50-config-openurl',
-    'qubes.Gpg': '50-config-splitgpg',
     'qubes.InputKeyboard': '50-config-input',
     'qubes.InputMouse': '50-config-input',
     'qubes.InputTablet': '50-config-input',
@@ -53,6 +52,11 @@ DISCLAIMER = """
 # Policy rules in this file were automatically converted from old
 # policy format. Old files can be found in /etc/qubes-rpc/policy; they have
 # the suffix .rpmsave.
+
+# All rules pertaining to qubes.Gpg were moved to this file. If you want to
+# move them to the relevant GUI config file, see 50-config-splitgpg. Caution:
+# the GUI tool for qubes.Gpg policy supports only policy rules that have a
+# single vm as a target.
 """
 
 TOOL_DISCLAIMER = """
@@ -94,7 +98,8 @@ class RuleWrapper:
             if 'allow' not in str(self.rule.action):
                 return False
             return self.rule.target.type != 'keyword' or \
-                str(self.rule.target) == '@adminvm'
+                str(self.rule.target) == '@adminvm' or \
+                str(self.rule.target) == '@default'
 
         if self.service in ('qubes.OpenInVM', 'qubes.OpenURL'):
             if self.rule.target != '@dispvm':
@@ -108,15 +113,8 @@ class RuleWrapper:
                 target = '@dispvm'
             return '@dispvm' in target
 
-        if self.service == 'qubes.Gpg':
-            if self.rule.source == '@anyvm':
-                if self.rule.target.type == 'keyword':
-                    # not supported main rule
-                    return False
-            return True
-
         if self.service == 'policy.RegisterArgument':
-            return self.rule.argument == '+u2f.Register'
+            return self.rule.argument == '+u2f.Authenticate'
 
         if self.service in ['u2f.Authenticate', 'u2f.Register']:
             if self.rule.target.type == 'keyword' and \
@@ -264,7 +262,7 @@ def main(args=None):
                 current_text = file.read_text()
                 if current_text.startswith(TOOL_DISCLAIMER):
                     current_text = current_text[len(TOOL_DISCLAIMER):]
-                text = text.rstrip('\n') + current_text
+                text = text.rstrip('\n') + '\n' + current_text.lstrip('\n')
 
         print("Writing " + str(file) + '...')
         file.write_text(text)
@@ -279,11 +277,14 @@ def main(args=None):
             file.rename(backup_name)
 
     # check if state changed
-    current_state_string = StringIO()
-    qrexec_policy_graph.main(['--policy-dir',
-                              str(POLICYPATH), '--full-output'],
-                             output=current_state_string)
-    current_state = set(current_state_string.getvalue().split('\n'))
+    try:
+        current_state_string = StringIO()
+        qrexec_policy_graph.main(['--policy-dir',
+                                  str(POLICYPATH), '--full-output'],
+                                 output=current_state_string)
+        current_state = set(current_state_string.getvalue().split('\n'))
+    except Exception: #pylint: disable-broad-except
+        current_state = 'ERROR'
 
     if initial_state != current_state:
         print("ERROR: Found the following differences between "

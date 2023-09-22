@@ -70,6 +70,13 @@ argparser.add_argument(
     "connections.",
 )
 
+argparser.add_argument(
+    "--full-output",
+    action="store_true",
+    help="Output complete policy scheme, including detailed action "
+         "specifications.",
+)
+
 
 def handle_single_action(args, action):
     """Get single policy action and output (or not) a line to add"""
@@ -83,6 +90,9 @@ def handle_single_action(args, action):
         target = action.rule.action.target
     if args.target and target not in args.target:
         return ""
+    if args.full_output:
+        return f'  "{action.request.source}" -> "{target}" ' \
+               f'[label="{service} {action.rule.action}" color=orange];\n'
     if isinstance(action, parser.AskResolution):
         if args.include_ask:
             return f'  "{action.request.source}" -> "{target}" [label="{service}" color=orange];\n'
@@ -91,10 +101,9 @@ def handle_single_action(args, action):
     return ""
 
 
-def main(args=None):
+def main(args=None, output=sys.stdout):
     args = argparser.parse_args(args)
 
-    output = sys.stdout
     if args.output:
         # pylint: disable=consider-using-with
         output = open(args.output, "w", encoding='utf-8')
