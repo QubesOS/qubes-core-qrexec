@@ -16,7 +16,7 @@ CXXFLAGS += -O1 -fno-omit-frame-pointer -gline-tables-only \
 		-fsanitize-address-use-after-scope -fsanitize=fuzzer
 endif
 
-_LIBQREXEC_OBJS = remote.o write-stdin.o ioall.o txrx-vchan.o buffer.o replace.o exec.o log.o unix-server.o
+_LIBQREXEC_OBJS = remote.o write-stdin.o ioall.o txrx-vchan.o buffer.o replace.o exec.o log.o unix-server.o toml.o
 LIBQREXEC_OBJS = $(patsubst %.o,libqrexec-%.o,$(_LIBQREXEC_OBJS))
 
 FUZZERS = qubesrpc_parse_fuzzer qrexec_remote_fuzzer qrexec_daemon_fuzzer

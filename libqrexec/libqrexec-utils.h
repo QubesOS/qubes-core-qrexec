@@ -83,8 +83,7 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
     const char *cmdline, bool strip_username);
 void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
 
-/* Load service configuration, currently only wait-for-session option
- * supported.
+/* Load service configuration.
  *
  * Return:
  *  1  - config successfuly loaded
@@ -92,7 +91,7 @@ void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
  *  -1 - other error
  */
 int load_service_config(const struct qrexec_parsed_command *cmd_name,
-                        int *wait_for_session);
+                        int *wait_for_session, char **user);
 
 typedef void (do_exec_t)(const char *cmdline, const char *user);
 void register_exec_func(do_exec_t *func);
@@ -117,6 +116,26 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
 int fork_and_flush_stdin(int fd, struct buffer *buffer);
 
 /**
+ * @brief Execute an already-parsed Qubes RPC command.
+ * @param cmdline Null-terminated command to execute.
+ * @param pid On return, holds the PID of the child process.
+ * @param stdin_fd On return, holds a file descriptor connected to the child's
+ * stdin.
+ * @param stdout_fd On return, holds a file descriptor connected to the child's
+ * stdout.
+ * @param stderr_fd On return, holds a file descriptor connected to the child's
+ * stderr.
+ * @param buffer This buffer will need to be prepended to the child process’s
+ * stdin.
+ * @return 0 if it spawned (or might have spawned) an external process,
+ * nonzero on failure.
+ */
+int execute_parsed_qubes_rpc_command(
+        const struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
+        int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer);
+
+/**
+ * @brief Execute a Qubes RPC command.
  * @param cmdline Null-terminated command to execute.
  * @param pid On return, holds the PID of the child process.
  * @param stdin_fd On return, holds a file descriptor connected to the child's
@@ -130,7 +149,7 @@ int fork_and_flush_stdin(int fd, struct buffer *buffer);
  * @param buffer This buffer will need to be prepended to the child process’s
  * stdin.
  * @return 0 if it spawned (or might have spawned) an external process,
- * a (positive) errno value otherwise.
+ * nonzero on failure.
  */
 int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
                               int *stdout_fd, int *stderr_fd,
@@ -281,9 +300,10 @@ int process_io(const struct process_io_request *req);
 
 
 void qrexec_log(int level, int errnoval, const char *file, int line,
-                const char *func, const char *fmt, ...);
+                const char *func, const char *fmt, ...) __attribute__((format(printf, 6, 7)));
 
 void setup_logging(const char *program_name);
+int qubes_toml_config_parse(const char *config_full_path, int *wait_for_session, char **user);
 
 /**
  * Make an Admin API call to qubesd.  The returned buffer must be released by

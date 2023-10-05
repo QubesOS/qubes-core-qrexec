@@ -130,22 +130,10 @@ int handle_handshake(libvchan_t *ctrl)
 }
 
 
-static int handle_just_exec(char *cmdline)
+static int handle_just_exec(struct qrexec_parsed_command *cmd)
 {
     int fdn, pid;
 
-    char *username = NULL;
-    char *realcmd = cmdline;
-
-    if (!qrexec_is_fork_server) {
-        username = cmdline;
-        realcmd = strchr(cmdline, ':');
-        if (!realcmd) {
-            LOG(ERROR, "No colon in command from dom0");
-            return -1;
-        }
-        *realcmd++ = '\0';
-    }
     switch (pid = fork()) {
         case -1:
             PERROR("fork");
@@ -153,10 +141,10 @@ static int handle_just_exec(char *cmdline)
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
-            do_exec(realcmd, username);
+            do_exec(cmd->command, cmd->username);
         default:;
     }
-    LOG(INFO, "executed (nowait): %s (pid %d)", cmdline, pid);
+    LOG(INFO, "executed (nowait): %s (pid %d)", cmd->command, pid);
     return 0;
 }
 
@@ -237,7 +225,7 @@ static int wait_for_vchan_connection_with_timeout(
  */
 static int handle_new_process_common(
     int type, int connect_domain, int connect_port,
-    char *cmdline, size_t cmdline_len,
+    struct qrexec_parsed_command *cmd,
     int buffer_size)
 {
     libvchan_t *data_vchan;
@@ -258,18 +246,6 @@ static int handle_new_process_common(
     if (buffer_size == 0)
         buffer_size = VCHAN_BUFFER_SIZE;
 
-    if (cmdline == NULL) {
-        LOG(ERROR, "internal qrexec error: NULL cmdline passed to a non-MSG_SERVICE_CONNECT call");
-        abort();
-    } else if (cmdline_len == 0) {
-        LOG(ERROR, "internal qrexec error: zero-length command line passed to a non-MSG_SERVICE_CONNECT call");
-        abort();
-    } else if (cmdline_len > MAX_QREXEC_CMD_LEN) {
-        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
-        LOG(ERROR, "Bad command from dom0: command line too long: length %zu", cmdline_len);
-        abort();
-    }
-    cmdline[cmdline_len-1] = 0;
     data_vchan = libvchan_client_init_async(connect_domain, connect_port, &wait_fd);
     if (!data_vchan) {
         LOG(ERROR, "Data vchan connection failed");
@@ -289,13 +265,13 @@ static int handle_new_process_common(
 
     switch (type) {
         case MSG_JUST_EXEC:
-            if (send_exit_code(data_vchan, handle_just_exec(cmdline)) < 0)
+            if (send_exit_code(data_vchan, handle_just_exec(cmd)) < 0)
                 handle_vchan_error("just_exec");
             libvchan_close(data_vchan);
             return 0;
         case MSG_EXEC_CMDLINE:
             buffer_init(&stdin_buf);
-            if (execute_qubes_rpc_command(cmdline, &pid, &stdin_fd, &stdout_fd, &stderr_fd, !qrexec_is_fork_server, &stdin_buf) < 0) {
+            if (execute_parsed_qubes_rpc_command(cmd, &pid, &stdin_fd, &stdout_fd, &stderr_fd, &stdin_buf) < 0) {
                 struct msg_header hdr = {
                     .type = MSG_DATA_STDOUT,
                     .len = 0,
@@ -314,7 +290,7 @@ static int handle_new_process_common(
                 libvchan_close(data_vchan);
                 return exit_code;
             }
-            LOG(INFO, "executed: %s (pid %d)", cmdline, pid);
+            LOG(INFO, "executed: %s (pid %d)", cmd->cmdline, pid);
             break;
         default:
             LOG(ERROR, "unknown request type: %d", type);
@@ -353,7 +329,7 @@ static int handle_new_process_common(
 
 /* Returns PID of data processing process */
 pid_t handle_new_process(int type, int connect_domain, int connect_port,
-        char *cmdline, size_t cmdline_len)
+                         struct qrexec_parsed_command *cmd)
 {
     int exit_code;
     pid_t pid;
@@ -371,7 +347,7 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
 
     /* child process */
     exit_code = handle_new_process_common(type, connect_domain, connect_port,
-                                          cmdline, cmdline_len, 0);
+                                          cmd, 0);
 
     exit(exit_code);
 }

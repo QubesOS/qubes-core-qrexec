@@ -228,7 +228,8 @@ static void wait_for_session_maybe(char *cmdline)
     if (!cmd->service_descriptor)
         goto out;
 
-    load_service_config(cmd, &wait_for_session);
+    char *user = NULL;
+    load_service_config(cmd, &wait_for_session, &user);
     if (!wait_for_session)
         goto out;
 

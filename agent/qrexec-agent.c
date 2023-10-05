@@ -61,6 +61,7 @@ struct waiting_request {
     int connect_port;
     int padding;
     char *cmdline;
+    struct qrexec_parsed_command *cmd;
 };
 
 /*  */
@@ -81,7 +82,9 @@ static int meminfo_write_started = 0;
 static const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
 static const char *fork_server_path = QREXEC_FORK_SERVER_SOCKET;
 
-static void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline);
+static void handle_server_exec_request_do(int type, int connect_domain, int connect_port,
+                                          struct qrexec_parsed_command *cmd,
+                                          char *cmdline);
 
 const bool qrexec_is_fork_server = false;
 
@@ -427,7 +430,7 @@ static void wake_meminfo_writer(void)
 }
 
 static int try_fork_server(int type, int connect_domain, int connect_port,
-        char *cmdline, size_t cmdline_len) {
+        char *cmdline, size_t cmdline_len, const char *username) {
     char *colon;
     char *fork_server_socket_path;
     int s = -1;
@@ -438,16 +441,9 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
 
     if (cmdline_len > MAX_QREXEC_CMD_LEN)
         return -1;
-    char *username = malloc(cmdline_len);
-    if (!username) {
-        PERROR("Memory allocation failed");
-        return -1;
-    }
-    memcpy(username, cmdline, cmdline_len);
-    colon = strchr(username, ':');
+    colon = strchr(cmdline, ':');
     if (!colon)
         goto fail;
-    *colon = '\0';
 
     if (asprintf(&fork_server_socket_path, fork_server_path, username) < 0) {
         LOG(ERROR, "Memory allocation failed");
@@ -475,7 +471,7 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
     info.type = type;
     info.connect_domain = connect_domain;
     info.connect_port = connect_port;
-    size_t username_len = strlen(username);
+    size_t username_len = (size_t)(colon - cmdline);
     assert(cmdline_len <= INT_MAX);
     assert(cmdline_len > username_len);
     info.cmdline_len = (int)(cmdline_len - (username_len + 1));
@@ -488,12 +484,10 @@ static int try_fork_server(int type, int connect_domain, int connect_port,
         goto fail;
     }
 
-    free(username);
     return s;
 fail:
     if (s >= 0)
         close(s);
-    free(username);
     return -1;
 }
 
@@ -523,43 +517,19 @@ static void register_vchan_connection(pid_t pid, int fd, int domain, int port)
  *  only after session is started)
  *  - 0 - waiting is not needed, caller may proceed with request immediately
  */
-static int wait_for_session_maybe(char *cmdline) {
-    struct qrexec_parsed_command *cmd;
+static bool wait_for_session_maybe(struct qrexec_parsed_command *cmd) {
     int stdin_pipe[2];
-    int wait_for_session = 0;
-    int ret = 0;
     sigset_t sigmask;
-
-    cmd = parse_qubes_rpc_command(cmdline, true);
-    if (!cmd)
-        /* error parsing the command, this will be properly reported later */
-        return 0;
-
-    /* "nogui:" prefix has priority - do not wait for session */
-    if (cmd->nogui)
-        goto out;
-
-    /* wait for session only for service requests */
-    if (!cmd->service_descriptor)
-        goto out;
-
-    /* load service config - if it fails, use initial value */
-    load_service_config(cmd, &wait_for_session);
-
-    if (!wait_for_session)
-        /* setting not set, or set to 0 */
-        goto out;
 
     /* ok, now we know that service is configured to wait for session */
     if (wait_for_session_pid != -1) {
         /* we're already waiting */
-        ret = 1;
-        goto out;
+        return true;
     }
 
     if (pipe(stdin_pipe) == -1) {
         PERROR("pipe for wait-for-session");
-        goto out;
+        return false;
     }
     /* start waiting process */
     wait_for_session_pid = fork();
@@ -572,10 +542,10 @@ static int wait_for_session_maybe(char *cmdline) {
             dup2(stdin_pipe[0], 0);
             exec_wait_for_session(cmd->source_domain);
             PERROR("exec");
-            exit(1);
+            _exit(1);
         case -1:
             PERROR("fork");
-            goto out;
+            return false;
         default:
             close(stdin_pipe[0]);
             if (write(stdin_pipe[1], cmd->username, strlen(cmd->username)) == -1)
@@ -586,11 +556,7 @@ static int wait_for_session_maybe(char *cmdline) {
     }
 
     /* qubes.WaitForSession started, postpone request until it report back */
-    ret = 1;
-
-out:
-    destroy_qrexec_parsed_command(cmd);
-    return ret;
+    return true;
 }
 
 
@@ -598,7 +564,8 @@ out:
 static void handle_server_exec_request_init(struct msg_header *hdr)
 {
     struct exec_params params;
-    if (hdr->len < sizeof(params))
+    struct qrexec_parsed_command *cmd;
+    if (hdr->len <= sizeof(params))
         abort();
     size_t buf_len = hdr->len - sizeof(params);
     if (buf_len > INT_MAX)
@@ -614,29 +581,63 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
 
     buf[buf_len-1] = 0;
 
-    if (hdr->type != MSG_SERVICE_CONNECT && wait_for_session_maybe(buf)) {
-        /* waiting for session, postpone actual call */
-        int slot_index;
-        for (slot_index = 0; slot_index < MAX_FDS; slot_index++)
-            if (!requests_waiting_for_session[slot_index].cmdline)
-                break;
-        if (slot_index == MAX_FDS) {
-            /* no free slots */
-            LOG(WARNING, "No free slots for waiting for GUI session, continuing!");
-        } else {
-            requests_waiting_for_session[slot_index].type = hdr->type;
-            requests_waiting_for_session[slot_index].connect_domain = params.connect_domain;
-            requests_waiting_for_session[slot_index].connect_port = params.connect_port;
-            requests_waiting_for_session[slot_index].cmdline = strdup(buf);
-            /* nothing to do now, when we get GUI session, we'll continue */
+    if (hdr->type == MSG_SERVICE_CONNECT) {
+        cmd = NULL;
+    } else {
+        cmd = parse_qubes_rpc_command(buf, true);
+        if (cmd == NULL) {
+            LOG(ERROR, "Could not parse command line: %s", buf);
             return;
+        }
+
+        /* load service config only for service requests */
+        if (cmd->service_descriptor) {
+            int wait_for_session = 0;
+            char *user = NULL;
+
+            if (load_service_config(cmd, &wait_for_session, &user) < 0) {
+                LOG(ERROR, "Could not load config for command %s", buf);
+                return;
+            }
+
+            if (user != NULL) {
+                free(cmd->username);
+                cmd->username = user;
+            }
+
+            /* "nogui:" prefix has priority */
+            if (!cmd->nogui && wait_for_session && wait_for_session_maybe(cmd)) {
+                /* waiting for session, postpone actual call */
+                int slot_index;
+                for (slot_index = 0; slot_index < MAX_FDS; slot_index++)
+                    if (!requests_waiting_for_session[slot_index].cmdline)
+                        break;
+                if (slot_index == MAX_FDS) {
+                    /* no free slots */
+                    LOG(WARNING, "No free slots for waiting for GUI session, continuing!");
+                } else {
+                    requests_waiting_for_session[slot_index].type = hdr->type;
+                    requests_waiting_for_session[slot_index].connect_domain = params.connect_domain;
+                    requests_waiting_for_session[slot_index].connect_port = params.connect_port;
+                    requests_waiting_for_session[slot_index].cmdline = buf;
+                    requests_waiting_for_session[slot_index].cmd = cmd;
+                    /* nothing to do now, when we get GUI session, we'll continue */
+                    return;
+                }
+            }
         }
     }
 
-    handle_server_exec_request_do(hdr->type, params.connect_domain, params.connect_port, buf);
+    handle_server_exec_request_do(hdr->type, params.connect_domain, params.connect_port, cmd, buf);
+    destroy_qrexec_parsed_command(cmd);
+    free(buf);
 }
 
-static void handle_server_exec_request_do(int type, int connect_domain, int connect_port, char *cmdline) {
+static void handle_server_exec_request_do(int type,
+                                          int connect_domain,
+                                          int connect_port,
+                                          struct qrexec_parsed_command *cmd,
+                                          char *cmdline) {
     int client_fd;
     pid_t child_agent;
     size_t cmdline_len = strlen(cmdline) + 1; // size of cmdline, including \0 at the end
@@ -645,32 +646,18 @@ static void handle_server_exec_request_do(int type, int connect_domain, int conn
         .connect_port = connect_port,
     };
 
-    if ((type == MSG_EXEC_CMDLINE || type == MSG_JUST_EXEC) &&
-            !strstr(cmdline, ":nogui:")) {
-        int child_socket;
+    if (type == MSG_SERVICE_CONNECT) {
+        if (sscanf(cmdline, "SOCKET%d", &client_fd) != 1)
+            goto bad_ident;
 
-        child_socket = try_fork_server(type,
-                params.connect_domain, params.connect_port,
-                cmdline, cmdline_len);
-        if (child_socket >= 0) {
-            register_vchan_connection(-1, child_socket,
-                    params.connect_domain, params.connect_port);
-            return;
-        }
-    }
-
-    if (type == MSG_SERVICE_CONNECT && sscanf(cmdline, "SOCKET%d", &client_fd)) {
         /* FIXME: Maybe add some check if client_fd is really FD to some
          * qrexec-client-vm process; but this data comes from qrexec-daemon
          * (which sends back what it got from us earlier), so it isn't critical.
          */
         if (write(client_fd, &params, sizeof(params)) < 0) {
             /* Do not start polling invalid FD */
-            if (errno == EBADF) {
-                LOG(ERROR, "Got MSG_SERVICE_CONNECT from qrexec-daemon with invalid ident (%s), ignoring",
-                        cmdline);
-                return;
-            }
+            if (errno == EBADF)
+                goto bad_ident;
             /* ignore other errors */
         }
         /* No need to send request_id (buf) - the client don't need it, there
@@ -684,13 +671,29 @@ static void handle_server_exec_request_do(int type, int connect_domain, int conn
         return;
     }
 
+    if (!cmd->nogui) {
+        /* try fork server */
+        int child_socket = try_fork_server(type,
+                params.connect_domain, params.connect_port,
+                cmdline, cmdline_len, cmd->username);
+        if (child_socket >= 0) {
+            register_vchan_connection(-1, child_socket,
+                    params.connect_domain, params.connect_port);
+            return;
+        }
+    }
+
     /* No fork server case */
     child_agent = handle_new_process(type,
             params.connect_domain, params.connect_port,
-            cmdline, cmdline_len);
+            cmd);
 
     register_vchan_connection(child_agent, -1,
             params.connect_domain, params.connect_port);
+    return;
+bad_ident:
+    LOG(ERROR, "Got MSG_SERVICE_CONNECT from qrexec-daemon with invalid ident (%s), ignoring",
+            cmdline);
 }
 
 static void handle_service_refused(struct msg_header *hdr)
@@ -790,7 +793,10 @@ static void reap_children(void)
                         requests_waiting_for_session[id].type,
                         requests_waiting_for_session[id].connect_domain,
                         requests_waiting_for_session[id].connect_port,
+                        requests_waiting_for_session[id].cmd,
                         requests_waiting_for_session[id].cmdline);
+                destroy_qrexec_parsed_command(requests_waiting_for_session[id].cmd);
+                requests_waiting_for_session[id].cmd = NULL;
                 free(requests_waiting_for_session[id].cmdline);
                 requests_waiting_for_session[id].cmdline = NULL;
             }

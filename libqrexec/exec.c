@@ -204,7 +204,7 @@ out:
     return result;
 }
 
-static int execute_parsed_qubes_rpc_command(
+static int execute_qrexec_service(
     const struct qrexec_parsed_command *cmd,
     int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd,
     struct buffer *stdin_buffer);
@@ -251,10 +251,10 @@ static int find_file(
     }
     return -1;
 }
-
 int load_service_config(const struct qrexec_parsed_command *cmd,
-                        int *wait_for_session) {
+                        int *wait_for_session, char **user) {
     assert(cmd->service_descriptor);
+    assert(*user == NULL);
 
     const char *config_path = getenv("QUBES_RPC_CONFIG_PATH");
     if (!config_path)
@@ -270,38 +270,7 @@ int load_service_config(const struct qrexec_parsed_command *cmd,
     if (ret < 0)
         return 0;
 
-    char config[MAX_CONFIG_SIZE];
-    char *config_iter = config;
-    FILE *config_file;
-    size_t read_count;
-    char *current_line;
-
-    config_file = fopen(config_full_path, "re");
-    if (!config_file) {
-        PERROR("Failed to load %s", config_full_path);
-        return -1;
-    }
-
-    read_count = fread(config, 1, sizeof(config)-1, config_file);
-
-    if (ferror(config_file)) {
-        fclose(config_file);
-        return -1;
-    }
-
-    // config is a text file, should not have \0 inside; but when it has, part
-    // after it will be ignored
-    config[read_count] = 0;
-
-    while ((current_line = strsep(&config_iter, "\n"))) {
-        // ignore comments
-        if (current_line[0] == '#')
-            continue;
-        sscanf(current_line, "wait-for-session=%d", wait_for_session);
-    }
-
-    fclose(config_file);
-    return 1;
+    return qubes_toml_config_parse(config_full_path, wait_for_session, user);
 }
 
 struct qrexec_parsed_command *parse_qubes_rpc_command(
@@ -409,6 +378,8 @@ err:
 }
 
 void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd) {
+    if (cmd == NULL)
+        return;
     if (cmd->username)
         free(cmd->username);
     if (cmd->service_descriptor)
@@ -431,21 +402,28 @@ int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
         return -1;
     }
 
-    if (cmd->service_descriptor) {
-        // Proper Qubes RPC call
-        ret = execute_parsed_qubes_rpc_command(
-            cmd, pid, stdin_fd, stdout_fd, stderr_fd, stdin_buffer);
-    } else {
-        // Legacy qrexec behavior: spawn shell directly
-        ret = do_fork_exec(cmd->username, cmd->command,
-                           pid, stdin_fd, stdout_fd, stderr_fd);
-    }
+    ret = execute_parsed_qubes_rpc_command(cmd, pid, stdin_fd,
+                                           stdout_fd, stderr_fd, stdin_buffer);
 
     destroy_qrexec_parsed_command(cmd);
     return ret;
 }
 
-static int execute_parsed_qubes_rpc_command(
+int execute_parsed_qubes_rpc_command(
+        const struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
+        int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer) {
+    if (cmd->service_descriptor) {
+        // Proper Qubes RPC call
+        return execute_qrexec_service(
+            cmd, pid, stdin_fd, stdout_fd, stderr_fd, stdin_buffer);
+    } else {
+        // Legacy qrexec behavior: spawn shell directly
+        return do_fork_exec(cmd->username, cmd->command,
+                           pid, stdin_fd, stdout_fd, stderr_fd);
+    }
+}
+
+static int execute_qrexec_service(
         const struct qrexec_parsed_command *cmd,
         int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd,
         struct buffer *stdin_buffer) {
