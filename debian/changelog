@@ -1,3 +1,18 @@
+qubes-core-qrexec (4.2.12-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Fix qrexec-policy-graph tool
+
+  [ Demi Marie Obenour ]
+  * Add a missing printf attribute
+  * Use _exit(), not exit(), in child process after fork
+  * qrexec-fork-server: validate data from qrexec-agent
+  * Prepare for parsing username from service config
+  * Allow specifying a username in service config
+  * Ensure that VLAs do not creep back into the code
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 06 Oct 2023 04:18:15 +0200
+
 qubes-core-qrexec (4.2.11-1) unstable; urgency=medium
 
   [ Frédéric Pierret (fepitre) ]
