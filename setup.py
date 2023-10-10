@@ -13,6 +13,7 @@ def get_console_scripts():
 #   yield 'qrexec-policy', 'qrexec.tools.policy'
 #   yield 'qrexec-policy-agent', 'qrexec.tools.dbusagent'
 #   yield 'qrexec-policy-graph', 'qrexec.tools.graph'
+#   yield 'qrexec-legacy-convert', 'qrexec.tools.qrexec_legacy_convert'
     for filename in os.listdir('./qrexec/tools'):
         basename, ext = os.path.splitext(os.path.basename(filename))
         if basename == '__init__' or ext != '.py':

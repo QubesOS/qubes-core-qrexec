@@ -104,6 +104,7 @@ rm -f %{name}-%{version}
 %files
 %defattr(-,root,root,-)
 
+%{_bindir}/qrexec-legacy-convert
 %{_bindir}/qrexec-policy-exec
 %{_bindir}/qrexec-policy-agent
 %{_bindir}/qrexec-policy-graph
@@ -153,6 +154,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tools/qubes_policy_admin.py
 %{python3_sitelib}/qrexec/tools/qubes_policy_editor.py
 %{python3_sitelib}/qrexec/tools/qubes_policy_lint.py
+%{python3_sitelib}/qrexec/tools/qrexec_legacy_convert.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_agent.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_exec.py
 %{python3_sitelib}/qrexec/tools/qrexec_policy_daemon.py
@@ -168,6 +170,7 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/rpcconfirmation.py
 %{python3_sitelib}/qrexec/tests/policy_parser.py
 %{python3_sitelib}/qrexec/tests/qrexec_policy_daemon.py
+%{python3_sitelib}/qrexec/tests/qrexec_legacy_convert.py
 %{python3_sitelib}/qrexec/tests/policy_cache.py
 %{python3_sitelib}/qrexec/tests/server.py
 %{python3_sitelib}/qrexec/tests/policy_admin.py
