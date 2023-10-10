@@ -1,3 +1,15 @@
+qubes-core-qrexec (4.2.13-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Adjust pylint config
+
+  [ Marta Marczykowska-Górecka ]
+  * Add a tool to convert legacy policy files to new format
+  * Modify qrexec-policy-graph for more flexibility
+  * Tests for legacy policy convert tool
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 11 Oct 2023 00:38:20 +0200
+
 qubes-core-qrexec (4.2.12-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
