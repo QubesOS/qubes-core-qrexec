@@ -1,3 +1,10 @@
+qubes-core-qrexec (4.2.14-1) unstable; urgency=medium
+
+  [ Marta Marczykowska-Górecka ]
+  * Fix conversion rules for input policy
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Thu, 12 Oct 2023 22:30:00 +0200
+
 qubes-core-qrexec (4.2.13-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
