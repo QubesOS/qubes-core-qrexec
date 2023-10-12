@@ -108,7 +108,7 @@ static int do_fork_exec(const char *user,
 #endif
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, inpipe) ||
             socketpair(AF_UNIX, SOCK_STREAM, 0, outpipe) ||
-            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe)) ||
+            (stderr_fd && pipe2(errpipe, O_CLOEXEC)) ||
             socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, statuspipe)) {
         PERROR("socketpair");
         exit(1);
