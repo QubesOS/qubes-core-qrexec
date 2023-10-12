@@ -225,7 +225,7 @@ def test_input_multiple_rules(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path
 
     # the deny @anyvm should be move to 30-user file
     (old_policy_dir / 'qubes.InputKeyboard').write_text("""
-sys-usb dom0 ask
+sys-usb dom0 ask default_target=@adminvm
 sys-usb @anyvm deny
 """)
 
@@ -246,7 +246,7 @@ sys-usb dom0 deny""")
     assert input_result.exists()
     # order does not matter
     assert set(input_result.read_text().split('\n')) == set((qrexec_legacy_convert.TOOL_DISCLAIMER +
-"""qubes.InputKeyboard\t*\tsys-usb\t@adminvm\task
+"""qubes.InputKeyboard\t*\tsys-usb\t@adminvm\task default_target=@adminvm
 qubes.InputMouse\t*\tsys-usb\t@adminvm\tallow
 qubes.InputTablet\t*\tsys-usb\t@adminvm\tdeny
 """).split('\n'))

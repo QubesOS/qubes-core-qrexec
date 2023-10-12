@@ -131,7 +131,12 @@ class RuleWrapper:
                 return False
             if self.rule.source.type == 'keyword':
                 return False
-            return self.is_rule_simple()
+            if getattr(self.rule.action, "target", None):
+                return str(self.rule.action.target) in ['dom0', '@adminvm']
+            if getattr(self.rule.action, "default_target", None):
+                return str(self.rule.action.default_target) \
+                    in ['dom0', '@adminvm']
+            return True
 
         return False
 
