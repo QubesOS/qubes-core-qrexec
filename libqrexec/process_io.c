@@ -229,7 +229,7 @@ int process_io(const struct process_io_request *req) {
         fds[FD_STDOUT].fd = -1;
         fds[FD_STDERR].fd = -1;
         if (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
-            if (stdout_fd >= 0) {
+            if (prefix.len == 0 && stdout_fd >= 0) {
                 fds[FD_STDOUT].fd = stdout_fd;
                 fds[FD_STDOUT].events = POLLIN;
             }
@@ -295,7 +295,7 @@ int process_io(const struct process_io_request *req) {
                 stderr_fd = -1;
                 break;
         }
-        if (stdout_fd >= 0 && fds[FD_STDOUT].revents) {
+        if (prefix.len > 0 || (stdout_fd >= 0 && fds[FD_STDOUT].revents)) {
             switch (handle_input(
                         vchan, stdout_fd, stdout_msg_type,
                         data_protocol_version, &prefix)) {
