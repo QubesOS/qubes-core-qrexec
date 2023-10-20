@@ -34,7 +34,7 @@ checks:tests:
   script:
     - xvfb-run ./run-tests
   after_script:
-    - ci/codecov-wrapper
+    - ci/codecov-wrapper --gcov
 
 checks:fuzz:
   extends: .qrexec_checks
