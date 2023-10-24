@@ -125,6 +125,7 @@ def main(args=None, output=sys.stdout):
         for dom in system_info["domains"]
         if system_info["domains"][dom]["template_for_dispvms"]
     )
+    targets.append("@default")
 
     connections = set()
 
