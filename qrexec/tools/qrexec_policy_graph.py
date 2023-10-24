@@ -104,6 +104,24 @@ def handle_single_action(args, action):
 def main(args=None, output=sys.stdout):
     args = argparser.parse_args(args)
 
+    if args.source:
+        sources = set()
+        for source in args.source:
+            try:
+                sources.add(parser.Source(source))
+            except exc.PolicySyntaxError:
+                argparser.error(f"--source {source} is not a valid call source")
+        args.source = sources
+
+    if args.target:
+        targets = set()
+        for target in args.target:
+            try:
+                targets.add(parser.Redirect(target))
+            except exc.PolicySyntaxError:
+                argparser.error(f"--target {target} is not a valid actual call target")
+        args.target = targets
+
     if args.output:
         # pylint: disable=consider-using-with
         output = open(args.output, "w", encoding='utf-8')
