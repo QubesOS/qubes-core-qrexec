@@ -39,7 +39,11 @@ BuildRequires:  python%{python3_pkgversion}-setuptools
 BuildRequires:	python3dist(sphinx)
 BuildRequires:	python%{python3_pkgversion}-recommonmark
 BuildRequires:	qubes-libvchan-devel
+%if 0%{?is_opensuse}
+BuildRequires:  python-rpm-macros
+%else
 BuildRequires:  python%{python3_pkgversion}-rpm-macros
+%endif
 
 Requires:   python%{python3_pkgversion}
 Requires:   python%{python3_pkgversion}-gbulb
