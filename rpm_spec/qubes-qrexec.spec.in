@@ -36,7 +36,7 @@ BuildRequires:	gcc
 BuildRequires:  python%{python3_pkgversion}-devel
 BuildRequires:  python%{python3_pkgversion}-setuptools
 # for building documentation
-BuildRequires:	python%{python3_pkgversion}-sphinx
+BuildRequires:	python3dist(sphinx)
 BuildRequires:	python%{python3_pkgversion}-recommonmark
 BuildRequires:	qubes-libvchan-devel
 BuildRequires:  python%{python3_pkgversion}-rpm-macros
