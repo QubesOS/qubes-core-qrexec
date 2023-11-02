@@ -198,9 +198,10 @@ rm -f %{name}-%{version}
 %files devel
 %{_includedir}/qrexec.h
 %{_includedir}/libqrexec-utils.h
+%{_libdir}/libqrexec-utils.so
 
 %files libs
-%{_libdir}/libqrexec-utils.so*
+%{_libdir}/libqrexec-utils.so.*
 
 %changelog
 @CHANGELOG@
