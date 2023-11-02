@@ -30,7 +30,7 @@ Summary:	The Qubes qrexec files (common files)
 Group:		Qubes
 Vendor:		Invisible Things Lab
 License:	GPL
-URL:		http://www.qubes-os.org
+URL:		https://www.qubes-os.org
 
 BuildRequires:	gcc
 BuildRequires:  python%{python3_pkgversion}-devel
