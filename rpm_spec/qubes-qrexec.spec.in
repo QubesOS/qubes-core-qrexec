@@ -120,9 +120,11 @@ rm -f %{name}-%{version}
 %{_bindir}/qubes-policy-lint
 %{_bindir}/qrexec-policy
 
+%dir /usr/lib/qubes
 /usr/lib/qubes/qubes-rpc-multiplexer
 /usr/lib/qubes/qrexec-policy-agent-autostart
 
+%dir %{_sysconfdir}/qubes-rpc
 %{_sysconfdir}/qubes-rpc/policy.Ask
 %{_sysconfdir}/qubes-rpc/policy.Notify
 
