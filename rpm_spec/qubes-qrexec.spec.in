@@ -47,7 +47,11 @@ BuildRequires:  python%{python3_pkgversion}-rpm-macros
 
 Requires:   python%{python3_pkgversion}
 Requires:   python%{python3_pkgversion}-gbulb
+%if 0%{?is_opensuse}
+Requires:   python%{python3_pkgversion}-pyinotify
+%else
 Requires:   python%{python3_pkgversion}-inotify
+%endif
 Conflicts:  qubes-utils-libs < 4.1.0
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 Conflicts:  qubes-core-dom0 < 4.1.10
