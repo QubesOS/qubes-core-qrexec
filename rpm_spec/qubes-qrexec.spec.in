@@ -101,6 +101,10 @@ make -C doc \
     SPHINXBUILD=sphinx-build \
     install
 
+# /qubes-rpc/policy.{Ask,Notify} intentionally points to files created at
+# runtime (in /var/run)
+export NO_BRP_STALE_LINK_ERROR=yes
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 rm -f %{name}-%{version}
