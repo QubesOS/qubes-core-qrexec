@@ -101,6 +101,8 @@ make -C doc \
     SPHINXBUILD=sphinx-build \
     install
 
+mkdir -p $RPM_BUILD_ROOT/etc/qubes/rpc-config
+
 # /qubes-rpc/policy.{Ask,Notify} intentionally points to files created at
 # runtime (in /var/run)
 export NO_BRP_STALE_LINK_ERROR=yes
@@ -128,6 +130,8 @@ rm -f %{name}-%{version}
 /usr/lib/qubes/qubes-rpc-multiplexer
 /usr/lib/qubes/qrexec-policy-agent-autostart
 
+%dir %{_sysconfdir}/qubes
+%dir %{_sysconfdir}/qubes/rpc-config
 %dir %{_sysconfdir}/qubes-rpc
 %{_sysconfdir}/qubes-rpc/policy.Ask
 %{_sysconfdir}/qubes-rpc/policy.Notify
