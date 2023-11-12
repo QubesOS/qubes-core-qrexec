@@ -151,7 +151,8 @@ def main(args=None):
             service, arg = service.split("+", 1)
             arg = "+" + arg
         services.add((service, arg))
-    for service, argument in services:
+    for service, argument in sorted(services,
+                                    key=lambda x: (x[0] or "", x[1] or "")):
         if (
             args.service
             and service not in args.service
