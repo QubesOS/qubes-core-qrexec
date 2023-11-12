@@ -91,8 +91,9 @@ def handle_single_action(args, action):
     if args.target and target not in args.target:
         return ""
     if args.full_output:
+        color = "orange" if isinstance(action, parser.AskResolution) else "red"
         return f'  "{action.request.source}" -> "{target}" ' \
-               f'[label="{service} {action.rule.action}" color=orange];\n'
+               f'[label="{service} {action.rule.action}" color={color}];\n'
     if isinstance(action, parser.AskResolution):
         if args.include_ask:
             return f'  "{action.request.source}" -> "{target}" [label="{service}" color=orange];\n'
