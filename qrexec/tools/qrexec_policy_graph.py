@@ -92,6 +92,7 @@ def handle_single_action(args, action):
 
 
 def main(args=None):
+    # pylint: disable=too-many-branches,too-many-statements
     args = argparser.parse_args(args)
 
     if args.source:
@@ -142,6 +143,14 @@ def main(args=None):
     services = set()
     for rule in policy.rules:
         services.add((rule.service, rule.argument))
+    # in case of just wildcard rules above, ensure explicit
+    # service/arg is considered too
+    for service in args.service or []:
+        arg = None
+        if "+" in service:
+            service, arg = service.split("+", 1)
+            arg = "+" + arg
+        services.add((service, arg))
     for service, argument in services:
         if (
             args.service
