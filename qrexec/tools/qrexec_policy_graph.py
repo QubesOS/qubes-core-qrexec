@@ -74,7 +74,7 @@ argparser.add_argument(
     "--full-output",
     action="store_true",
     help="Output complete policy scheme, including detailed action "
-         "specifications.",
+         "specifications and service arguments.",
 )
 
 
@@ -84,6 +84,8 @@ def handle_single_action(args, action):
         service = ""
     else:
         service = action.request.service
+        if args.full_output and action.rule.argument:
+            service += action.rule.argument
     target = action.request.target
     # handle forced target=
     if action.rule.action.target:

@@ -165,6 +165,7 @@ def test_simple_service_no_wildcard():
     with tempfile.TemporaryDirectory() as policy_dir:
         with open(os.path.join(policy_dir, "10-test.policy"), "w") as policy:
             policy.write("test.Service +arg work personal allow\n")
+            policy.write("test.Service +arg2 work personal allow\n")
             policy.write("test.Service2 +arg sys-usb personal allow\n")
         with tempfile.NamedTemporaryFile() as output:
             main(["--policy-dir", policy_dir,
@@ -173,6 +174,26 @@ def test_simple_service_no_wildcard():
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "personal" [label="test.Service" color=red];
+}
+"""
+            assert content == expected
+
+
+def test_simple_service_no_wildcard_full():
+    with tempfile.TemporaryDirectory() as policy_dir:
+        with open(os.path.join(policy_dir, "10-test.policy"), "w") as policy:
+            policy.write("test.Service +arg work personal allow\n")
+            policy.write("test.Service +arg2 work personal allow\n")
+            policy.write("test.Service2 +arg sys-usb personal allow\n")
+        with tempfile.NamedTemporaryFile() as output:
+            main(["--policy-dir", policy_dir,
+                  "--output", output.name,
+                  "--full-output",
+                  "--service", "test.Service"])
+            content = output.read().decode()
+            expected = """digraph g {
+  "work" -> "personal" [label="test.Service+arg allow" color=red];
+  "work" -> "personal" [label="test.Service+arg2 allow" color=red];
 }
 """
             assert content == expected
