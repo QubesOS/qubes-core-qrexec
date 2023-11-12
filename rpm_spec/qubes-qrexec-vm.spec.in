@@ -118,6 +118,7 @@ fi
 %files
 %defattr(-,root,root,-)
 %config(noreplace) /etc/pam.d/qrexec
+%dir /etc/qubes
 %dir /etc/qubes/rpc-config
 /etc/qubes/rpc-config/README
 
@@ -126,6 +127,7 @@ fi
 
 %{_mandir}/man1/qrexec-client-vm.1*
 
+%dir /usr/lib/qubes
 /usr/lib/qubes/qrexec-agent
 /usr/lib/qubes/qrexec-client-vm
 /usr/lib/qubes/qrexec_client_vm
