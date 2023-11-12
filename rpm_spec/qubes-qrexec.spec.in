@@ -30,17 +30,20 @@ Summary:	The Qubes qrexec files (common files)
 Group:		Qubes
 Vendor:		Invisible Things Lab
 License:	GPL
-URL:		http://www.qubes-os.org
+URL:		https://www.qubes-os.org
 
 BuildRequires:	gcc
 BuildRequires:  python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-dbus
 BuildRequires:  python%{python3_pkgversion}-setuptools
 # for building documentation
-BuildRequires:	python%{python3_pkgversion}-sphinx
+BuildRequires:	python3dist(sphinx)
 BuildRequires:	python%{python3_pkgversion}-recommonmark
 BuildRequires:	qubes-libvchan-devel
+%if 0%{?is_opensuse}
+BuildRequires:  python-rpm-macros
+%else
 BuildRequires:  python%{python3_pkgversion}-rpm-macros
+%endif
 
 Requires:   python%{python3_pkgversion}
 Requires:   python%{python3_pkgversion}-gbulb
@@ -117,9 +120,11 @@ rm -f %{name}-%{version}
 %{_bindir}/qubes-policy-lint
 %{_bindir}/qrexec-policy
 
+%dir /usr/lib/qubes
 /usr/lib/qubes/qubes-rpc-multiplexer
 /usr/lib/qubes/qrexec-policy-agent-autostart
 
+%dir {_sysconfdir}/qubes-rpc
 %{_sysconfdir}/qubes-rpc/policy.Ask
 %{_sysconfdir}/qubes-rpc/policy.Notify
 
@@ -194,9 +199,10 @@ rm -f %{name}-%{version}
 %files devel
 %{_includedir}/qrexec.h
 %{_includedir}/libqrexec-utils.h
+%{_libdir}/libqrexec-utils.so
 
 %files libs
-%{_libdir}/libqrexec-utils.so*
+%{_libdir}/libqrexec-utils.so.*
 
 %changelog
 @CHANGELOG@
