@@ -1,3 +1,36 @@
+qubes-core-qrexec (4.2.16-1) unstable; urgency=medium
+
+  [ Ben Grande ]
+  * Add missing dependency inotify
+
+  [ Marek Marczykowski-Górecki ]
+  * qrexec-policy-graph: fix handling of default target
+  * qrexec-policy-graph: validate and normalize source/target arguments
+  * qrexec-policy-graph: print wildcard rules when specific argument
+    requested
+  * qrexec-policy-graph: add basic tests
+  * qrexec-policy-graph: fix output with --full-output
+  * qrexec-policy-graph: add specific argument on the graph with --full-
+    output
+  * qrexec-policy-graph: make output order deterministic
+
+  [ Frédéric Pierret (fepitre) ]
+  * Add dedicated PAM file for Gentoo
+
+  [ Marek Marczykowski-Górecki ]
+  * rpm: use https URL
+  * rpm: drop unused BR: python3-dbus
+  * rpm: use virtual provides python3dist(sphinx)
+  * rpm: adjust BR: python-rpm-macros for opneSUSE
+  * rpm: add missing directory ownership
+  * rpm: move libqrexec-utils.so to -devel subpackage
+  * rpm: do not fail the build on symlinks to /var/run
+  * rpm: own /etc/qubes/rpc-config dir too
+  * rpm: adjust pyinotify pkg name for openSUSE
+  * rpm: add missing directory ownership
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Tue, 14 Nov 2023 05:31:10 +0100
+
 qubes-core-qrexec (4.2.15-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
