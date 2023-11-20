@@ -1,3 +1,28 @@
+qubes-core-qrexec (4.1.24-1) unstable; urgency=medium
+
+  [ Frédéric Pierret (fepitre) ]
+  * Support for Fedora 39
+
+  [ Demi Marie Obenour ]
+  * Add a missing printf attribute
+  * Use _exit(), not exit(), in child process after fork
+
+  [ Ben Grande ]
+  * Add missing dependency inotify
+
+  [ Marek Marczykowski-Górecki ]
+  * rpm: use https URL
+  * rpm: drop unused BR: python3-dbus
+  * qrexec-policy-graph: validate and normalize source/target arguments
+  * qrexec-policy-graph: print wildcard rules when specific argument
+    requested
+  * qrexec-policy-graph: add basic tests
+  * Fix log format
+  * qrexec-policy-graph: make output order deterministic
+  * Adjust pylint config
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 20 Nov 2023 11:10:11 +0100
+
 qubes-core-qrexec (4.1.23-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
