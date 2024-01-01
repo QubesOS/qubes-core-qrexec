@@ -20,18 +20,20 @@
 import asyncio
 import os.path
 import pyinotify
-from qrexec import POLICYPATH, POLICYPATH_OLD
+from qrexec import POLICYPATH, POLICYPATH_OLD, RUNTIME_POLICY_PATH
 from . import parser
 
 
 class PolicyCache:
-    def __init__(self, path=POLICYPATH, use_legacy=True, lazy_load=False):
-        self.path = path
+    def __init__(
+        self, path=(RUNTIME_POLICY_PATH, POLICYPATH), use_legacy=True, lazy_load=False
+    ) -> None:
+        self.paths = list(path)
         self.outdated = lazy_load
         if lazy_load:
             self.policy = None
         else:
-            self.policy = parser.FilePolicy(policy_path=self.path)
+            self.policy = parser.FilePolicy(policy_path=self.paths)
 
         # default policy paths are listed manually, for compatibility with R4.0
         # to be removed in Qubes 5.0
@@ -62,22 +64,20 @@ class PolicyCache:
             self.watch_manager, loop, default_proc_fun=PolicyWatcher(self)
         )
 
-        if str(self.path) not in self.default_policy_paths and os.path.exists(
-            self.path
-        ):
-            self.watches.append(
-                self.watch_manager.add_watch(
-                    str(self.path), mask, rec=True, auto_add=True
+        for path in self.paths:
+            str_path = str(path)
+            if str_path not in self.default_policy_paths and os.path.exists(str_path):
+                self.watches.append(
+                    self.watch_manager.add_watch(
+                        str_path, mask, rec=True, auto_add=True
+                    )
                 )
-            )
 
         for path in self.default_policy_paths:
             if not os.path.exists(path):
                 continue
             self.watches.append(
-                self.watch_manager.add_watch(
-                    str(path), mask, rec=True, auto_add=True
-                )
+                self.watch_manager.add_watch(str(path), mask, rec=True, auto_add=True)
             )
 
     def cleanup(self):
@@ -92,7 +92,7 @@ class PolicyCache:
 
     def get_policy(self):
         if self.outdated:
-            self.policy = parser.FilePolicy(policy_path=self.path)
+            self.policy = parser.FilePolicy(policy_path=self.paths)
             self.outdated = False
 
         return self.policy
