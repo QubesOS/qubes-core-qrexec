@@ -24,7 +24,6 @@
 decisions."""
 
 import itertools
-import os
 import argparse
 import asyncio
 
