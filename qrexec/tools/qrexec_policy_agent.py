@@ -23,11 +23,10 @@
 """ Agent running in user session, responsible for asking the user about policy
 decisions."""
 
+import importlib.resources
 import itertools
 import argparse
 import asyncio
-
-import pkg_resources
 
 # pylint: disable=import-error,wrong-import-position
 import gi
@@ -321,8 +320,8 @@ class FocusStealingHelper(GtkOneTimerHelper):
 
 class RPCConfirmationWindow:
     # pylint: disable=too-few-public-methods,too-many-instance-attributes
-    _source_file = pkg_resources.resource_filename(
-        "qrexec", os.path.join("glade", "RPCConfirmationWindow.glade")
+    _source_file = (
+        importlib.resources.files("qrexec") / "glade" / "RPCConfirmationWindow.glade"
     )
     _source_id = {
         "window": "RPCConfirmationWindow",
@@ -428,7 +427,9 @@ class RPCConfirmationWindow:
         sanitize_service_name(source, assert_sanitized=True)
 
         self._gtk_builder = Gtk.Builder()
-        self._gtk_builder.add_from_file(self._source_file)
+        self._gtk_builder.add_from_string(
+            self._source_file.read_text(encoding="UTF-8", errors="strict")
+        )
         self._rpc_window = self._gtk_builder.get_object(
             self._source_id["window"]
         )
