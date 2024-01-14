@@ -22,56 +22,72 @@ from typing import Tuple
 from unittest import mock
 import pytest
 from pathlib import Path
+from types import MappingProxyType as Proxy
 from ..tools import qrexec_legacy_convert
 
 @pytest.fixture(autouse=True)
 def system_info():
     system_info = {
-        "domains": {
-            "dom0": {
-                "icon": "black",
-                "template_for_dispvms": False,
-                "guivm": None,
-                "type": "AdminVM",
-                "tags": [],
-            },
-            "work": {
-                "icon": "red",
-                "template_for_dispvms": False,
-                "guivm": None,
-                "type": "AppVM",
-                "tags": [],
-            },
-            "personal": {
-                "icon": "red",
-                "template_for_dispvms": False,
-                "guivm": None,
-                "type": "AppVM",
-                "tags": [],
-            },
-            "sys-usb": {
-                "icon": "red",
-                "template_for_dispvms": False,
-                "guivm": None,
-                "type": "AppVM",
-                "tags": [],
-            },
-            "sys-usb-2": {
-                "icon": "red",
-                "template_for_dispvms": False,
-                "guivm": None,
-                "type": "AppVM",
-                "tags": [],
-            },
-            "dvm_template": {
-                "icon": "red",
-                "template_for_dispvms": True,
-                "guivm": None,
-                "type": "AppVM",
-                "tags": [],
-            },
+        "dom0": {
+            "icon": "black",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "type": "AdminVM",
+            "tags": [],
+            "uuid": "00000000-0000-0000-0000-000000000000",
+        },
+        "work": {
+            "icon": "red",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "type": "AppVM",
+            "tags": [],
+            "uuid": "8079de03-ab79-424c-8fb6-d8adcfda19d1",
+        },
+        "personal": {
+            "icon": "red",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "type": "AppVM",
+            "tags": [],
+            "uuid": "bf7cdc8a-1dc5-4fcc-b01f-bd648ff8d903",
+        },
+        "sys-usb": {
+            "icon": "red",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "type": "AppVM",
+            "tags": [],
+            "uuid": "46fd27ac-46e3-44d7-918e-986f095900f9",
+        },
+        "sys-usb-2": {
+            "icon": "red",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "type": "AppVM",
+            "tags": [],
+            "uuid": "b65fceec-2d84-4665-99cb-50c2e7d91dc6",
+        },
+        "dvm_template": {
+            "icon": "red",
+            "template_for_dispvms": True,
+            "guivm": None,
+            "type": "AppVM",
+            "tags": [],
+            "uuid": "b41c5829-3ea9-475e-b5e6-b404ea409f29",
         },
     }
+
+    for i, j in list(system_info.items()):
+        assert not i.startswith("uuid:")
+        j["name"] = i
+        j["tags"] = tuple(j["tags"])
+        system_info["uuid:" + j["uuid"]] = system_info[i] = Proxy(j)
+    for i in system_info.values():
+        assert not i["name"].startswith("uuid:")
+        assert "uuid" in i
+    system_info = Proxy({"domains": system_info})
+
     with mock.patch("qrexec.utils.get_system_info") as mock_system_info:
         mock_system_info.return_value = system_info
         yield system_info

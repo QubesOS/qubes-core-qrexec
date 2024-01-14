@@ -136,16 +136,18 @@ def main(args=None, output=sys.stdout):
     else:
         system_info = utils.get_system_info()
 
-    sources = list(system_info["domains"].keys())
+    targets = [key for key in system_info["domains"] if not key.startswith("uuid")]
     if args.source:
         sources = args.source
+    else:
+        sources = list(targets)
 
-    targets = list(system_info["domains"].keys())
     targets.append("@dispvm")
     targets.extend(
         "@dispvm:" + dom
         for dom in system_info["domains"]
-        if system_info["domains"][dom]["template_for_dispvms"]
+        if (not dom.startswith("uuid:")
+            and system_info["domains"][dom]["template_for_dispvms"])
     )
     targets.append("@default")
 

@@ -73,9 +73,11 @@ class AgentAskResolution(parser.AskResolution):
             assert False, "handle_user_response should throw"
 
         # prepare icons
-        icons = {name: domains[name]["icon"] for name in domains.keys()}
+        icons = {name: domains[name]["icon"] for name in domains.keys()
+                 if not name.startswith("uuid:")}
         for dispvm_base in domains:
-            if not domains[dispvm_base]["template_for_dispvms"]:
+            if (dispvm_base.startswith("uuid:")
+                or not domains[dispvm_base]["template_for_dispvms"]):
                 continue
             dispvm_api_name = "@dispvm:" + dispvm_base
             icons[dispvm_api_name] = domains[dispvm_base]["icon"]
@@ -288,10 +290,10 @@ def get_result(args: Optional[List[str]]) -> Union[str, int]:
             intended_target = intended_target[1:]
         cmd += f" {target_type} {intended_target}"
     else:
+        target = result["target_uuid"]
         cmd = f"{result['user'] or 'DEFAULT'}:" + cmd
         if dispvm:
-            target = (utils.qubesd_call(target[8:],
-                                        "admin.vm.CreateDisposable")
+            target = (utils.qubesd_call(target, "admin.vm.CreateDisposable", payload=b"uuid")
                            .decode("ascii", "strict"))
         utils.qubesd_call(target, "admin.vm.Start")
     # pylint: disable=possibly-used-before-assignment

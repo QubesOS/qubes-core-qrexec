@@ -142,6 +142,8 @@ int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdi
 __attribute__((warn_unused_result))
 bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
                        const char *cmd, size_t service_length, const char *request_id,
-                       bool just_exec, bool wait_connection_end);
+                       bool just_exec, bool wait_connection_end, bool use_uuid);
 /** FD for stdout of remote process */
 extern int local_stdin_fd;
+__attribute__((warn_unused_result))
+bool target_refers_to_dom0(const char *target);

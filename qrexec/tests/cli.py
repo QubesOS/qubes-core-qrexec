@@ -103,39 +103,46 @@ def policy():
 @pytest.fixture(autouse=True)
 def system_info():
     system_info = {
-        "domains": {
-            "dom0": {
-                "icon": "black",
-                "template_for_dispvms": False,
-                "guivm": None,
-            },
-            "source": {
-                "icon": "red",
-                "template_for_dispvms": False,
-                "guivm": "gui",
-            },
-            "test-vm1": {
-                "icon": "red",
-                "template_for_dispvms": False,
-                "guivm": None,
-            },
-            "test-vm2": {
-                "icon": "red",
-                "template_for_dispvms": False,
-                "guivm": None,
-            },
-            "test-vm3": {
-                "icon": "green",
-                "template_for_dispvms": True,
-                "guivm": None,
-            },
-            "gui": {
-                "icon": "orange",
-                "template_for_dispvms": False,
-                "guivm": None,
-            },
+        "dom0": {
+            "icon": "black",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "uuid": "00000000-0000-0000-0000-000000000000",
+        },
+        "source": {
+            "icon": "red",
+            "template_for_dispvms": False,
+            "guivm": "gui",
+            "uuid": "33e31fb2-31a3-4486-abef-e141416221d9",
+        },
+        "test-vm1": {
+            "icon": "red",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "uuid": "42d488d0-1168-44eb-9829-81bde8f43065",
+        },
+        "test-vm2": {
+            "icon": "red",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "uuid": "5b92449a-e783-4566-a1bc-67b6389be5cc",
+        },
+        "test-vm3": {
+            "icon": "green",
+            "template_for_dispvms": True,
+            "guivm": None,
+            "uuid": "5f3989a7-44e3-4154-bd14-7688f802ec21",
+        },
+        "gui": {
+            "icon": "orange",
+            "template_for_dispvms": False,
+            "guivm": None,
+            "uuid": "f5c8b32b-8ade-4cdf-8b28-180e07b30ace",
         },
     }
+    for i, j in system_info.items():
+        j["name"] = i
+    system_info = {"domains": system_info}
     with mock.patch("qrexec.utils.get_system_info") as mock_system_info:
         mock_system_info.return_value = system_info
         yield system_info
@@ -209,7 +216,12 @@ def test_000_allow(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == """user=user
+result=allow
+target=test-vm1
+target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
+autostart=True
+requested_target=test-vm1"""
     assert agent_service.mock_calls == []
 
 
@@ -218,7 +230,12 @@ def test_001_allow_notify(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == """user=user
+result=allow
+target=test-vm1
+target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
+autostart=True
+requested_target=test-vm1"""
     assert agent_service.mock_calls == [
         notify_call("allow"),
     ]
@@ -230,7 +247,12 @@ def test_002_allow_notify_failed(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == """user=user
+result=allow
+target=test-vm1
+target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
+autostart=True
+requested_target=test-vm1"""
     assert agent_service.mock_calls == [
         notify_call("allow"),
     ]
@@ -243,7 +265,12 @@ def test_004_allow_no_guivm(policy, system_info, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == """user=user
+result=allow
+target=test-vm1
+target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
+autostart=True
+requested_target=test-vm1"""
     assert agent_service.mock_calls == []
 
 
@@ -253,7 +280,12 @@ def test_010_ask_allow(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == """user=user
+result=allow
+target=test-vm1
+target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
+autostart=True
+requested_target=test-vm1"""
     assert agent_service.mock_calls == [
         ask_call(),
     ]
@@ -265,7 +297,12 @@ def test_011_ask_allow_notify(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == """user=user
+result=allow
+target=test-vm1
+target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
+autostart=True
+requested_target=test-vm1"""
     assert agent_service.mock_calls == [
         ask_call(),
         notify_call("allow"),
@@ -278,7 +315,7 @@ def test_012_ask_allow_notify_no_argument(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == "user=user\nresult=allow\ntarget=test-vm1\ntarget_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065\nautostart=True\nrequested_target=test-vm1"
     assert agent_service.mock_calls == [
         ask_call(argument="+"),
         notify_call("allow", argument="+"),
@@ -316,7 +353,12 @@ def test_017_ask_default_target(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\nautostart=True\nrequested_target=test-vm1"
+    assert retval == """user=user
+result=allow
+target=test-vm1
+target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
+autostart=True
+requested_target=test-vm1"""
     assert agent_service.mock_calls == [
         ask_call(default_target="test-vm1"),
     ]
@@ -440,14 +482,14 @@ def test_034_allow_policy_exec(policy, agent_service):
             ["source-id", "source", "test-vm1", "service+arg",
              "process_ident"]
         )
-        assert c.mock_calls == [mock.call("test-vm1", "admin.vm.Start")]
+        assert c.mock_calls == [mock.call("uuid:42d488d0-1168-44eb-9829-81bde8f43065", "admin.vm.Start")]
         assert agent_service.mock_calls == []
         assert retval == 0
         assert m.mock_calls == [
             mock.call((
                 QREXEC_CLIENT,
                 "-Ed",
-                "test-vm1",
+                "uuid:42d488d0-1168-44eb-9829-81bde8f43065",
                 "-c",
                 "process_ident,source,source-id",
                 "--",

@@ -11,6 +11,8 @@
 #include "qrexec-daemon-common.h"
 
 const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
+#define QREXEC_DISPVM_PREFIX "@dispvm:"
+#define QREXEC_DISPVM_PREFIX_SIZE (sizeof QREXEC_DISPVM_PREFIX - 1)
 
 /* ask the daemon to allocate vchan port */
 bool negotiate_connection_params(int s, int other_domid, unsigned type,
@@ -47,6 +49,20 @@ bool negotiate_connection_params(int s, int other_domid, unsigned type,
     *data_port = params.connect_port;
     *data_domain = params.connect_domain;
     return true;
+}
+
+bool target_refers_to_dom0(const char *target)
+{
+    switch (target[0]) {
+    case '@':
+        return strcmp(target + 1, "adminvm") == 0;
+    case 'd':
+        return strcmp(target + 1, "om0") == 0;
+    case 'u':
+        return strcmp(target + 1, "uid:00000000-0000-0000-0000-000000000000") == 0;
+    default:
+        return false;
+    }
 }
 
 int handle_daemon_handshake(int fd)
@@ -93,7 +109,7 @@ int handle_daemon_handshake(int fd)
 bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
                        const char *cmd, size_t const service_length,
                        const char *request_id, bool just_exec,
-                       bool wait_connection_end)
+                       bool wait_connection_end, bool use_uuid)
 {
     if (service_length < 2 || (size_t)service_length > MAX_QREXEC_CMD_LEN) {
         /* This is arbitrary, but it helps reduce the risk of overflows in other code */
@@ -119,11 +135,26 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
         }
         // Otherwise, we kill the VM immediately after starting it.
         wait_connection_end = true;
-        buf = qubesd_call(target + 8, "admin.vm.CreateDisposable", "", &resp_len);
+        buf = qubesd_call2(target + QREXEC_DISPVM_PREFIX_SIZE,
+                           "admin.vm.CreateDisposable", "",
+                           "uuid", use_uuid ? 4 : 0, &resp_len);
         if (buf == NULL) // error already printed by qubesd_call
             return false;
         if (memcmp(buf, "0", 2) == 0) {
-            /* we exit later so memory leaks do not matter */
+            if (strlen(buf + 2) != resp_len - 2) {
+                LOG(ERROR, "NUL byte in qubesd response");
+                return false;
+            }
+            if (use_uuid) {
+                if (resp_len != sizeof("uuid:00000000-0000-0000-0000-000000000000") + 1) {
+                    LOG(ERROR, "invalid UUID length");
+                    return false;
+                }
+                if (memcmp(buf + 2, "uuid:", 5) != 0) {
+                    LOG(ERROR, "invalid UUID target %s", buf + 2);
+                    return false;
+                }
+            }
             target = buf + 2;
         } else {
             if (memcmp(buf, "2", 2) == 0) {
