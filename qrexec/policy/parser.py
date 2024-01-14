@@ -30,6 +30,7 @@ import io
 import itertools
 import logging
 import pathlib
+import re
 import string
 
 from typing import (
@@ -235,11 +236,11 @@ class VMToken(str, metaclass=VMTokenMeta):
         orig_token = token
 
         # first, adjust some aliases
-        if token == "dom0":
+        if token in ("dom0", "uuid:00000000-0000-0000-0000-000000000000"):
             # TODO: log a warning in Qubes 4.1
             token = "@adminvm"
 
-        # if user specified just qube name, use it directly
+        # if user specified just qube name or UUID, use it directly
         if not (token.startswith("@") or token == "*"):
             return super().__new__(cls, token)
 
@@ -300,13 +301,28 @@ class VMToken(str, metaclass=VMTokenMeta):
     # This replaces is_match() and is_match_single().
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional["VMToken"]=None
     ) -> bool:
         """Check if this token matches opposite token"""
-        # pylint: disable=unused-argument
+        # pylint: disable=unused-argument,too-many-return-statements
+        if self == "@adminvm":
+            return other == "@adminvm"
+        info = system_info["domains"]
+        if self.startswith("uuid:"):
+            if other.startswith("uuid:"):
+                return self == other
+            try:
+                return self[5:] == info[str(other)]["uuid"]
+            except KeyError:
+                return False
+        if other.startswith("uuid:"):
+            try:
+                return other[5:] == info[str(self)]["uuid"]
+            except KeyError:
+                return False
         return self == other
 
     def is_special_value(self) -> bool:
@@ -339,9 +355,9 @@ class _BaseTarget(VMToken):
 
         This is used as part of :py:meth:`Policy.collect_targets_for_ask()`.
         """
-        if self in system_info["domains"]:
+        info = system_info["domains"]
+        if self in info:
             yield IntendedTarget(self)
-
 
 class Target(_BaseTarget):
     # pylint: disable=missing-docstring
@@ -362,10 +378,12 @@ class Redirect(_BaseTarget):
         return super().__new__(cls, value, filepath=filepath, lineno=lineno) # type: ignore
 
 
+_uuid_regex = re.compile(r"\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
+
 # this method (with overloads in subclasses) was verify_target_value
 class IntendedTarget(VMToken):
     # pylint: disable=missing-docstring
-    def verify(self, *, system_info: FullSystemInfo) -> VMToken:
+    def verify(self, *, system_info: FullSystemInfo) -> Optional[VMToken]:
         """Check if given value names valid target
 
         This function check if given value is not only syntactically correct,
@@ -410,7 +428,7 @@ class WildcardVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -443,7 +461,7 @@ class AnyVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -476,7 +494,7 @@ class TypeVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -499,7 +517,7 @@ class TagVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -522,7 +540,7 @@ class DispVM(Target, Redirect, IntendedTarget):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -556,7 +574,7 @@ class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -590,7 +608,7 @@ class DispVMTag(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -698,12 +716,30 @@ class AllowResolution(AbstractResolution):
         if request.source == target:
             raise AccessDenied("loopback qrexec connection not supported")
 
+        if target in ("@adminvm", "dom0", "uuid:00000000-0000-0000-0000-000000000000"):
+            return f"""\
+user={self.user or 'DEFAULT'}
+result=allow
+target=@adminvm
+autostart={self.autostart}
+requested_target={request.target}"""
+        if target.startswith("@dispvm:"):
+            target_info = request.system_info["domains"][target[8:]]
+            return f"""\
+user={self.user or 'DEFAULT'}
+result=allow
+target={self.target}
+target_uuid=@dispvm:uuid:{target_info['uuid']}
+autostart={self.autostart}
+requested_target={request.target}"""
+        target_info = request.system_info["domains"][target]
         return f"""\
 user={self.user or 'DEFAULT'}
 result=allow
 target={self.target}
+target_uuid=uuid:{target_info['uuid']}
 autostart={self.autostart}
-requested_target={self.request.target}"""
+requested_target={request.target}"""
 
 class AskResolution(AbstractResolution):
     """Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
