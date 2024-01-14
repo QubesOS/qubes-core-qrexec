@@ -488,7 +488,7 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
-    if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
+    if (target_refers_to_dom0(domname)) {
         if (request_id == NULL) {
             fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
             usage(argv[0]);

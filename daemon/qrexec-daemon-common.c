@@ -47,6 +47,20 @@ void negotiate_connection_params(int s, int other_domid, unsigned type,
     *data_domain = params.connect_domain;
 }
 
+bool target_refers_to_dom0(const char *target)
+{
+    switch (target[0]) {
+    case '@':
+        return strcmp(target + 1, "adminvm") == 0;
+    case 'd':
+        return strcmp(target + 1, "om0") == 0;
+    case 'u':
+        return strcmp(target + 1, "uid:00000000-0000-0000-0000-000000000000") == 0;
+    default:
+        return false;
+    }
+}
+
 int handle_daemon_handshake(int fd)
 {
     struct msg_header hdr;

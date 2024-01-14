@@ -7,3 +7,4 @@ void negotiate_connection_params(int s, int other_domid, unsigned type,
         int *data_domain, int *data_port);
 void send_service_connect(int s, const char *conn_ident,
         int connect_domain, int connect_port);
+bool target_refers_to_dom0(const char *target);
