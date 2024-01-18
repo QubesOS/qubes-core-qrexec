@@ -131,7 +131,6 @@ def main():
         # check if the argument isn't registered already
         policy = FilePolicy()
         for rule in policy.rules:
-            print(repr(rule))
             if rule.service == rpcname and rule.argument == "+" + argument:
                 die('%s: %s → %s %s argument failed: argument already registered',
                     rpcname, frontend, backend, argument)
