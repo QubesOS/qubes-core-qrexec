@@ -1,3 +1,9 @@
+qubes-core-qrexec (4.2.17-1) unstable; urgency=medium
+
+  * Remove leftover debug print
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 19 Jan 2024 00:51:32 +0100
+
 qubes-core-qrexec (4.2.16-1) unstable; urgency=medium
 
   [ Ben Grande ]
