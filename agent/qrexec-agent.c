@@ -98,7 +98,7 @@ static int pam_conv_callback(int num_msg, const struct pam_message **msg,
     assert(num_msg >= 0);
     int i;
     struct pam_response *resp_array =
-        calloc(sizeof(struct pam_response), (size_t)num_msg);
+        calloc((size_t)num_msg, sizeof(struct pam_response));
 
     if (resp_array == NULL)
         return PAM_BUF_ERR;
