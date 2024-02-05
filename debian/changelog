@@ -1,3 +1,9 @@
+qubes-core-qrexec (4.2.18-1) unstable; urgency=medium
+
+  * agent: fix calloc parameters order
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 05 Feb 2024 04:49:33 +0100
+
 qubes-core-qrexec (4.2.17-1) unstable; urgency=medium
 
   * Remove leftover debug print
