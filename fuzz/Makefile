@@ -38,7 +38,7 @@ test-%: % %_seed_corpus.zip
 	unzip $<_seed_corpus.zip
 	./$< $<_seed_corpus -runs=100000
 
-qrexec_daemon_fuzzer: qrexec_daemon_fuzzer.o fuzz.o $(LIBQREXEC_OBJS) daemon-qrexec-daemon.o
+qrexec_daemon_fuzzer: qrexec_daemon_fuzzer.o fuzz.o $(LIBQREXEC_OBJS) daemon-qrexec-daemon.o daemon-qrexec-daemon-common.o
 
 %_fuzzer: %_fuzzer.o fuzz.o $(LIBQREXEC_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LIB_FUZZING_ENGINE)
