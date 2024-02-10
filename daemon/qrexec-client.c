@@ -41,8 +41,8 @@
 #include "libqrexec-utils.h"
 
 // whether qrexec-client should replace problematic bytes with _ before printing the output
-static int replace_chars_stdout = 0;
-static int replace_chars_stderr = 0;
+static bool replace_chars_stdout = false;
+static bool replace_chars_stderr = false;
 
 static int exit_with_code = 1;
 
@@ -54,7 +54,7 @@ static int local_stdin_fd, local_stdout_fd;
 static pid_t local_pid = 0;
 /* flag if this is "remote" end of service call. In this case swap STDIN/STDOUT
  * msg types and send exit code at the end */
-static int is_service = 0;
+static bool is_service = false;
 
 static volatile sig_atomic_t sigchld = 0;
 
@@ -543,7 +543,7 @@ int main(int argc, char **argv)
     int data_domain;
     int msg_type;
     int s;
-    int just_exec = 0;
+    bool just_exec = false;
     int wait_connection_end = 0;
     char *local_cmdline = NULL;
     char *remote_cmdline = NULL;
@@ -572,7 +572,7 @@ int main(int argc, char **argv)
                 local_cmdline = xstrdup(optarg);
                 break;
             case 'e':
-                just_exec = 1;
+                just_exec = true;
                 break;
             case 'E':
                 exit_with_code = 0;
@@ -583,13 +583,13 @@ int main(int argc, char **argv)
                     usage(argv[0]);
                 }
                 parse_connect(optarg, &request_id, &src_domain_name, &src_domain_id);
-                is_service = 1;
+                is_service = true;
                 break;
             case 't':
-                replace_chars_stdout = 1;
+                replace_chars_stdout = true;
                 break;
             case 'T':
-                replace_chars_stderr = 1;
+                replace_chars_stderr = true;
                 break;
             case 'w':
                 connection_timeout = parse_int(optarg, "connection timeout");
@@ -616,7 +616,7 @@ int main(int argc, char **argv)
 
     register_exec_func(&do_exec);
 
-    if (just_exec + (request_id != NULL) + (local_cmdline != 0) > 1) {
+    if (just_exec + (request_id != NULL) + (local_cmdline != NULL) > 1) {
         fprintf(stderr, "ERROR: only one of -e, -l, -c can be specified\n");
         usage(argv[0]);
     }
