@@ -621,6 +621,13 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
+    char src_domain_id_str[11];
+    {
+        int snprintf_res = snprintf(src_domain_id_str, sizeof(src_domain_id_str), "%d", src_domain_id);
+        if (snprintf_res < 0 || snprintf_res >= (int)sizeof(src_domain_id_str))
+            err(1, "snprintf()");
+    }
+
     if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
         if (request_id != NULL) {
             msg_type = MSG_SERVICE_CONNECT;
@@ -635,7 +642,7 @@ int main(int argc, char **argv)
             abort();
         }
         set_remote_domain(src_domain_name);
-        s = connect_unix_socket(src_domain_name);
+        s = connect_unix_socket(src_domain_id_str);
         negotiate_connection_params(s,
                 0, /* dom0 */
                 msg_type,
@@ -698,7 +705,7 @@ int main(int argc, char **argv)
         buffer_init(&stdin_buffer);
         prepare_ret = prepare_local_fds(local_cmdline, &stdin_buffer);
         if (request_id) {
-            s = connect_unix_socket(src_domain_name);
+            s = connect_unix_socket(src_domain_id_str);
             send_service_connect(s, request_id, data_domain, data_port);
             close(s);
             if (wait_connection_end) {
