@@ -163,8 +163,12 @@ static void unlink_qrexec_socket(void)
                  "%s/qrexec.%s", socket_dir, remote_domain_name);
     if (v < (int)sizeof("/qrexec.") || v >= (int)sizeof(link_to_socket_name))
         abort();
-    unlink(socket_address);
-    unlink(link_to_socket_name);
+    v = unlink(socket_address);
+    if (v != 0 && !(v == -1 && errno == ENOENT))
+        err(1, "unlink(%s)", socket_address);
+    v = unlink(link_to_socket_name);
+    if (v != 0 && !(v == -1 && errno == ENOENT))
+        err(1, "unlink(%s)", link_to_socket_name);
 }
 
 static void handle_vchan_error(const char *op)
@@ -178,12 +182,17 @@ static int create_qrexec_socket(int domid, const char *domname)
 {
     char socket_address[40];
     char link_to_socket_name[strlen(domname) + sizeof(socket_address)];
+    int res;
 
-    snprintf(socket_address, sizeof(socket_address),
-             "%s/qrexec.%d", socket_dir, domid);
-    snprintf(link_to_socket_name, sizeof link_to_socket_name,
-             "%s/qrexec.%s", socket_dir, domname);
-    unlink(link_to_socket_name);
+    if ((unsigned)snprintf(socket_address, sizeof(socket_address),
+                           "%s/qrexec.%d", socket_dir, domid) >= sizeof(socket_address))
+        errx(1, "socket name too long");
+    if ((unsigned)snprintf(link_to_socket_name, sizeof link_to_socket_name,
+                           "%s/qrexec.%s", socket_dir, domname) >= sizeof link_to_socket_name)
+        errx(1, "socket link name too long");
+    res = unlink(link_to_socket_name);
+    if (res != 0 && !(res == -1 && errno == ENOENT))
+        err(1, "unlink(%s)", link_to_socket_name);
 
     /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
     umask(0);
@@ -330,8 +339,10 @@ static void init(int xid)
     close(0);
 
     if (!opt_direct) {
-        snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
-                 "/var/log/qubes/qrexec.%s.log", remote_domain_name);
+        if ((unsigned)snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
+                               "/var/log/qubes/qrexec.%s.log", remote_domain_name) >=
+                sizeof(qrexec_error_log_name))
+            errx(1, "remote domain name too long");
         umask(0007);        // make the log readable by the "qubes" group
         logfd =
             open(qrexec_error_log_name, O_WRONLY | O_CREAT | O_TRUNC,
