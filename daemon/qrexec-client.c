@@ -629,14 +629,13 @@ int main(int argc, char **argv)
     }
 
     if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
-        if (request_id != NULL) {
-            msg_type = MSG_SERVICE_CONNECT;
-            strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
-            svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
-        } else {
+        if (request_id == NULL) {
             fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
             usage(argv[0]);
         }
+        msg_type = MSG_SERVICE_CONNECT;
+        strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
+        svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
         if (src_domain_name == NULL) {
             LOG(ERROR, "internal error: src_domain_name should not be NULL here");
             abort();
@@ -646,8 +645,8 @@ int main(int argc, char **argv)
         negotiate_connection_params(s,
                 0, /* dom0 */
                 msg_type,
-                request_id ? (void*)&svc_params : (void*)remote_cmdline,
-                request_id ? sizeof(svc_params) : compute_service_length(remote_cmdline, argv[0]),
+                (void*)&svc_params,
+                sizeof(svc_params),
                 &data_domain,
                 &data_port);
 
@@ -659,26 +658,20 @@ int main(int argc, char **argv)
         } else {
             prepare_ret = prepare_local_fds(remote_cmdline, &stdin_buffer);
         }
-        if (request_id) {
-            void (*old_handler)(int);
+        void (*old_handler)(int);
 
-            /* libvchan_client_init is blocking and does not support connection
-             * timeout, so use alarm(2) for that... */
-            old_handler = signal(SIGALRM, sigalrm_handler);
-            alarm(connection_timeout);
-            data_vchan = libvchan_client_init(data_domain, data_port);
-            alarm(0);
-            signal(SIGALRM, old_handler);
-        } else {
-            data_vchan = libvchan_server_init(data_domain, data_port,
-                    VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
-            wait_for_vchan_client_with_timeout(data_vchan, connection_timeout);
-        }
+        /* libvchan_client_init is blocking and does not support connection
+         * timeout, so use alarm(2) for that... */
+        old_handler = signal(SIGALRM, sigalrm_handler);
+        alarm(connection_timeout);
+        data_vchan = libvchan_client_init(data_domain, data_port);
+        alarm(0);
+        signal(SIGALRM, old_handler);
         if (!data_vchan || !libvchan_is_open(data_vchan)) {
             LOG(ERROR, "Failed to open data vchan connection");
             exit(1);
         }
-        data_protocol_version = handle_agent_handshake(data_vchan, request_id != NULL);
+        data_protocol_version = handle_agent_handshake(data_vchan, true);
         if (data_protocol_version < 0)
             exit(1);
         if (prepare_ret < 0)
