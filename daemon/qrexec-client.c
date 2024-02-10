@@ -19,6 +19,7 @@
  *
  */
 
+#include <limits.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdio.h>
@@ -410,40 +411,43 @@ _Noreturn static void usage(const char *const name)
     exit(1);
 }
 
+static int parse_int(const char *str, const char *msg) {
+    long value;
+    char *end = (char *)str;
+
+    if (str[0] < '0' || str[0] > '9')
+        errx(1, "%s '%s' does not start with an ASCII digit", msg, str);
+    errno = 0;
+    value = strtol(str, &end, 0);
+    if (*end != '\0')
+        errx(1, "trailing junk '%s' after %s", end, msg);
+    if (errno == 0 && (value < 0 || value > INT_MAX))
+        errno = ERANGE;
+    if (errno)
+        err(1, "invalid %s '%s': strtol", msg, str);
+    return (int)value;
+}
+
 static void parse_connect(char *str, char **request_id,
         char **src_domain_name, int *src_domain_id)
 {
-    int i=0;
-    char *token = NULL;
-    char *separators = ",";
+    char *token;
 
-    token = strtok(str, separators);
-    while (token)
-    {
-        switch (i)
-        {
-            case 0:
-                *request_id = token;
-                if (strlen(*request_id) >= sizeof(struct service_params)) {
-                    fprintf(stderr, "Invalid -c parameter (request_id too long, max %lu)\n",
-                            sizeof(struct service_params)-1);
-                    exit(1);
-                }
-                break;
-            case 1:
-                *src_domain_name = token;
-                break;
-            case 2:
-                *src_domain_id = atoi(token);
-                break;
-            default:
-                goto bad_c_param;
-        }
-        token = strtok(NULL, separators);
-        i++;
-    }
-    if (i == 3)
-        return;
+    token = strchr(str, ',');
+    if (token == NULL)
+        goto bad_c_param;
+    if ((size_t)(token - str) >= sizeof(struct service_params))
+        errx(1, "Invalid -c parameter (request_id too long, max %zu)\n",
+             sizeof(struct service_params)-1);
+    *token = 0;
+    *request_id = str;
+    *src_domain_name = token + 1;
+    token = strchr(*src_domain_name, ',');
+    if (token == NULL)
+        goto bad_c_param;
+    *token = 0;
+    *src_domain_id = parse_int(token + 1, "source domain ID");
+    return;
 bad_c_param:
     fprintf(stderr, "Invalid -c parameter (should be: \"-c request_id,src_domain_name,src_domain_id\")\n");
     exit(1);
@@ -565,7 +569,7 @@ int main(int argc, char **argv)
                 replace_chars_stderr = 1;
                 break;
             case 'w':
-                connection_timeout = atoi(optarg);
+                connection_timeout = parse_int(optarg, "connection timeout");
                 break;
             case 'W':
                 wait_connection_end = 1;
