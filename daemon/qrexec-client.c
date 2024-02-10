@@ -174,10 +174,8 @@ static int connect_unix_socket(const char *domname)
     int s, len, res;
     struct sockaddr_un remote;
 
-    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        PERROR("socket");
-        return -1;
-    }
+    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+        err(1, "socket");
 
     remote.sun_family = AF_UNIX;
     res = snprintf(remote.sun_path, sizeof remote.sun_path,
@@ -188,10 +186,8 @@ static int connect_unix_socket(const char *domname)
         errx(1, "%s/qrexec.%s is too long for AF_UNIX socket path",
              socket_dir, domname);
     len = (size_t)res + 1 + offsetof(struct sockaddr_un, sun_path);
-    if (connect(s, (struct sockaddr *) &remote, len) == -1) {
-        PERROR("connect");
-        exit(1);
-    }
+    if (connect(s, (struct sockaddr *) &remote, len) == -1)
+        err(1, "connect %s", remote.sun_path);
     if (handle_daemon_handshake(s) < 0)
         exit(1);
     return s;
