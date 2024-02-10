@@ -846,7 +846,9 @@ static void handle_trigger_io(void)
     if (command[command_len-1] != '\0')
         goto error;
 
-    snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
+    int res = snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
+    if (res < 0 || res >= (int)sizeof(params.request_id))
+        abort();
     if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) != sizeof(hdr))
         handle_vchan_error("write hdr");
     if (libvchan_send(ctrl_vchan, &params, sizeof(params)) != sizeof(params))

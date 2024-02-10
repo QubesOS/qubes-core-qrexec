@@ -171,7 +171,7 @@ static int handle_daemon_handshake(int fd)
 
 static int connect_unix_socket(const char *domname)
 {
-    int s, len;
+    int s, len, res;
     struct sockaddr_un remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -180,8 +180,13 @@ static int connect_unix_socket(const char *domname)
     }
 
     remote.sun_family = AF_UNIX;
-    snprintf(remote.sun_path, sizeof remote.sun_path,
-             "%s/qrexec.%s", socket_dir, domname);
+    res = snprintf(remote.sun_path, sizeof remote.sun_path,
+                   "%s/qrexec.%s", socket_dir, domname);
+    if (res < 0)
+        err(1, "snprintf");
+    if (res >= (int)sizeof(remote.sun_path))
+        errx(1, "%s/qrexec.%s is too long for AF_UNIX socket path",
+             socket_dir, domname);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
     if (connect(s, (struct sockaddr *) &remote, len) == -1) {
         PERROR("connect");
