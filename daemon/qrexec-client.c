@@ -39,6 +39,7 @@
 #include <time.h>
 
 #include "libqrexec-utils.h"
+#include "qrexec-daemon-common.h"
 
 // whether qrexec-client should replace problematic bytes with _ before printing the output
 static bool replace_chars_stdout = false;
@@ -57,8 +58,6 @@ static pid_t local_pid = 0;
 static bool is_service = false;
 
 static volatile sig_atomic_t sigchld = 0;
-
-static const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
 
 extern char **environ;
 
@@ -126,75 +125,6 @@ static int handle_agent_handshake(libvchan_t *vchan, bool remote_send_first)
         who++;
     }
     return data_protocol_version;
-}
-
-static int handle_daemon_handshake(int fd)
-{
-    struct msg_header hdr;
-    struct peer_info info;
-
-    /* daemon send MSG_HELLO first */
-    if (!read_all(fd, &hdr, sizeof(hdr))) {
-        PERROR("daemon handshake");
-        return -1;
-    }
-    if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-        LOG(ERROR, "Invalid daemon MSG_HELLO");
-        return -1;
-    }
-    if (!read_all(fd, &info, sizeof(info))) {
-        PERROR("daemon handshake");
-        return -1;
-    }
-
-    if (info.version != QREXEC_PROTOCOL_VERSION) {
-        LOG(ERROR, "Incompatible daemon protocol version "
-            "(daemon %d, client %d)",
-            info.version, QREXEC_PROTOCOL_VERSION);
-        return -1;
-    }
-
-    hdr.type = MSG_HELLO;
-    hdr.len = sizeof(info);
-    info.version = QREXEC_PROTOCOL_VERSION;
-
-    if (!write_all(fd, &hdr, sizeof(hdr))) {
-        LOG(ERROR, "Failed to send MSG_HELLO hdr to daemon");
-        return -1;
-    }
-    if (!write_all(fd, &info, sizeof(info))) {
-        LOG(ERROR, "Failed to send MSG_HELLO to daemon");
-        return -1;
-    }
-    return 0;
-}
-
-static int connect_unix_socket(const char *domname)
-{
-    int s, len, res;
-    struct sockaddr_un remote;
-
-    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        PERROR("socket");
-        return -1;
-    }
-
-    remote.sun_family = AF_UNIX;
-    res = snprintf(remote.sun_path, sizeof remote.sun_path,
-                   "%s/qrexec.%s", socket_dir, domname);
-    if (res < 0)
-        err(1, "snprintf");
-    if (res >= (int)sizeof(remote.sun_path))
-        errx(1, "%s/qrexec.%s is too long for AF_UNIX socket path",
-             socket_dir, domname);
-    len = (size_t)res + 1 + offsetof(struct sockaddr_un, sun_path);
-    if (connect(s, (struct sockaddr *) &remote, len) == -1) {
-        PERROR("connect");
-        exit(1);
-    }
-    if (handle_daemon_handshake(s) < 0)
-        exit(1);
-    return s;
 }
 
 static void sigchld_handler(int x __attribute__((__unused__)))
@@ -312,66 +242,6 @@ static _Noreturn void handle_failed_exec(libvchan_t *data_vchan)
     }
     exit(exit_code);
 }
-
-/* ask the daemon to allocate vchan port */
-static void negotiate_connection_params(int s, int other_domid, unsigned type,
-        void *cmdline_param, int cmdline_size,
-        int *data_domain, int *data_port)
-{
-    struct msg_header hdr;
-    struct exec_params params;
-    hdr.type = type;
-    hdr.len = sizeof(params) + cmdline_size;
-    params.connect_domain = other_domid;
-    params.connect_port = 0;
-    if (!write_all(s, &hdr, sizeof(hdr))
-            || !write_all(s, &params, sizeof(params))
-            || !write_all(s, cmdline_param, cmdline_size)) {
-        PERROR("write daemon");
-        exit(1);
-    }
-    /* the daemon will respond with the same message with connect_port filled
-     * and empty cmdline */
-    if (!read_all(s, &hdr, sizeof(hdr))) {
-        PERROR("read daemon");
-        exit(1);
-    }
-    assert(hdr.type == type);
-    if (hdr.len != sizeof(params)) {
-        LOG(ERROR, "Invalid response for 0x%x", type);
-        exit(1);
-    }
-    if (!read_all(s, &params, sizeof(params))) {
-        PERROR("read daemon");
-        exit(1);
-    }
-    *data_port = params.connect_port;
-    *data_domain = params.connect_domain;
-}
-
-static void send_service_connect(int s, char *conn_ident,
-        int connect_domain, int connect_port)
-{
-    struct msg_header hdr;
-    struct exec_params exec_params;
-    struct service_params srv_params;
-
-    hdr.type = MSG_SERVICE_CONNECT;
-    hdr.len = sizeof(exec_params) + sizeof(srv_params);
-
-    exec_params.connect_domain = connect_domain;
-    exec_params.connect_port = connect_port;
-    strncpy(srv_params.ident, conn_ident, sizeof(srv_params.ident) - 1);
-    srv_params.ident[sizeof(srv_params.ident) - 1] = '\0';
-
-    if (!write_all(s, &hdr, sizeof(hdr))
-            || !write_all(s, &exec_params, sizeof(exec_params))
-            || !write_all(s, &srv_params, sizeof(srv_params))) {
-        PERROR("write daemon");
-        exit(1);
-    }
-}
-
 static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buffer *stdin_buf)
 {
     struct process_io_request req = { 0 };
@@ -560,7 +430,7 @@ int main(int argc, char **argv)
     int data_domain;
     int s;
     bool just_exec = false;
-    int wait_connection_end = 0;
+    int wait_connection_end = -1;
     char *local_cmdline = NULL;
     char *remote_cmdline = NULL;
     char *request_id = NULL;
@@ -570,6 +440,7 @@ int main(int argc, char **argv)
     struct service_params svc_params;
     int prepare_ret;
     bool kill = false;
+    int rc = 126;
 
     if (argc < 3) {
         // certainly too few arguments
@@ -636,13 +507,6 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
-    char src_domain_id_str[11];
-    {
-        int snprintf_res = snprintf(src_domain_id_str, sizeof(src_domain_id_str), "%d", src_domain_id);
-        if (snprintf_res < 0 || snprintf_res >= (int)sizeof(src_domain_id_str))
-            err(1, "snprintf()");
-    }
-
     if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
         if (request_id == NULL) {
             fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
@@ -655,14 +519,19 @@ int main(int argc, char **argv)
             abort();
         }
         set_remote_domain(src_domain_name);
-        s = connect_unix_socket(src_domain_id_str);
-        negotiate_connection_params(s,
+        s = connect_unix_socket_by_id(src_domain_id);
+        if (s < 0) {
+            goto cleanup;
+        }
+        if (!negotiate_connection_params(s,
                 0, /* dom0 */
                 MSG_SERVICE_CONNECT,
                 (void*)&svc_params,
                 sizeof(svc_params),
                 &data_domain,
-                &data_port);
+                &data_port)) {
+            goto cleanup;
+        }
 
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
@@ -684,30 +553,39 @@ int main(int argc, char **argv)
         handshake_and_go(data_vchan, &stdin_buffer, true, prepare_ret);
     } else {
         s = connect_unix_socket(domname);
-        negotiate_connection_params(s,
+        if (!negotiate_connection_params(s,
                 src_domain_id,
                 just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE,
                 remote_cmdline,
                 compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
-                &data_port);
-        if (wait_connection_end && request_id)
-            /* save socket fd, 's' will be reused for the other qrexec-daemon
-             * connection */
-            wait_connection_end = s;
-        else
-            close(s);
+                &data_port)) {
+            goto cleanup;
+        }
         if (request_id) {
-            s = connect_unix_socket(src_domain_id_str);
-            send_service_connect(s, request_id, data_domain, data_port);
+            if (wait_connection_end != -1) {
+                /* save socket fd, 's' will be reused for the other qrexec-daemon
+                 * connection */
+                wait_connection_end = s;
+            } else {
+                close(s);
+            }
+            s = connect_unix_socket_by_id(src_domain_id);
+            if (s == -1) {
+                goto cleanup;
+            }
+            if (!send_service_connect(s, request_id, data_domain, data_port)) {
+                goto cleanup;
+            }
             close(s);
-            if (wait_connection_end) {
+            if (wait_connection_end != -1) {
                 /* wait for EOF */
                 struct pollfd fds[1] = {
                     { .fd = wait_connection_end, .events = POLLIN | POLLHUP, .revents = 0 },
                 };
                 poll(fds, 1, -1);
             }
+            rc = 0;
         } else {
             set_remote_domain(domname);
             struct buffer stdin_buffer;
@@ -724,12 +602,13 @@ int main(int argc, char **argv)
         }
     }
 
+cleanup:
     if (kill && domname) {
         size_t l;
         qubesd_call(domname, "admin.vm.Kill", "", &l);
     }
 
-    return 0;
+    return rc;
 }
 
 // vim:ts=4:sw=4:et:

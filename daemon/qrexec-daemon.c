@@ -36,6 +36,7 @@
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 #include "../libqrexec/ioall.h"
+#include "qrexec-daemon-common.h"
 
 #define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
 #define QREXEC_SOCKET_PATH "/run/qubes/policy.sock"
@@ -44,6 +45,12 @@
 void __gcov_dump(void);
 void __gcov_reset(void);
 #endif
+static _Noreturn void daemon__exit(int status) {
+#ifdef COVERAGE
+    __gcov_dump();
+#endif
+    _exit(status);
+}
 
 enum client_state {
     CLIENT_INVALID = 0,	// table slot not used
@@ -105,7 +112,6 @@ static const char default_user_keyword[] = "DEFAULT:";
 static int opt_quiet = 0;
 static int opt_direct = 0;
 
-static const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
 static const char *policy_program = QREXEC_POLICY_PROGRAM;
 
 #ifdef __GNUC__
@@ -913,7 +919,7 @@ static void send_request_to_daemon(
             service_name);
     if (command_size < 0) {
         PERROR("failed to construct request");
-        _exit(126);
+        daemon__exit(126);
     }
 
     for (int i = 0; i < command_size; i += bytes_sent) {
@@ -923,10 +929,18 @@ static void send_request_to_daemon(
         if (bytes_sent < 0) {
             assert(bytes_sent == -1);
             PERROR("send to socket failed");
-            _exit(126);
+            daemon__exit(126);
         }
     }
     free(command);
+}
+
+static _Noreturn void null_exit(void)
+{
+#ifdef COVERAGE
+    __gcov_dump();
+#endif
+    _exit(126);
 }
 
 /*
@@ -951,7 +965,7 @@ static enum policy_response connect_daemon_socket(
     int daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (daemon_socket < 0) {
          PERROR("socket creation failed");
-         _exit(126);
+         daemon__exit(126);
     }
 
     int connect_result = connect(daemon_socket,
@@ -982,7 +996,7 @@ static enum policy_response connect_daemon_socket(
     int fds[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds)) {
         PERROR("socketpair()");
-        _exit(126);
+        daemon__exit(126);
     }
     daemon_socket = fds[0];
 
@@ -990,13 +1004,13 @@ static enum policy_response connect_daemon_socket(
     switch (pid) {
         case -1:
             LOG(ERROR, "Could not fork!");
-            _exit(126);
+            daemon__exit(126);
         case 0:
             if (close(fds[0]))
-                abort();
+                _exit(126);
             if (dup2(fds[1], 0) != 0 || dup2(fds[1], 1) != 1) {
                 PERROR("dup2()");
-                _exit(126);
+                daemon__exit(126);
             }
             if (close(fds[1]))
                 abort();
@@ -1015,7 +1029,7 @@ static enum policy_response connect_daemon_socket(
             } else {
                 PERROR("snprintf");
             }
-            _exit(126);
+            daemon__exit(126);
         default:
             if (close(fds[1]))
                 abort();
@@ -1026,12 +1040,12 @@ static enum policy_response connect_daemon_socket(
             do {
                 if (waitpid(pid, &status, 0) != pid) {
                     PERROR("waitpid");
-                    _exit(126);
+                    daemon__exit(126);
                 }
             } while (!WIFEXITED(status));
             if (WEXITSTATUS(status) != 0) {
                 LOG(ERROR, "qrexec-policy-exec failed");
-                _exit(126);
+                daemon__exit(126);
             }
             // This leaks 'result', but as the code execs later anyway this isn't a problem.
             // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
@@ -1040,36 +1054,23 @@ static enum policy_response connect_daemon_socket(
     }
 }
 
-static void handle_execute_service(
+static size_t compute_service_length(const char *const remote_cmdline) {
+    const size_t service_length = strlen(remote_cmdline) + 1;
+    if (service_length < 2 || service_length > MAX_QREXEC_CMD_LEN) {
+        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
+        errx(1, "Bad command: command line too long or empty: length %zu\n", service_length);
+    }
+    return service_length;
+}
+
+
+_Noreturn static void handle_execute_service_child(
         const int remote_domain_id,
         const char *remote_domain_name,
         const char *target_domain,
         const char *service_name,
-        const struct service_params *request_id)
-{
+        const struct service_params *request_id) {
     int i;
-    int policy_pending_slot;
-    pid_t pid;
-
-    policy_pending_slot = find_policy_pending_slot();
-    if (policy_pending_slot < 0) {
-        LOG(ERROR, "Service request denied, too many pending requests");
-        send_service_refused(vchan, request_id);
-        return;
-    }
-
-    switch (pid=fork()) {
-        case -1:
-            PERROR("fork");
-            exit(1);
-        case 0:
-            break;
-        default:
-            policy_pending[policy_pending_slot].pid = pid;
-            policy_pending[policy_pending_slot].params = *request_id;
-            policy_pending[policy_pending_slot].response_sent = RESPONSE_PENDING;
-            return;
-    }
 
     for (i = 3; i < MAX_FDS; i++)
         close(i);
@@ -1081,7 +1082,7 @@ static void handle_execute_service(
                               &user, &target, &requested_target, &autostart);
 
     if (policy_response != RESPONSE_ALLOW)
-        _exit(126);
+        daemon__exit(126);
 
     /* Replace the target domain with the version normalized by the policy engine */
     target_domain = requested_target;
@@ -1113,14 +1114,31 @@ static void handle_execute_service(
                      remote_domain_name,
                      type,
                      target_domain) <= 0)
-            _exit(126);
+            daemon__exit(126);
+        char *cid;
+        if (asprintf(&cid, "%s,%s,%d", request_id->ident, remote_domain_name, remote_domain_id) <= 0)
+            daemon__exit(126);
+
+        const char *to_exec[] = {
+            "/usr/bin/qrexec-client",
+            "-Ed",
+            target,
+            "-c",
+            cid,
+            "--",
+            cmd,
+            NULL,
+        };
+        execv(to_exec[0], (char **)to_exec);
+        LOG(ERROR, "execve() failed: %m");
+        daemon__exit(126);
     } else {
         char *buf;
         if (strncmp("@dispvm:", target, sizeof("@dispvm:") - 1) == 0) {
             disposable = true;
             buf = qubesd_call(target + 8, "admin.vm.CreateDisposable", "", &resp_len);
             if (!buf) // error already printed by qubesd_call
-                _exit(126);
+                daemon__exit(126);
             if (memcmp(buf, "0", 2) == 0) {
                 /* we exec later so memory leaks do not matter */
                 target = buf + 2;
@@ -1130,7 +1148,7 @@ static void handle_execute_service(
                 } else {
                     LOG(ERROR, "invalid response to admin.vm.CreateDisposable");
                 }
-                _exit(126);
+                daemon__exit(126);
             }
         }
         if (asprintf(&cmd, "%s:QUBESRPC %s%s %s",
@@ -1138,11 +1156,11 @@ static void handle_execute_service(
                     service_name,
                     trailer,
                     remote_domain_name) <= 0)
-            _exit(126);
+            daemon__exit(126);
         if (autostart) {
             buf = qubesd_call(target, "admin.vm.Start", "", &resp_len);
             if (!buf) // error already printed by qubesd_call
-                _exit(126);
+                daemon__exit(126);
             if (!((memcmp(buf, "0", 2) == 0) ||
                   (resp_len >= 24 && memcmp(buf, "2\0QubesVMNotHaltedError", 24) == 0))) {
                 if (memcmp(buf, "2", 2) == 0) {
@@ -1150,28 +1168,79 @@ static void handle_execute_service(
                 } else {
                     LOG(ERROR, "invalid response to admin.vm.Start");
                 }
-                _exit(126);
+                daemon__exit(126);
             }
             free(buf);
         }
-    }
-    char *cid;
-    if (asprintf(&cid, "%s,%s,%d", request_id->ident, remote_domain_name, remote_domain_id) <= 0)
-        _exit(126);
+        int s = connect_unix_socket(target);
+        int data_domain;
+        int data_port;
+        int rc = 126;
+        if (!negotiate_connection_params(s,
+                remote_domain_id,
+                MSG_EXEC_CMDLINE,
+                cmd,
+                compute_service_length(cmd),
+                &data_domain,
+                &data_port))
+            daemon__exit(126);
+        int wait_connection_end = -1;
+        if (disposable) {
+            wait_connection_end = s;
+        } else {
+            close(s);
+        }
 
-    const char *to_exec[] = {
-        "/usr/bin/qrexec-client",
-        disposable ? "-EWkd" : "-Ed",
-        target,
-        "-c",
-        cid,
-        "--",
-        cmd,
-        NULL,
-    };
-    execv(to_exec[0], (char **)to_exec);
-    LOG(ERROR, "execve() failed: %m");
-    _exit(126);
+        s = connect_unix_socket_by_id((unsigned)remote_domain_id);
+        if (send_service_connect(s, request_id->ident, data_domain, data_port))
+            rc = 0;
+        close(s);
+        if (wait_connection_end != -1) {
+            /* wait for EOF */
+            struct pollfd fds[1] = {
+                { .fd = wait_connection_end, .events = POLLIN | POLLHUP, .revents = 0 },
+            };
+            poll(fds, 1, -1);
+            size_t l;
+            qubesd_call(target, "admin.vm.Kill", "", &l);
+        }
+        daemon__exit(rc);
+    }
+}
+
+static void handle_execute_service(
+        const int remote_domain_id,
+        const char *remote_domain_name,
+        const char *target_domain,
+        const char *service_name,
+        const struct service_params *request_id)
+{
+    int policy_pending_slot;
+    pid_t pid;
+
+    policy_pending_slot = find_policy_pending_slot();
+    if (policy_pending_slot < 0) {
+        LOG(ERROR, "Service request denied, too many pending requests");
+        send_service_refused(vchan, request_id);
+        return;
+    }
+
+    switch (pid=fork()) {
+        case -1:
+            PERROR("fork");
+            exit(1);
+        case 0:
+            if (atexit(null_exit))
+                _exit(126);
+            handle_execute_service_child(remote_domain_id, remote_domain_name,
+                                         target_domain, service_name, request_id);
+            abort();
+        default:
+            policy_pending[policy_pending_slot].pid = pid;
+            policy_pending[policy_pending_slot].params = *request_id;
+            policy_pending[policy_pending_slot].response_sent = RESPONSE_PENDING;
+            return;
+    }
 }
 
 
