@@ -541,7 +541,6 @@ int main(int argc, char **argv)
     libvchan_t *data_vchan = NULL;
     int data_port;
     int data_domain;
-    int msg_type;
     int s;
     bool just_exec = false;
     int wait_connection_end = 0;
@@ -633,7 +632,6 @@ int main(int argc, char **argv)
             fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
             usage(argv[0]);
         }
-        msg_type = MSG_SERVICE_CONNECT;
         strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
         svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
         if (src_domain_name == NULL) {
@@ -644,7 +642,7 @@ int main(int argc, char **argv)
         s = connect_unix_socket(src_domain_id_str);
         negotiate_connection_params(s,
                 0, /* dom0 */
-                msg_type,
+                MSG_SERVICE_CONNECT,
                 (void*)&svc_params,
                 sizeof(svc_params),
                 &data_domain,
@@ -678,11 +676,10 @@ int main(int argc, char **argv)
             handle_failed_exec(data_vchan);
         select_loop(data_vchan, data_protocol_version, &stdin_buffer);
     } else {
-        msg_type = just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE;
         s = connect_unix_socket(domname);
         negotiate_connection_params(s,
                 src_domain_id,
-                msg_type,
+                just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE,
                 remote_cmdline,
                 compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
