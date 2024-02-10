@@ -493,9 +493,12 @@ class TestClient(unittest.TestCase):
             self.client.communicate()
             self.client = None
 
-    def connect_daemon(self, domain_name):
+    def connect_daemon(self, domain_id, domain_name):
+        assert isinstance(domain_id, int), "domain ID is first"
+        assert isinstance(domain_name, str), "domain name is second"
         daemon = qrexec.socket_server(
-            os.path.join(self.tempdir, "qrexec.{}".format(domain_name))
+            os.path.join(self.tempdir, "qrexec.{}".format(domain_id)),
+            os.path.join(self.tempdir, "qrexec.{}".format(domain_name)),
         )
         self.addCleanup(daemon.close)
         return daemon
@@ -516,7 +519,7 @@ class TestClient(unittest.TestCase):
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain_name)
+        target_daemon = self.connect_daemon(target_domain, target_domain_name)
         self.start_client(["-d", target_domain_name, cmd])
         target_daemon.accept()
         target_daemon.handshake()
@@ -552,7 +555,7 @@ class TestClient(unittest.TestCase):
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain_name)
+        target_daemon = self.connect_daemon(target_domain, target_domain_name)
         self.start_client(["-d", target_domain_name, "-l", local_cmd, cmd])
         target_daemon.accept()
         target_daemon.handshake()
@@ -599,8 +602,8 @@ class TestClient(unittest.TestCase):
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain_name)
-        src_daemon = self.connect_daemon(src_domain_name)
+        target_daemon = self.connect_daemon(target_domain, target_domain_name)
+        src_daemon = self.connect_daemon(src_domain, src_domain_name)
 
         self.start_client(
             [
@@ -649,7 +652,7 @@ class TestClient(unittest.TestCase):
         src_domain = 43
         src_port = 42
 
-        src_daemon = self.connect_daemon(src_domain_name)
+        src_daemon = self.connect_daemon(src_domain, src_domain_name)
         source = self.connect_source(src_domain, src_port)
 
         self.start_client(
