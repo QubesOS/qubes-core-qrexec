@@ -79,7 +79,7 @@ static void set_remote_domain(const char *src_domain_name) {
 }
 
 /* initialize data_protocol_version */
-static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
+static int handle_agent_handshake(libvchan_t *vchan, bool remote_send_first)
 {
     struct msg_header hdr;
     struct peer_info info;
@@ -534,6 +534,23 @@ static size_t compute_service_length(const char *const remote_cmdline, const cha
     return service_length;
 }
 
+static void handshake_and_go(libvchan_t *data_vchan,
+                             struct buffer *stdin_buffer,
+                             bool remote_send_first,
+                             int prepare_ret)
+{
+    if (data_vchan == NULL || !libvchan_is_open(data_vchan)) {
+        LOG(ERROR, "Failed to open data vchan connection");
+        exit(1);
+    }
+    int data_protocol_version = handle_agent_handshake(data_vchan, remote_send_first);
+    if (data_protocol_version < 0)
+        exit(1);
+    if (prepare_ret < 0)
+        handle_failed_exec(data_vchan);
+    select_loop(data_vchan, data_protocol_version, stdin_buffer);
+}
+
 int main(int argc, char **argv)
 {
     int opt;
@@ -551,7 +568,6 @@ int main(int argc, char **argv)
     int src_domain_id = 0; /* if not -c given, the process is run in dom0 */
     int connection_timeout = 5;
     struct service_params svc_params;
-    int data_protocol_version;
     int prepare_ret;
     bool kill = false;
 
@@ -665,16 +681,7 @@ int main(int argc, char **argv)
         data_vchan = libvchan_client_init(data_domain, data_port);
         alarm(0);
         signal(SIGALRM, old_handler);
-        if (!data_vchan || !libvchan_is_open(data_vchan)) {
-            LOG(ERROR, "Failed to open data vchan connection");
-            exit(1);
-        }
-        data_protocol_version = handle_agent_handshake(data_vchan, true);
-        if (data_protocol_version < 0)
-            exit(1);
-        if (prepare_ret < 0)
-            handle_failed_exec(data_vchan);
-        select_loop(data_vchan, data_protocol_version, &stdin_buffer);
+        handshake_and_go(data_vchan, &stdin_buffer, true, prepare_ret);
     } else {
         s = connect_unix_socket(domname);
         negotiate_connection_params(s,
@@ -713,16 +720,7 @@ int main(int argc, char **argv)
                 exit(1);
             }
             wait_for_vchan_client_with_timeout(data_vchan, connection_timeout);
-            if (!libvchan_is_open(data_vchan)) {
-                LOG(ERROR, "Failed to open data vchan connection");
-                exit(1);
-            }
-            data_protocol_version = handle_agent_handshake(data_vchan, 0);
-            if (data_protocol_version < 0)
-                exit(1);
-            if (prepare_ret < 0)
-                handle_failed_exec(data_vchan);
-            select_loop(data_vchan, data_protocol_version, &stdin_buffer);
+            handshake_and_go(data_vchan, &stdin_buffer, false, prepare_ret);
         }
     }
 
