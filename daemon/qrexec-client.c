@@ -693,10 +693,6 @@ int main(int argc, char **argv)
             wait_connection_end = s;
         else
             close(s);
-        set_remote_domain(domname);
-        struct buffer stdin_buffer;
-        buffer_init(&stdin_buffer);
-        prepare_ret = prepare_local_fds(local_cmdline, &stdin_buffer);
         if (request_id) {
             s = connect_unix_socket(src_domain_id_str);
             send_service_connect(s, request_id, data_domain, data_port);
@@ -709,6 +705,10 @@ int main(int argc, char **argv)
                 poll(fds, 1, -1);
             }
         } else {
+            set_remote_domain(domname);
+            struct buffer stdin_buffer;
+            buffer_init(&stdin_buffer);
+            prepare_ret = prepare_local_fds(local_cmdline, &stdin_buffer);
             data_vchan = libvchan_server_init(data_domain, data_port,
                     VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
             if (!data_vchan) {
