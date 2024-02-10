@@ -187,7 +187,7 @@ static int connect_unix_socket(const char *domname)
     if (res >= (int)sizeof(remote.sun_path))
         errx(1, "%s/qrexec.%s is too long for AF_UNIX socket path",
              socket_dir, domname);
-    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+    len = (size_t)res + 1 + offsetof(struct sockaddr_un, sun_path);
     if (connect(s, (struct sockaddr *) &remote, len) == -1) {
         PERROR("connect");
         exit(1);
