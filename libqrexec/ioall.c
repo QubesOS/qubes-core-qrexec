@@ -219,7 +219,7 @@ int copy_fd_all(int fdout, int fdin)
 
 bool qubes_sendmsg_all(struct msghdr *const msg, int const sock)
 {
-    while (msg->msg_iovlen) {
+    while (msg->msg_iovlen > 0) {
         ssize_t const res = sendmsg(sock, msg, MSG_NOSIGNAL);
         if (res < 0) {
             int const i = errno;
@@ -232,17 +232,18 @@ bool qubes_sendmsg_all(struct msghdr *const msg, int const sock)
         }
 
         size_t unsigned_res = (size_t)res;
-        while (unsigned_res) {
-            assert(msg->msg_iovlen > 0);
+        for (;;) {
             struct iovec *const v = msg->msg_iov;
             if (unsigned_res < v->iov_len) {
                 v->iov_base += unsigned_res;
                 v->iov_len -= unsigned_res;
                 break;
             }
-            unsigned_res -= msg->msg_iov[0].iov_len;
+            unsigned_res -= v->iov_len;
             msg->msg_iovlen--;
             msg->msg_iov++;
+            if (msg->msg_iovlen == 0)
+                return true;
         }
     }
     return true;
