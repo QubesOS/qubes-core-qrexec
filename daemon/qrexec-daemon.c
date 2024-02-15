@@ -156,12 +156,12 @@ static void unlink_qrexec_socket(void)
     char link_to_socket_name[strlen(remote_domain_name) + sizeof(socket_address)];
 
     int v = snprintf(socket_address, sizeof(socket_address),
-                     "%s/qrexec.%d", socket_dir, remote_domain_id);
-    if (v < (int)sizeof("/qrexec.1") || v >= (int)sizeof(socket_address))
+                     "qrexec.%d", remote_domain_id);
+    if (v < (int)sizeof("qrexec.1") - 1 || v >= (int)sizeof(socket_address))
         abort();
     v = snprintf(link_to_socket_name, sizeof(link_to_socket_name),
-                 "%s/qrexec.%s", socket_dir, remote_domain_name);
-    if (v < (int)sizeof("/qrexec.") || v >= (int)sizeof(link_to_socket_name))
+                 "qrexec.%s", remote_domain_name);
+    if (v < (int)sizeof("qrexec.") - 1 || v >= (int)sizeof(link_to_socket_name))
         abort();
     v = unlink(socket_address);
     if (v != 0 && !(v == -1 && errno == ENOENT))
@@ -185,20 +185,19 @@ static int create_qrexec_socket(int domid, const char *domname)
     int res;
 
     if ((unsigned)snprintf(socket_address, sizeof(socket_address),
-                           "%s/qrexec.%d", socket_dir, domid) >= sizeof(socket_address))
+                           "qrexec.%d", domid) >= sizeof(socket_address))
         errx(1, "socket name too long");
     if ((unsigned)snprintf(link_to_socket_name, sizeof link_to_socket_name,
-                           "%s/qrexec.%s", socket_dir, domname) >= sizeof link_to_socket_name)
+                           "qrexec.%s", domname) >= sizeof link_to_socket_name)
         errx(1, "socket link name too long");
     res = unlink(link_to_socket_name);
     if (res != 0 && !(res == -1 && errno == ENOENT))
         err(1, "unlink(%s)", link_to_socket_name);
-    const char *symlink_target = socket_address + strlen(socket_dir) + 1;
 
     /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
     umask(0);
-    if (symlink(symlink_target, link_to_socket_name)) {
-        PERROR("symlink(%s,%s)", symlink_target, link_to_socket_name);
+    if (symlink(socket_address, link_to_socket_name)) {
+        PERROR("symlink(%s,%s)", socket_address, link_to_socket_name);
     }
     int fd = get_server_socket(socket_address);
     umask(0077);
@@ -339,9 +338,14 @@ static void init(int xid)
 
     close(0);
 
+    if (chdir(socket_dir) < 0) {
+        PERROR("chdir %s failed", socket_dir);
+        exit(1);
+    }
+
     if (!opt_direct) {
         if ((unsigned)snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
-                               "/var/log/qubes/qrexec.%s.log", remote_domain_name) >=
+                               "qrexec.%s.log", remote_domain_name) >=
                 sizeof(qrexec_error_log_name))
             errx(1, "remote domain name too long");
         umask(0007);        // make the log readable by the "qubes" group
@@ -357,10 +361,6 @@ static void init(int xid)
         dup2(logfd, 1);
         dup2(logfd, 2);
 
-        if (chdir("/var/run/qubes") < 0) {
-            PERROR("chdir /var/run/qubes failed");
-            exit(1);
-        }
         if (setsid() < 0) {
             PERROR("setsid()");
             exit(1);
