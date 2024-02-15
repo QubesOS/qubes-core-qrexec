@@ -193,11 +193,12 @@ static int create_qrexec_socket(int domid, const char *domname)
     res = unlink(link_to_socket_name);
     if (res != 0 && !(res == -1 && errno == ENOENT))
         err(1, "unlink(%s)", link_to_socket_name);
+    const char *symlink_target = socket_address + strlen(socket_dir) + 1;
 
     /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
     umask(0);
-    if (symlink(socket_address, link_to_socket_name)) {
-        PERROR("symlink(%s,%s)", socket_address, link_to_socket_name);
+    if (symlink(symlink_target, link_to_socket_name)) {
+        PERROR("symlink(%s,%s)", symlink_target, link_to_socket_name);
     }
     int fd = get_server_socket(socket_address);
     umask(0077);
