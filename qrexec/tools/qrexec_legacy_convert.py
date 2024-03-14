@@ -288,7 +288,7 @@ def main(args=None):
                                   str(POLICYPATH), '--full-output'],
                                  output=current_state_string)
         current_state = set(current_state_string.getvalue().split('\n'))
-    except Exception: #pylint: disable-broad-except
+    except Exception: # pylint: disable=broad-except
         current_state = 'ERROR'
 
     if initial_state != current_state:
