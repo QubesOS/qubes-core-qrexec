@@ -287,10 +287,10 @@ def get_result(args: Optional[List[str]]) -> Union[str, int]:
             intended_target = intended_target[1:]
         cmd += f" {target_type} {intended_target}"
     else:
+        target = result["target_uuid"]
         cmd = f"{result['user'] or 'DEFAULT'}:" + cmd
         if dispvm:
-            target = (utils.qubesd_call(target[8:],
-                                        "admin.vm.CreateDisposable")
+            target = (utils.qubesd_call(target, "admin.vm.CreateDisposable", payload=b"uuid")
                            .decode("ascii", "strict"))
         utils.qubesd_call(target, "admin.vm.Start")
     return subprocess.call((

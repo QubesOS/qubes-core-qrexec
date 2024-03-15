@@ -44,6 +44,7 @@ class TestDaemon(unittest.TestCase):
     daemon = None
     domain = 42
     domain_name = "domain_name"
+    domain_uuid = "f5086f02-e322-4876-a670-14973aed21b5"
 
     # Stub qrexec-policy-exec program.
     # Strictly speaking, the program should also run qrexec-client in case the
@@ -77,6 +78,7 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         env["VCHAN_SOCKET_DIR"] = self.tempdir
         cmd = [
             os.path.join(ROOT_PATH, "daemon", "qrexec-daemon"),
+            "--uuid=" + self.domain_uuid,
             "--socket-dir=" + self.tempdir,
             "--policy-program=" + policy_program_path,
             "--direct",
@@ -493,9 +495,16 @@ class TestClient(unittest.TestCase):
             self.client.communicate()
             self.client = None
 
-    def connect_daemon(self, domain_name):
+    def connect_daemon(self, domain_id, domain_name, domain_uuid = ""):
+        assert isinstance(domain_id, int), "domain ID is first"
+        assert isinstance(domain_name, str), "domain name is second"
+        assert isinstance(domain_uuid, str), "domain UUID is third"
         daemon = qrexec.socket_server(
-            os.path.join(self.tempdir, "qrexec.{}".format(domain_name))
+            os.path.join(self.tempdir, "qrexec.{}".format(domain_id)),
+            (
+                os.path.join(self.tempdir, "qrexec.{}".format(domain_name)),
+                os.path.join(self.tempdir, "qrexec.uuid:{}".format(domain_uuid)),
+            ) if domain_uuid else (os.path.join(self.tempdir, "qrexec.{}".format(domain_name)),),
         )
         self.addCleanup(daemon.close)
         return daemon
@@ -513,10 +522,11 @@ class TestClient(unittest.TestCase):
     def test_run_vm_command_from_dom0(self):
         cmd = "user:command"
         target_domain_name = "target_domain"
+        target_domain_uuid = "d95e1147-2d82-4595-90bb-5a7500cc3196"
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain_name)
+        target_daemon = self.connect_daemon(target_domain, target_domain_name, target_domain_uuid)
         self.start_client(["-d", target_domain_name, cmd])
         target_daemon.accept()
         target_daemon.handshake()
@@ -549,11 +559,12 @@ class TestClient(unittest.TestCase):
         cmd = "user:command"
         local_cmd = "while read x; do echo input: $x; done; exit 44"
         target_domain_name = "target_domain"
+        target_domain_uuid = "d95e1147-2d82-4595-90bb-5a7500cc3196"
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain_name)
-        self.start_client(["-d", target_domain_name, "-l", local_cmd, cmd])
+        target_daemon = self.connect_daemon(target_domain, target_domain_name, target_domain_uuid)
+        self.start_client(["-d", "uuid:" + target_domain_uuid, "-l", local_cmd, cmd])
         target_daemon.accept()
         target_daemon.handshake()
 
@@ -599,8 +610,8 @@ class TestClient(unittest.TestCase):
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain_name)
-        src_daemon = self.connect_daemon(src_domain_name)
+        target_daemon = self.connect_daemon(target_domain, target_domain_name)
+        src_daemon = self.connect_daemon(src_domain, src_domain_name)
 
         self.start_client(
             [
@@ -649,7 +660,7 @@ class TestClient(unittest.TestCase):
         src_domain = 43
         src_port = 42
 
-        src_daemon = self.connect_daemon(src_domain_name)
+        src_daemon = self.connect_daemon(src_domain, src_domain_name)
         source = self.connect_source(src_domain, src_port)
 
         self.start_client(

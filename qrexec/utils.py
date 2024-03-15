@@ -115,6 +115,7 @@ class SystemInfoEntry(TypedDict):
     power_state: str
     icon: str
     guivm: Optional[str]
+    uuid: Optional[str]
 
 SystemInfo: 'TypeAlias' = Dict[str, SystemInfoEntry]
 
@@ -136,7 +137,15 @@ def get_system_info() -> FullSystemInfo:
     """
 
     system_info = qubesd_call("dom0", "internal.GetSystemInfo")
-    return cast(SystemInfo, json.loads(system_info.decode("utf-8")))
+    system_info_decoded = cast(FullSystemInfo, json.loads(system_info.decode("utf-8")))
+    inner = system_info_decoded["domains"]
+    for i, j in list(inner.items()):
+        j["name"] = i
+        try:
+            inner["uuid:" + j["uuid"]] = j
+        except KeyError:
+            pass
+    return system_info_decoded
 
 
 def prepare_subprocess_kwds(input: object) -> Dict[str, object]:

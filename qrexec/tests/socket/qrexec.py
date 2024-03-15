@@ -131,13 +131,22 @@ def vchan_server(socket_dir, domain, remote_domain, port):
     return socket_server(vchan_socket_path)
 
 
-def socket_server(socket_path):
+def socket_server(socket_path, socket_path_alt=()):
+    assert isinstance(socket_path_alt, tuple), "did you forget the tuple?"
     try:
         os.unlink(socket_path)
     except FileNotFoundError:
         pass
+    for i in socket_path_alt:
+        assert i[0] == '/', "path not absolute"
+        try:
+            os.unlink(i)
+        except FileNotFoundError:
+            pass
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(socket_path)
+    for i in socket_path_alt:
+        os.symlink(socket_path, i)
     server.listen(1)
     return QrexecServer(server)
 

@@ -38,6 +38,7 @@ SYSTEM_INFO = {
             "default_dispvm": "default-dvm",
             "template_for_dispvms": False,
             "power_state": "Running",
+            "uuid": "00000000-0000-0000-0000-000000000000",
         },
         "test-vm1": {
             "tags": ["tag1", "tag2"],
@@ -45,6 +46,7 @@ SYSTEM_INFO = {
             "default_dispvm": "default-dvm",
             "template_for_dispvms": False,
             "power_state": "Running",
+            "uuid": "c9024a97-9b15-46cc-8341-38d75d5d421b",
         },
         "test-vm2": {
             "tags": ["tag2"],
@@ -52,6 +54,7 @@ SYSTEM_INFO = {
             "default_dispvm": "default-dvm",
             "template_for_dispvms": False,
             "power_state": "Running",
+            "uuid": "b3eb69d0-f9d9-4c3c-ad5c-454500303ea4",
         },
         "test-vm3": {
             "tags": ["tag3"],
@@ -59,6 +62,7 @@ SYSTEM_INFO = {
             "default_dispvm": "default-dvm",
             "template_for_dispvms": True,
             "power_state": "Halted",
+            "uuid": "fa6d56e8-a89d-4106-aa62-22e172a43c8b",
         },
         "default-dvm": {
             "tags": [],
@@ -66,6 +70,7 @@ SYSTEM_INFO = {
             "default_dispvm": "default-dvm",
             "template_for_dispvms": True,
             "power_state": "Halted",
+            "uuid": "f3e538bd-4427-4697-bed7-45ef3270df21",
         },
         "test-invalid-dvm": {
             "tags": ["tag1", "tag2"],
@@ -73,6 +78,7 @@ SYSTEM_INFO = {
             "default_dispvm": "test-vm1",
             "template_for_dispvms": False,
             "power_state": "Halted",
+            "uuid": "c4fa3586-a6b6-4dc4-bdda-c9e7375a12b5",
         },
         "test-no-dvm": {
             "tags": ["tag1", "tag2"],
@@ -80,6 +86,7 @@ SYSTEM_INFO = {
             "default_dispvm": None,
             "template_for_dispvms": False,
             "power_state": "Halted",
+            "uuid": "53a450b9-a454-4416-8adb-46812257ad29",
         },
         "test-template": {
             "tags": ["tag1", "tag2"],
@@ -87,6 +94,7 @@ SYSTEM_INFO = {
             "default_dispvm": "default-dvm",
             "template_for_dispvms": False,
             "power_state": "Halted",
+            "uuid": "a9fe2b04-9fd5-4e95-be20-162433d64de0",
         },
         "test-standalone": {
             "tags": ["tag1", "tag2"],
@@ -94,6 +102,7 @@ SYSTEM_INFO = {
             "default_dispvm": "default-dvm",
             "template_for_dispvms": False,
             "power_state": "Halted",
+            "uuid": "6d7a02b5-532b-467f-b9fb-6596bae03c33",
         },
     },
 }
@@ -110,6 +119,11 @@ class AsyncMock(unittest.mock.MagicMock):
 
 
 class TC_00_VMToken(unittest.TestCase):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        for i, j in SYSTEM_INFO["domains"].items():
+            j["name"] = i
+
     def test_010_Source(self):
         #       with self.assertRaises(exc.PolicySyntaxError):
         #           parser.Source(None)
@@ -120,6 +134,11 @@ class TC_00_VMToken(unittest.TestCase):
         parser.Source("*")
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Source("@default")
+        parser.Source("uuid:d8a249f1-b02b-4944-a9e5-437def2fbe2c")
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source("@uuid:")
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source("@uuid:d8a249f1-b02b-4944-a9e5-437def2fbe2c")
         parser.Source("@type:AppVM")
         parser.Source("@tag:tag1")
         with self.assertRaises(exc.PolicySyntaxError):
@@ -150,6 +169,7 @@ class TC_00_VMToken(unittest.TestCase):
         parser.Target("@dispvm")
         parser.Target("@dispvm:default-dvm")
         parser.Target("@dispvm:@tag:tag3")
+        parser.Target("uuid:d8a249f1-b02b-4944-a9e5-437def2fbe2c")
 
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Target("@invalid")
@@ -163,19 +183,22 @@ class TC_00_VMToken(unittest.TestCase):
             parser.Target("@type:")
 
     def test_021_Target_expand(self):
-        self.assertCountEqual(
-            parser.Target("test-vm1").expand(system_info=SYSTEM_INFO),
+        self.assertEqual(
+            list(parser.Target("test-vm1").expand(system_info=SYSTEM_INFO)),
             ["test-vm1"],
         )
-        self.assertCountEqual(
-            parser.Target("@adminvm").expand(system_info=SYSTEM_INFO),
+        self.assertEqual(
+            list(parser.Target("@adminvm").expand(system_info=SYSTEM_INFO)),
             ["@adminvm"],
         )
-        self.assertCountEqual(
-            parser.Target("dom0").expand(system_info=SYSTEM_INFO), ["@adminvm"]
+        self.assertEqual(
+            list(parser.Target("dom0").expand(system_info=SYSTEM_INFO)), ["@adminvm"]
         )
-        self.assertCountEqual(
-            parser.Target("@anyvm").expand(system_info=SYSTEM_INFO),
+        self.assertEqual(
+            list(parser.Target("uuid:00000000-0000-0000-0000-000000000000").expand(system_info=SYSTEM_INFO)), ["@adminvm"]
+        )
+        self.assertEqual(
+            list(parser.Target("@anyvm").expand(system_info=SYSTEM_INFO)),
             [
                 "test-vm1",
                 "test-vm2",
@@ -286,6 +309,7 @@ class TC_00_VMToken(unittest.TestCase):
         parser.Redirect("test-vm1")
         parser.Redirect("@adminvm")
         parser.Redirect("dom0")
+        parser.Redirect("uuid:00000000-0000-0000-0000-000000000000")
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect("@anyvm")
         with self.assertRaises(exc.PolicySyntaxError):
@@ -313,6 +337,7 @@ class TC_00_VMToken(unittest.TestCase):
             parser.Redirect("@type:")
 
     def test_040_IntendedTarget(self):
+        parser.IntendedTarget("uuid:00000000-0000-0000-0000-000000000000")
         parser.IntendedTarget("test-vm1")
         parser.IntendedTarget("@adminvm")
         parser.IntendedTarget("dom0")
@@ -344,6 +369,10 @@ class TC_00_VMToken(unittest.TestCase):
     def test_100_match_single(self):
         # pytest: disable=no-self-use
         cases = [
+            ("uuid:00000000-0000-0000-0000-000000000000", "@adminvm", True),
+            ("uuid:00000000-0000-0000-0000-000000000000", "dom0", True),
+            ("uuid:00000000-0000-0000-0000-000000000000", "@dispvm:default-dvm", False),
+            ("uuid:00000000-0000-0000-0000-000000000000", "test-vm1", False),
             ("@anyvm", "test-vm1", True),
             ("@anyvm", "@default", True),
             ("@default", "@default", True),
@@ -1795,6 +1824,7 @@ class TC_40_evaluate(unittest.TestCase):
 user=DEFAULT
 result=allow
 target=test-vm2
+target_uuid=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4
 autostart=True
 requested_target=test-vm2\
 """,
@@ -1817,7 +1847,7 @@ requested_target=test-vm2\
             """\
 user=DEFAULT
 result=allow
-target=dom0
+target=@adminvm
 autostart=True
 requested_target=@adminvm\
 """
@@ -1871,6 +1901,7 @@ requested_target=@adminvm\
 user=DEFAULT
 result=allow
 target=@dispvm:default-dvm
+target_uuid=@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21
 autostart=True
 requested_target=@dispvm:default-dvm\
 """)
@@ -1887,12 +1918,14 @@ requested_target=@dispvm:default-dvm\
             rule, request, user=None, target="test-vm2", autostart=True,
         )
         result = await resolution.execute()
+        self.assertTrue(result.index("uuid:") != 0)
         self.assertEqual(
             result,
             """\
 user=DEFAULT
 result=allow
 target=test-vm2
+target_uuid=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4
 autostart=True
 requested_target=test-vm2\
 """)
