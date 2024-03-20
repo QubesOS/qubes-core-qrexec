@@ -284,12 +284,11 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
 
     struct qrexec_parsed_command *cmd;
 
-    if (!(cmd = malloc(sizeof(*cmd)))) {
-        PERROR("malloc");
+    if (!(cmd = calloc(1, sizeof(*cmd)))) {
+        PERROR("calloc");
         return NULL;
     }
 
-    memset(cmd, 0, sizeof(*cmd));
     cmd->cmdline = cmdline;
 
     if (strip_username) {
