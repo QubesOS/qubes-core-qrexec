@@ -141,21 +141,24 @@ static int handle_just_exec(struct qrexec_parsed_command *cmd)
     int fdn, pid;
 
     if (cmd == NULL)
-        return 127;
+        return QREXEC_EXIT_PROBLEM;
 
     if (cmd->service_descriptor) {
         int socket_fd;
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
-        if (!find_qrexec_service(cmd, &socket_fd, &stdin_buffer))
-            return 127;
+        int status = find_qrexec_service(cmd, &socket_fd, &stdin_buffer);
+        if (status == -1)
+            return QREXEC_EXIT_SERVICE_NOT_FOUND;
+        if (status != 0)
+            return QREXEC_EXIT_PROBLEM;
         if (socket_fd != -1)
-            return write_all(socket_fd, stdin_buffer.data, stdin_buffer.buflen) ? 0 : 127;
+            return write_all(socket_fd, stdin_buffer.data, stdin_buffer.buflen) ? 0 : QREXEC_EXIT_PROBLEM;
     }
     switch (pid = fork()) {
         case -1:
             PERROR("fork");
-            return 127;
+            return QREXEC_EXIT_PROBLEM;
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
@@ -226,23 +229,26 @@ static int handle_new_process_common(
             libvchan_close(data_vchan);
             return 0;
         case MSG_EXEC_CMDLINE:
+            exit_code = QREXEC_EXIT_PROBLEM;
             buffer_init(&stdin_buf);
-            if (cmd == NULL ||
-                    execute_parsed_qubes_rpc_command(cmd, &pid, &stdin_fd, &stdout_fd, &stderr_fd, &stdin_buf) < 0) {
-                struct msg_header hdr = {
-                    .type = MSG_DATA_STDOUT,
-                    .len = 0,
-                };
+            if (cmd != NULL) {
+                int status = execute_parsed_qubes_rpc_command(cmd, &pid, &stdin_fd, &stdout_fd, &stderr_fd, &stdin_buf);
+                if (status == -1)
+                    exit_code = QREXEC_EXIT_SERVICE_NOT_FOUND;
+                else if (status == 0)
+                    exit_code = 0;
+            }
+            if (exit_code != 0) {
                 LOG(ERROR, "failed to spawn process");
                 /* Send stdout+stderr EOF first, since the service is expected to send
                  * one before exit code in case of MSG_EXEC_CMDLINE. Ignore
                  * libvchan_send error if any, as we're going to terminate soon
                  * anyway.
                  */
+                struct msg_header hdr = { .type = MSG_DATA_STDOUT, .len = 0 };
                 libvchan_send(data_vchan, &hdr, sizeof(hdr));
                 hdr.type = MSG_DATA_STDERR;
                 libvchan_send(data_vchan, &hdr, sizeof(hdr));
-                exit_code = 127;
                 send_exit_code(data_vchan, exit_code);
                 libvchan_close(data_vchan);
                 return exit_code;

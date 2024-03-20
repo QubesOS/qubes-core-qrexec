@@ -76,7 +76,9 @@ way to learn exit code of remote service in this case.
 In both cases, if process (local or remote) was terminated by a signal, exit
 status is 128+signal number.
 
-If service call is denied by dom0, ``qrexec-client-vm`` exit with status 126.
+If service call is denied by dom0, ``qrexec-client-vm`` exits with status 126.
+If invoking the service fails for some other reason, such as resource exhaustion
+or a system configuration problem, ``qrexec-client-vm`` exits with status 125.
 
 AUTHORS
 =======

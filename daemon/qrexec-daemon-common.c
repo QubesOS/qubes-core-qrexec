@@ -277,16 +277,14 @@ int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdi
     };
     sigemptyset(&action.sa_mask);
     if (sigaction(SIGCHLD, &action, NULL))
-        return 126;
+        return QREXEC_EXIT_PROBLEM;
     return execute_parsed_qubes_rpc_command(command, &local_pid, &local_stdin_fd, &local_stdout_fd,
             NULL, stdin_buffer);
 }
 
 // See also qrexec-agent/qrexec-agent-data.c
-__attribute__((warn_unused_result))
-static int handle_failed_exec(libvchan_t *data_vchan, bool is_service)
+static void handle_failed_exec(libvchan_t *data_vchan, bool is_service, int exit_code)
 {
-    int exit_code = 127;
     struct msg_header hdr = {
         .type = MSG_DATA_STDOUT,
         .len = 0,
@@ -308,7 +306,6 @@ static int handle_failed_exec(libvchan_t *data_vchan, bool is_service)
         libvchan_send(data_vchan, &hdr, sizeof(hdr));
         send_exit_code(data_vchan, exit_code);
     }
-    return exit_code;
 }
 
 static int select_loop(struct handshake_params *params)
@@ -351,7 +348,7 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
     set_remote_domain(src_domain_name);
     s = connect_unix_socket_by_id(src_domain_id);
     if (s < 0)
-        return 126;
+        return QREXEC_EXIT_PROBLEM;
     if (!negotiate_connection_params(s,
             0, /* dom0 */
             MSG_SERVICE_CONNECT,
@@ -359,17 +356,17 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
             sizeof(*svc_params),
             &data_domain,
             &data_port))
-        return 126;
+        return QREXEC_EXIT_PROBLEM;
 
     struct buffer stdin_buffer;
     buffer_init(&stdin_buffer);
     struct qrexec_parsed_command *command =
         parse_qubes_rpc_command(remote_cmdline, false);
     if (command == NULL) {
-        prepare_ret = -1;
+        prepare_ret = -2;
     } else if (!wait_for_session_maybe(command)) {
         LOG(ERROR, "Cannot load service configuration, or forking process failed");
-        prepare_ret = -1;
+        prepare_ret = -2;
     } else {
         prepare_ret = prepare_local_fds(command, &stdin_buffer);
     }
@@ -401,15 +398,16 @@ int handshake_and_go(struct handshake_params *params)
 {
     if (params->data_vchan == NULL || !libvchan_is_open(params->data_vchan)) {
         LOG(ERROR, "Failed to open data vchan connection");
-        return 126;
+        return QREXEC_EXIT_PROBLEM;
     }
     int rc;
     int data_protocol_version = handle_agent_handshake(params->data_vchan,
                                                        params->remote_send_first);
     if (data_protocol_version < 0) {
-        rc = 126;
-    } else if (params->prepare_ret < 0) {
-        rc = handle_failed_exec(params->data_vchan, params->remote_send_first);
+        rc = QREXEC_EXIT_PROBLEM;
+    } else if (params->prepare_ret != 0) {
+        rc = params->prepare_ret == -1 ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM;
+        handle_failed_exec(params->data_vchan, params->remote_send_first, rc);
     } else {
         params->data_protocol_version = data_protocol_version;
         rc = select_loop(params);

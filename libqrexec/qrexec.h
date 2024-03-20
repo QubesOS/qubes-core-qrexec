@@ -175,6 +175,8 @@ enum {
 
 // Exit codes
 
+// Service allowed, but service file not found
+#define QREXEC_EXIT_SERVICE_NOT_FOUND 127
 // Service call refused
 #define QREXEC_EXIT_REQUEST_REFUSED 126
 // Problem with qrexec itself

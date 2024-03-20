@@ -175,7 +175,7 @@ int main(int argc, char **argv)
     bool replace_chars_stdout = false;
     bool replace_chars_stderr = false;
     bool exit_with_code = true;
-    int rc = 126;
+    int rc = QREXEC_EXIT_PROBLEM;
 
     if (argc < 3) {
         // certainly too few arguments
@@ -301,7 +301,7 @@ int main(int argc, char **argv)
                 struct qrexec_parsed_command *command =
                     parse_qubes_rpc_command(local_cmdline, false);
                 if (!command)
-                    prepare_ret = 127;
+                    prepare_ret = QREXEC_EXIT_PROBLEM;
                 else {
                     prepare_ret = prepare_local_fds(command, &stdin_buffer);
                     destroy_qrexec_parsed_command(command);

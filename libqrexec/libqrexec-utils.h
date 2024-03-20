@@ -158,14 +158,14 @@ int execute_parsed_qubes_rpc_command(
  * @brief Find the implementation of a Qubes RPC command. If it is a socket,
  *        connect to it.
  * @param[in] cmdline Null-terminated command to execute.
- * @param[out] socket_fd On return, holds a file descriptor connected to the socket,
- * or -1 for executable services.
+ * @param[out] socket_fd On successful return, holds a file descriptor connected to
+ * the socket, or -1 for executable services.
  * @param stdin_buffer This buffer will need to be prepended to the child process’s
  * stdin.
- * @return true if the implementation is found (and, for sockets, connected to)
- * successfully, false on failure.
+ * @return 0 if the implementation is found (and, for sockets, connected to)
+ * successfully, -1 if not found, -2 if problem.
  */
-bool find_qrexec_service(
+int find_qrexec_service(
         struct qrexec_parsed_command *cmd,
         int *socket_fd, struct buffer *stdin_buffer);
 

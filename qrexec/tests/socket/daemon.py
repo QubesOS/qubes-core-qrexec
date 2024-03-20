@@ -801,7 +801,7 @@ read input
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 """,
         )
-        self.test_run_dom0_service_failed()
+        self._test_run_dom0_service_failed()
 
     def test_exec_service_with_invalid_config_1(self):
         self.exec_service_with_invalid_config("wait-for-session = 00\n")
@@ -859,8 +859,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
     def test_run_dom0_service_exec_nogui(self):
         self._test_run_dom0_service_exec(True)
 
-    def test_run_dom0_service_failed(self):
-        # qubes.Service does not exist
+    def _test_run_dom0_service_failed(self, exit_status=qrexec.QREXEC_EXIT_PROBLEM):
         cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
@@ -868,11 +867,15 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
             source.recv_all_messages(),
             [
                 (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 127)),
+                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", exit_status)),
             ],
         )
         self.client.wait()
-        self.assertEqual(self.client.returncode, 127)
+        self.assertEqual(self.client.returncode, exit_status)
+
+    def test_run_dom0_service_not_found(self):
+        # qubes.Service does not exist
+        self._test_run_dom0_service_failed(qrexec.QREXEC_EXIT_SERVICE_NOT_FOUND)
 
     def test_run_dom0_service_wait_for_session(self):
         log = os.path.join(self.tempdir, "wait-for-session.log")

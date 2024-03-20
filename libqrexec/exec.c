@@ -57,14 +57,14 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
         prog_copy = strdup(prog);
         if (!prog_copy) {
             PERROR("strdup");
-            _exit(1);
+            _exit(QREXEC_EXIT_PROBLEM);
         }
 
         tok=strtok_r(prog_copy, " ", &savetok);
         do {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
                 LOG(ERROR, "To many arguments to %s", RPC_REQUEST_COMMAND);
-                _exit(1);
+                _exit(QREXEC_EXIT_PROBLEM);
             }
             argv[i++] = tok;
         } while ((tok=strtok_r(NULL, " ", &savetok)));
@@ -74,8 +74,9 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
         if (!argv[0])
             argv[0] = QUBES_RPC_MULTIPLEXER_PATH;
         execve(argv[0], argv, envp);
+        bool noent = errno == ENOENT;
         PERROR("exec qubes-rpc-multiplexer");
-        _exit(126);
+        _exit(noent ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM);
     }
 }
 
@@ -137,7 +138,7 @@ static int do_fork_exec(const char *user,
                 exec_func(cmdline, user);
             else
                 abort();
-            status = errno;
+            status = -1;
             while (write(statuspipe[1], &status, sizeof status) <= 0) {}
             _exit(-1);
         }
@@ -506,8 +507,11 @@ int execute_parsed_qubes_rpc_command(
         int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer) {
     if (cmd->service_descriptor) {
         // Proper Qubes RPC call
-        if (!find_qrexec_service(cmd, stdin_fd, stdin_buffer))
-            return -1;
+        int find_res = find_qrexec_service(cmd, stdin_fd, stdin_buffer);
+        if (find_res != 0) {
+            assert(find_res < 0);
+            return find_res;
+        }
         if (*stdin_fd > -1) {
             *stdout_fd = *stdin_fd;
             if (stderr_fd)
@@ -596,7 +600,7 @@ freeaddrs:
     return rc;
 }
 
-bool find_qrexec_service(
+int find_qrexec_service(
         struct qrexec_parsed_command *cmd,
         int *socket_fd, struct buffer *stdin_buffer) {
     assert(cmd->service_descriptor);
@@ -618,9 +622,11 @@ bool find_qrexec_service(
                         path_buffer.data, (size_t)path_buffer.buflen,
                         &statbuf);
     if (ret < 0) {
-        LOG(ERROR, "Service not found: %s",
-            cmd->service_descriptor);
-        return false;
+        if (ret == -1)
+            LOG(ERROR, "Service not found: %s", cmd->service_descriptor);
+        else
+            LOG(ERROR, "Error finding service: %s", cmd->service_descriptor);
+        return ret;
     }
 
     if (S_ISSOCK(statbuf.st_mode)) {
@@ -628,12 +634,12 @@ bool find_qrexec_service(
         int s;
         if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
             PERROR("socket");
-            return false;
+            return -2;
         }
         if (qubes_connect(s, path_buffer.data, strlen(path_buffer.data))) {
             PERROR("qubes_connect");
             close(s);
-            return false;
+            return -2;
         }
 
         if (cmd->send_service_descriptor) {
@@ -643,7 +649,7 @@ bool find_qrexec_service(
         }
 
         *socket_fd = s;
-        return true;
+        return 0;
     } else if (S_ISLNK(statbuf.st_mode)) {
         /* TCP-based service */
         assert(path_buffer.buflen >= (int)sizeof("/dev/tcp") - 1);
@@ -664,7 +670,7 @@ bool find_qrexec_service(
             if (cmd->arg == NULL || *cmd->arg == '\0') {
                 LOG(ERROR, "No or empty argument provided, cannot connect to %s",
                     path_buffer.data);
-                return false;
+                return -2;
             }
             if (host == NULL) {
                 /* Get both host and port from service arguments */
@@ -672,13 +678,13 @@ bool find_qrexec_service(
                 port = strrchr(cmd->arg, '+');
                 if (port == NULL) {
                     LOG(ERROR, "No port provided, cannot connect to %s", cmd->arg);
-                    return false;
+                    return -2;
                 }
                 *port = '\0';
                 for (char *p = host; p < port; ++p) {
                     if (*p == '_') {
                         LOG(ERROR, "Underscore not allowed in hostname %s", host);
-                        return false;
+                        return -2;
                     }
                     if (*p == '+')
                         *p = ':';
@@ -691,7 +697,7 @@ bool find_qrexec_service(
         } else {
             if (cmd->arg != NULL && *cmd->arg != '\0') {
                 LOG(ERROR, "Unexpected argument %s to service %s", cmd->arg, path_buffer.data);
-                return false;
+                return -2;
             }
         }
 
@@ -703,19 +709,19 @@ bool find_qrexec_service(
 
         int res = qubes_tcp_connect(host, port);
         if (res == -1)
-            return false;
+            return -2;
         *socket_fd = res;
-        return true;
+        return 0;
     }
 
     if (euidaccess(path_buffer.data, X_OK) == 0) {
         /* Executable-based service. */
-        return true;
+        return 0;
     }
 
     LOG(ERROR, "Unknown service type (not executable, not a socket): %.*s",
         path_buffer.buflen, path_buffer.data);
-    return false;
+    return -2;
 }
 
 int exec_wait_for_session(const char *source_domain) {

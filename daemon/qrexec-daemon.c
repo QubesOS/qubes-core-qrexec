@@ -924,7 +924,7 @@ static void send_request_to_daemon(
             service_name);
     if (command_size < 0) {
         PERROR("failed to construct request");
-        daemon__exit(126);
+        daemon__exit(QREXEC_EXIT_PROBLEM);
     }
 
     for (int i = 0; i < command_size; i += bytes_sent) {
@@ -934,7 +934,7 @@ static void send_request_to_daemon(
         if (bytes_sent < 0) {
             assert(bytes_sent == -1);
             PERROR("send to socket failed");
-            daemon__exit(126);
+            daemon__exit(QREXEC_EXIT_PROBLEM);
         }
     }
     free(command);
@@ -945,7 +945,7 @@ static _Noreturn void null_exit(void)
 #ifdef COVERAGE
     __gcov_dump();
 #endif
-    _exit(126);
+    _exit(QREXEC_EXIT_PROBLEM);
 }
 
 /*
@@ -970,7 +970,7 @@ static enum policy_response connect_daemon_socket(
     int daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (daemon_socket < 0) {
          PERROR("socket creation failed");
-         daemon__exit(126);
+         daemon__exit(QREXEC_EXIT_PROBLEM);
     }
 
     int connect_result = connect(daemon_socket,
@@ -1001,7 +1001,7 @@ static enum policy_response connect_daemon_socket(
     int fds[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds)) {
         PERROR("socketpair()");
-        daemon__exit(126);
+        daemon__exit(QREXEC_EXIT_PROBLEM);
     }
     daemon_socket = fds[0];
 
@@ -1009,13 +1009,13 @@ static enum policy_response connect_daemon_socket(
     switch (pid) {
         case -1:
             LOG(ERROR, "Could not fork!");
-            daemon__exit(126);
+            daemon__exit(QREXEC_EXIT_PROBLEM);
         case 0:
             if (close(fds[0]))
-                _exit(126);
+                daemon__exit(QREXEC_EXIT_PROBLEM);
             if (dup2(fds[1], 0) != 0 || dup2(fds[1], 1) != 1) {
                 PERROR("dup2()");
-                daemon__exit(126);
+                daemon__exit(QREXEC_EXIT_PROBLEM);
             }
             if (close(fds[1]))
                 abort();
@@ -1034,7 +1034,7 @@ static enum policy_response connect_daemon_socket(
             } else {
                 PERROR("snprintf");
             }
-            daemon__exit(126);
+            daemon__exit(QREXEC_EXIT_PROBLEM);
         default:
             if (close(fds[1]))
                 abort();
@@ -1045,12 +1045,12 @@ static enum policy_response connect_daemon_socket(
             do {
                 if (waitpid(pid, &status, 0) != pid) {
                     PERROR("waitpid");
-                    daemon__exit(126);
+                    daemon__exit(QREXEC_EXIT_PROBLEM);
                 }
             } while (!WIFEXITED(status));
             if (WEXITSTATUS(status) != 0) {
                 LOG(ERROR, "qrexec-policy-exec failed");
-                daemon__exit(126);
+                daemon__exit(QREXEC_EXIT_PROBLEM);
             }
             // This leaks 'result', but as the code execs later anyway this isn't a problem.
             // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
@@ -1077,7 +1077,7 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     /* if above haven't executed qubes-rpc-multiplexer, pass it to shell */
     execl("/bin/bash", "bash", "-c", prog, NULL);
     PERROR("exec bash");
-    _exit(126);
+    _exit(QREXEC_EXIT_PROBLEM);
 }
 
 _Noreturn static void handle_execute_service_child(
@@ -1098,7 +1098,7 @@ _Noreturn static void handle_execute_service_child(
                               &user, &target, &requested_target, &autostart);
 
     if (policy_response != RESPONSE_ALLOW)
-        daemon__exit(126);
+        daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
 
     /* Replace the target domain with the version normalized by the policy engine */
     target_domain = requested_target;
@@ -1130,7 +1130,7 @@ _Noreturn static void handle_execute_service_child(
                      remote_domain_name,
                      type,
                      target_domain) <= 0)
-            daemon__exit(126);
+            daemon__exit(QREXEC_EXIT_PROBLEM);
         register_exec_func(&do_exec);
         daemon__exit(run_qrexec_to_dom0(request_id,
                            remote_domain_id,
@@ -1144,7 +1144,7 @@ _Noreturn static void handle_execute_service_child(
             disposable = true;
             buf = qubesd_call(target + 8, "admin.vm.CreateDisposable", "", &resp_len);
             if (!buf) // error already printed by qubesd_call
-                daemon__exit(126);
+                daemon__exit(QREXEC_EXIT_PROBLEM);
             if (memcmp(buf, "0", 2) == 0) {
                 /* we exec later so memory leaks do not matter */
                 target = buf + 2;
@@ -1154,7 +1154,7 @@ _Noreturn static void handle_execute_service_child(
                 } else {
                     LOG(ERROR, "invalid response to admin.vm.CreateDisposable");
                 }
-                daemon__exit(126);
+                daemon__exit(QREXEC_EXIT_PROBLEM);
             }
         }
         if (asprintf(&cmd, "%s:QUBESRPC %s%s %s",
@@ -1162,11 +1162,11 @@ _Noreturn static void handle_execute_service_child(
                     service_name,
                     trailer,
                     remote_domain_name) <= 0)
-            daemon__exit(126);
+            daemon__exit(QREXEC_EXIT_PROBLEM);
         if (autostart) {
             buf = qubesd_call(target, "admin.vm.Start", "", &resp_len);
             if (!buf) // error already printed by qubesd_call
-                daemon__exit(126);
+                daemon__exit(QREXEC_EXIT_PROBLEM);
             if (!((memcmp(buf, "0", 2) == 0) ||
                   (resp_len >= 24 && memcmp(buf, "2\0QubesVMNotHaltedError", 24) == 0))) {
                 if (memcmp(buf, "2", 2) == 0) {
@@ -1174,14 +1174,14 @@ _Noreturn static void handle_execute_service_child(
                 } else {
                     LOG(ERROR, "invalid response to admin.vm.Start");
                 }
-                daemon__exit(126);
+                daemon__exit(QREXEC_EXIT_PROBLEM);
             }
             free(buf);
         }
         int s = connect_unix_socket(target);
         int data_domain;
         int data_port;
-        int rc = 126;
+        int rc = QREXEC_EXIT_PROBLEM;
         if (!negotiate_connection_params(s,
                 remote_domain_id,
                 MSG_EXEC_CMDLINE,
@@ -1189,7 +1189,7 @@ _Noreturn static void handle_execute_service_child(
                 compute_service_length(cmd),
                 &data_domain,
                 &data_port))
-            daemon__exit(126);
+            daemon__exit(QREXEC_EXIT_PROBLEM);
         int wait_connection_end = -1;
         if (disposable) {
             wait_connection_end = s;
@@ -1237,7 +1237,7 @@ static void handle_execute_service(
             exit(1);
         case 0:
             if (atexit(null_exit))
-                _exit(126);
+                _exit(QREXEC_EXIT_PROBLEM);
             handle_execute_service_child(remote_domain_id, remote_domain_name,
                                          target_domain, service_name, request_id);
             abort();

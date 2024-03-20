@@ -272,9 +272,9 @@ _Noreturn void do_exec(const char *cmd, const char *user)
             /* child */
 
             if (setgid (pw->pw_gid))
-                exit(126);
+                _exit(QREXEC_EXIT_PROBLEM);
             if (setuid (pw->pw_uid))
-                exit(126);
+                _exit(QREXEC_EXIT_PROBLEM);
             setsid();
             /* This is a copy but don't care to free as we exec later anyway.  */
             env = pam_getenvlist (pamh);
@@ -289,7 +289,7 @@ _Noreturn void do_exec(const char *cmd, const char *user)
 
             /* otherwise exec shell */
             execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
-            exit(127);
+            _exit(QREXEC_EXIT_PROBLEM);
         default:
             /* parent */
             /* close std*, so when child process closes them, qrexec-agent will receive EOF */

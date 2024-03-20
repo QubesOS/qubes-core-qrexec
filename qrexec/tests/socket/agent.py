@@ -84,7 +84,7 @@ class TestAgentBase(unittest.TestCase):
         os.mkdir(os.path.join(self.tempdir, "rpc-config"))
         self.addCleanup(shutil.rmtree, self.tempdir)
 
-    def start_agent(self):
+    def start_agent(self, fail_exec=False):
         if self.agent is not None:
             return
         env = os.environ.copy()
@@ -101,7 +101,7 @@ class TestAgentBase(unittest.TestCase):
             ]
         )
         env["QUBES_RPC_CONFIG_PATH"] = os.path.join(self.tempdir, "rpc-config")
-        env["QREXEC_MULTIPLEXER_PATH"] = os.path.join(
+        env["QREXEC_MULTIPLEXER_PATH"] = "/dev/null" if fail_exec else os.path.join(
             ROOT_PATH, "lib", "qubes-rpc-multiplexer"
         )
         cmd = [
@@ -235,6 +235,17 @@ printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
             self.assertEqual(f.read(), b"qubes.Service+\n")
         self.check_dom0(dom0)
 
+    def test_just_exec_rpc_not_found(self):
+        cmd = b"QUBESRPC qubes.Service+ domX"
+        target, dom0 = self._test_just_exec(cmd)
+        self.assertListEqual(
+            target.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
     def test_exec_cmdline(self):
         self.start_agent()
 
@@ -334,8 +345,8 @@ printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
 
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
 class TestAgentExecQubesRpc(TestAgentBase):
-    def execute_qubesrpc(self, service: str, src_domain_name: str):
-        self.start_agent()
+    def execute_qubesrpc(self, service: str, src_domain_name: str, fail_exec:bool=False):
+        self.start_agent(fail_exec)
 
         dom0 = self.connect_dom0()
 
@@ -494,7 +505,32 @@ wait-for-session = 1 # line comment
         self.assertExpectedStdout(target, expected_stdout)
         self.check_dom0(dom0)
 
-    def test_exec_service_fail(self):
+    def test_exec_service_not_found(self):
+        """
+        Service does not exist
+        """
+        self._test_exec_service_fail(qrexec.QREXEC_EXIT_SERVICE_NOT_FOUND)
+
+    def test_exec_service_bad_multiplexer(self):
+        """
+        RPC multiplexer is junk
+        """
+        util.make_executable_service(self.tempdir, "rpc", "qubes.Service", "")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX", fail_exec=True)
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        messages = util.sort_messages(target.recv_all_messages())
+        self.assertEqual(messages[0], (qrexec.MSG_DATA_STDOUT, b""))
+        self.assertListEqual(messages[-2:],
+                             [
+                                 (qrexec.MSG_DATA_STDERR, b""),
+                                 (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
+                             ])
+        for msg_type, msg_value in messages[1:-2]:
+            self.assertEqual(msg_type, qrexec.MSG_DATA_STDERR)
+            self.assertTrue(msg_value)
+        self.check_dom0(dom0)
+
+    def _test_exec_service_fail(self, exit_code=qrexec.QREXEC_EXIT_PROBLEM):
         target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         messages = target.recv_all_messages()
@@ -503,7 +539,7 @@ wait-for-session = 1 # line comment
             [
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", exit_code)),
             ],
         )
         self.check_dom0(dom0)
@@ -524,17 +560,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
                 f.write(invalid_config)
         else:
             os.symlink("/dev/null/doesnotexist", config_path)
-        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
-            ],
-        )
-        self.check_dom0(dom0)
+        self._test_exec_service_fail()
 
     def test_exec_service_with_invalid_config_1(self):
         self.exec_service_with_invalid_config("wait-for-session = 00\n")
@@ -596,18 +622,7 @@ echo "general service"
 echo "general service"
 """,
         )
-        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
-        target.send_message(qrexec.MSG_DATA_STDIN, b"")
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
-            ],
-        )
-        self.check_dom0(dom0)
+        self._test_exec_service_fail()
 
     def test_exec_null_argument_finds_service_for_empty_argument(self):
         self.make_executable_service(
@@ -808,7 +823,7 @@ skip-service-descriptor = true
             [
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
             ],
         )
 
@@ -827,7 +842,7 @@ skip-service-descriptor = true
             [
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
             ],
         )
         self.check_dom0(dom0)
@@ -847,7 +862,7 @@ skip-service-descriptor = true
             [
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
             ],
         )
         self.check_dom0(dom0)
@@ -867,7 +882,7 @@ skip-service-descriptor = true
             [
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
             ],
         )
         self.check_dom0(dom0)
@@ -887,7 +902,7 @@ skip-service-descriptor = true
             [
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
             ],
         )
         self.check_dom0(dom0)
@@ -1282,20 +1297,20 @@ class TestClientVm(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.stdout.read(), b"")
         self.assertEqual(self.client.stderr.read(), b"Request refused\n")
-        self.assertEqual(self.client.returncode, 126)
+        self.assertEqual(self.client.returncode, qrexec.QREXEC_EXIT_REQUEST_REFUSED)
 
     def test_run_client_failed(self):
         target_client = self.run_service()
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         target_client.send_message(
-            qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 127)
+            qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", qrexec.QREXEC_EXIT_PROBLEM)
         )
         # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
         # and also no MSG_DATA_STDIN after receiving MSG_DATA_EXIT_CODE
         self.assertListEqual(target_client.recv_all_messages(), [])
         self.assertEqual(self.client.stdout.read(), b"")
         self.client.wait()
-        self.assertEqual(self.client.returncode, 127)
+        self.assertEqual(self.client.returncode, qrexec.QREXEC_EXIT_PROBLEM)
 
     def test_run_client_with_local_proc(self):
         target_client = self.run_service(local_program=["/bin/cat"])
@@ -1351,14 +1366,14 @@ echo "received: $x" >&0
         target_client = self.run_service(local_program=["/bin/cat"])
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         target_client.send_message(
-            qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 127)
+            qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", qrexec.QREXEC_EXIT_PROBLEM)
         )
         # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
         self.assertListEqual(target_client.recv_all_messages(), [])
         target_client.close()
         self.assertEqual(self.client.stdout.read(), b"")
         self.client.wait()
-        self.assertEqual(self.client.returncode, 127)
+        self.assertEqual(self.client.returncode, qrexec.QREXEC_EXIT_PROBLEM)
 
     def test_run_client_with_local_proc_local_proc_failed(self):
         target_client = self.run_service(local_program=["/bin/false"])
@@ -1405,7 +1420,7 @@ echo "received: $x" >&0
         self.client.wait()
         self.assertEqual(self.client.stdout.read(), b"")
         self.assertEqual(self.client.stderr.read(), b"Request refused\n")
-        self.assertEqual(self.client.returncode, 126)
+        self.assertEqual(self.client.returncode, qrexec.QREXEC_EXIT_REQUEST_REFUSED)
         self.assertFalse(os.path.exists(flag_file))
 
     def test_run_client_vchan_disconnect(self):
