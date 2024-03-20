@@ -19,6 +19,7 @@
  *
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -534,18 +535,42 @@ static void release_vchan_port(int port, int expected_remote_id)
 static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
 {
     struct exec_params params;
-    int len = hdr->len-sizeof(params);
-    char buf[len];
+    uint32_t len;
+    char *buf = NULL;
     int use_default_user = 0;
     int i;
 
+    if (hdr->len <= sizeof(params)) {
+        LOG(ERROR, "Too-short packet received from client %d: "
+                   "type %" PRIu32 ", len %" PRIu32 "(min %zu)",
+                   fd, hdr->type, hdr->len, sizeof(params) + 1);
+        goto terminate;
+    }
+    if (hdr->len > MAX_QREXEC_CMD_LEN) {
+        LOG(ERROR, "Too-long packet received from client %d: "
+                   "type %" PRIu32 ", len %" PRIu32 "(max %lu)",
+                   fd, hdr->type, hdr->len, MAX_QREXEC_CMD_LEN);
+        goto terminate;
+    }
+    len = hdr->len - sizeof(params);
+
+    buf = malloc(len);
+    if (buf == NULL) {
+        PERROR("malloc");
+        goto terminate;
+    }
+
     if (!read_all(fd, &params, sizeof(params))) {
-        terminate_client(fd);
-        return 0;
+        goto terminate;
     }
     if (!read_all(fd, buf, len)) {
-        terminate_client(fd);
-        return 0;
+        goto terminate;
+    }
+
+    if (buf[len - 1] != '\0') {
+        LOG(ERROR, "Client sent buffer of length %" PRIu32 " that is not "
+            "NUL-terminated", len);
+        goto terminate;
     }
 
     if (hdr->type == MSG_SERVICE_CONNECT) {
@@ -562,8 +587,7 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         if (i > policy_pending_max) {
             LOG(ERROR, "Connection with ident %s not requested or already handled",
                     policy_pending[i].params.ident);
-            terminate_client(fd);
-            return 0;
+            goto terminate;
         }
         policy_pending[i].response_sent = RESPONSE_ALLOW;
     }
@@ -574,29 +598,28 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         params.connect_port = allocate_vchan_port(params.connect_domain);
         if (params.connect_port <= 0) {
             LOG(ERROR, "Failed to allocate new vchan port, too many clients?");
-            terminate_client(fd);
-            return 0;
+            goto terminate;
         }
         /* notify the client when this connection got terminated */
         vchan_port_notify_client[params.connect_port-VCHAN_BASE_DATA_PORT] = fd;
         client_params.connect_port = params.connect_port;
         client_params.connect_domain = remote_domain_id;
         hdr->len = sizeof(client_params);
-        if (!write_all(fd, hdr, sizeof(*hdr))) {
+        if (!write_all(fd, hdr, sizeof(*hdr)) ||
+                !write_all(fd, &client_params, sizeof(client_params))) {
             terminate_client(fd);
             release_vchan_port(params.connect_port, params.connect_domain);
-            return 0;
-        }
-        if (!write_all(fd, &client_params, sizeof(client_params))) {
-            terminate_client(fd);
-            release_vchan_port(params.connect_port, params.connect_domain);
+            free(buf);
             return 0;
         }
         /* restore original len value */
         hdr->len = len+sizeof(params);
     } else {
-        assert(params.connect_port >= VCHAN_BASE_DATA_PORT);
-        assert(params.connect_port < VCHAN_BASE_DATA_PORT+MAX_CLIENTS);
+        if (!((params.connect_port >= VCHAN_BASE_DATA_PORT) &&
+              (params.connect_port < VCHAN_BASE_DATA_PORT+MAX_CLIENTS))) {
+            LOG(ERROR, "Invalid connect port %" PRIu32, params.connect_port);
+            goto terminate;
+        }
     }
 
     if (!strncmp(buf, default_user_keyword, default_user_keyword_len_without_colon+1)) {
@@ -617,9 +640,14 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
                     send_len) != send_len)
             handle_vchan_error("send buf");
     } else
-        if (libvchan_send(vchan, buf, len) < len)
+        if (libvchan_send(vchan, buf, len) < (int)len)
             handle_vchan_error("send buf");
+    free(buf);
     return 1;
+terminate:
+    terminate_client(fd);
+    free(buf);
+    return 0;
 }
 
 static void handle_cmdline_message_from_client(int fd)
@@ -639,10 +667,11 @@ static void handle_cmdline_message_from_client(int fd)
             return;
     }
 
-    if (!handle_cmdline_body_from_client(fd, &hdr))
+    if (!handle_cmdline_body_from_client(fd, &hdr)) {
         // client disconnected while sending cmdline, above call already
         // cleaned up client info
         return;
+    }
     clients[fd].state = CLIENT_RUNNING;
 }
 
