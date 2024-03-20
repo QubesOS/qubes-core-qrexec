@@ -54,6 +54,11 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
         char *argv[16]; // right now 6 are used, but allow future extensions
         size_t i = 0;
 
+        if (prog[RPC_REQUEST_COMMAND_LEN] != ' ') {
+            LOG(ERROR, "\"" RPC_REQUEST_COMMAND "\" not followed by space");
+            _exit(126);
+        }
+
         prog_copy = strdup(prog);
         if (!prog_copy) {
             PERROR("strdup");
@@ -404,13 +409,18 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
     } else
         cmd->nogui = false;
 
-    /* If the command starts with "QUBESRPC ", parse service descriptor */
-    if (strncmp(cmd->command, RPC_REQUEST_COMMAND " ",
-                RPC_REQUEST_COMMAND_LEN + 1) == 0) {
+    /* If the command starts with "QUBESRPC", parse service descriptor */
+    if (strncmp(cmd->command, RPC_REQUEST_COMMAND,
+                RPC_REQUEST_COMMAND_LEN) == 0) {
         const char *start, *end;
 
-        /* Parse service descriptor ("qubes.Service+arg") */
+        /* Check for space after "QUBESRPC" */
+        if (cmd->command[RPC_REQUEST_COMMAND_LEN] != ' ') {
+            LOG(ERROR, "\"" RPC_REQUEST_COMMAND "\" not followed by space");
+            goto err;
+        }
 
+        /* Parse service descriptor ("qubes.Service+arg") */
         start = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
         end = strchr(start, ' ');
         if (!end) {
