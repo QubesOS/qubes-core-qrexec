@@ -576,7 +576,9 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         assert(params.connect_port < VCHAN_BASE_DATA_PORT+MAX_CLIENTS);
     }
 
-    if (!strncmp(buf, default_user_keyword, default_user_keyword_len_without_colon+1)) {
+    if ((hdr->type != MSG_SERVICE_CONNECT) &&
+        (strncmp(buf, default_user_keyword, default_user_keyword_len_without_colon+1) == 0))
+    {
         use_default_user = 1;
         hdr->len -= default_user_keyword_len_without_colon;
         hdr->len += strlen(default_user);
