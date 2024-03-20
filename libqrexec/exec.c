@@ -64,7 +64,7 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
         do {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
                 LOG(ERROR, "To many arguments to %s", RPC_REQUEST_COMMAND);
-                exit(1);
+                _exit(1);
             }
             argv[i++] = tok;
         } while ((tok=strtok_r(NULL, " ", &savetok)));
