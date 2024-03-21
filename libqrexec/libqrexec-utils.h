@@ -79,6 +79,9 @@ struct qrexec_parsed_command {
 
     /* Should a session be waited for? */
     bool wait_for_session;
+
+    /* For socket-based services: Should the service descriptor be sent? */
+    bool send_service_descriptor;
 };
 
 /* Parse a command, return NULL on failure. Uses cmd->cmdline
@@ -97,8 +100,7 @@ void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
  * Deprecated, use load_service_config_v2() instead.
  */
 int load_service_config(struct qrexec_parsed_command *cmd_name,
-                        int *wait_for_session, char **user)
-    __attribute__((deprecated("use load_service_config_v2() instead")));
+                        int *wait_for_session, char **user);
 int load_service_config_v2(struct qrexec_parsed_command *cmd);
 
 typedef void (do_exec_t)(const char *cmdline, const char *user);
