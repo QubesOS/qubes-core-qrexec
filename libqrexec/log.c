@@ -32,7 +32,7 @@
 static const char *qrexec_program_name = "qrexec";
 
 static void log_time(void) {
-    const size_t buf_len = 32;
+#define buf_len 32
     char buf[buf_len];
     struct tm tm_buf;
     struct tm *tm;
@@ -46,12 +46,13 @@ static void log_time(void) {
 
     strftime(buf, buf_len, "%Y-%m-%d %H:%M:%S", tm);
     fprintf(stderr, "%s.%03d ", buf, (int)(tv.tv_usec / 1000));
+#undef buf_len
 }
 
 static void qrexec_logv(__attribute__((unused)) int level, int errnoval,
                         const char *file, int line,
                         const char *func, const char *fmt, va_list ap) {
-    const size_t buf_len = 64;
+#define buf_len 64
     char buf[buf_len];
     char *err;
     int _errno = errno;
@@ -65,6 +66,7 @@ static void qrexec_logv(__attribute__((unused)) int level, int errnoval,
     fprintf(stderr, "\n");
     fflush(stderr);
     errno = _errno;
+#undef buf_len
 }
 
 void qrexec_log(int level, int errnoval, const char *file, int line,

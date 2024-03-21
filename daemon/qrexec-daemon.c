@@ -153,19 +153,19 @@ static int remote_domain_id;
 
 static void unlink_qrexec_socket(void)
 {
-    char socket_address[40];
-    char link_to_socket_name[strlen(remote_domain_name) + sizeof(socket_address)];
+    char *socket_address;
+    char *link_to_socket_name;
 
-    int v = snprintf(socket_address, sizeof(socket_address),
-                     "%s/qrexec.%d", socket_dir, remote_domain_id);
-    if (v < (int)sizeof("/qrexec.1") || v >= (int)sizeof(socket_address))
-        abort();
-    v = snprintf(link_to_socket_name, sizeof(link_to_socket_name),
-                 "%s/qrexec.%s", socket_dir, remote_domain_name);
-    if (v < (int)sizeof("/qrexec.") || v >= (int)sizeof(link_to_socket_name))
-        abort();
-    unlink(socket_address);
-    unlink(link_to_socket_name);
+    if (asprintf(&socket_address, "%s/qrexec.%d", socket_dir, remote_domain_id) < 0)
+        err(1, "asprintf");
+    if (unlink(socket_address) != 0 && errno != ENOENT)
+        err(1, "unlink(%s)", socket_address);
+    free(socket_address);
+    if (asprintf(&link_to_socket_name, "%s/qrexec.%s", socket_dir, remote_domain_name) < 0)
+        err(1, "asprintf");
+    if (unlink(link_to_socket_name) != 0 && errno != ENOENT)
+        err(1, "unlink(%s)", link_to_socket_name);
+    free(link_to_socket_name);
 }
 
 static void handle_vchan_error(const char *op)
@@ -178,12 +178,13 @@ static void handle_vchan_error(const char *op)
 static int create_qrexec_socket(int domid, const char *domname)
 {
     char socket_address[40];
-    char link_to_socket_name[strlen(domname) + sizeof(socket_address)];
+    char *link_to_socket_name;
 
     snprintf(socket_address, sizeof(socket_address),
              "%s/qrexec.%d", socket_dir, domid);
-    snprintf(link_to_socket_name, sizeof link_to_socket_name,
-             "%s/qrexec.%s", socket_dir, domname);
+    if (asprintf(&link_to_socket_name,
+                 "%s/qrexec.%s", socket_dir, domname) < 0)
+        err(1, "asprintf");
     unlink(link_to_socket_name);
 
     /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
@@ -193,6 +194,7 @@ static int create_qrexec_socket(int domid, const char *domname)
     }
     int fd = get_server_socket(socket_address);
     umask(0077);
+    free(link_to_socket_name);
     return fd;
 }
 
