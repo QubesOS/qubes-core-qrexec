@@ -269,7 +269,8 @@ static int load_service_config_raw(struct qrexec_parsed_command *cmd,
                         config_full_path, sizeof(config_full_path), NULL);
     if (ret < 0)
         return 0;
-    return qubes_toml_config_parse(config_full_path, &cmd->wait_for_session, user);
+    return qubes_toml_config_parse(config_full_path, &cmd->wait_for_session, user,
+                                   &cmd->send_service_descriptor);
 }
 
 int load_service_config_v2(struct qrexec_parsed_command *cmd) {
@@ -304,6 +305,7 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
     }
 
     memset(cmd, 0, sizeof(*cmd));
+    cmd->send_service_descriptor = true;
     cmd->cmdline = cmdline;
 
     if (strip_username) {
@@ -489,9 +491,11 @@ static int execute_qrexec_service(
         *pid = 0;
         set_nonblock(s);
 
-        /* send part after "QUBESRPC ", including trailing NUL */
-        const char *desc = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
-        buffer_append(stdin_buffer, desc, strlen(desc) + 1);
+        if (cmd->send_service_descriptor) {
+            /* send part after "QUBESRPC ", including trailing NUL */
+            const char *desc = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
+            buffer_append(stdin_buffer, desc, strlen(desc) + 1);
+        }
         return 0;
     }
 

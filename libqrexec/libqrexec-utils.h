@@ -79,6 +79,9 @@ struct qrexec_parsed_command {
 
     /* Should a session be waited for? */
     bool wait_for_session;
+
+    /* For socket-based services: Should the service descriptor be sent? */
+    bool send_service_descriptor;
 };
 
 /* Parse a command, return NULL on failure. Uses cmd->cmdline

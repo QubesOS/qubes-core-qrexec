@@ -171,7 +171,7 @@ static void toml_value_free(union toml_data *value, enum toml_type ty) {
     }
 }
 
-int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session, char **user)
+int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session, char **user, bool *send_service_descriptor)
 {
     int result = -1; /* assume problem */
     FILE *config_file = fopen(config_full_path, "re");
@@ -186,7 +186,9 @@ int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session
     ssize_t signed_linelen;
     bool seen_wait_for_session = false;
     bool seen_user = false;
+    bool seen_skip_service_descriptor = false;
     *wait_for_session = 0;
+    *send_service_descriptor = true;
 #define CHECK_DUP_KEY(v) do {                                               \
     if (toml_check_dup_key(&(v), config_full_path, lineno, current_line)) { \
         toml_value_free(&value, ty);                                        \
@@ -288,6 +290,10 @@ int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session
                 CHECK_TYPE(TOML_TYPE_BOOL, "wait-for-session");
                 *wait_for_session = value.boolean;
             }
+        } else if (strcmp(current_line, "skip-service-descriptor") == 0) {
+            CHECK_DUP_KEY(seen_skip_service_descriptor);
+            CHECK_TYPE(TOML_TYPE_BOOL, "skip-service-descriptor");
+            *send_service_descriptor = !value.boolean;
         } else if (strcmp(current_line, "force-user") == 0) {
             CHECK_DUP_KEY(seen_user);
             CHECK_TYPE(TOML_TYPE_STRING, "user name or user ID");

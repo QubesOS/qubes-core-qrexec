@@ -525,6 +525,42 @@ echo "general service"
         )
         self.check_dom0(dom0)
 
+    def test_connect_socket_no_metadata(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg2"
+        )
+        with open(
+            os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg2"), "w"
+        ) as f:
+            f.write("""\
+skip-service-descriptor = true
+""")
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService+arg2", "domX")
+
+        server.accept()
+
+        message = b"stdin data"
+        target.send_message(qrexec.MSG_DATA_STDIN, message)
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self.assertEqual(server.recvall(len(message)), message)
+
+        server.sendall(b"stdout data")
+        server.close()
+        messages = target.recv_all_messages()
+        # No stderr
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
     def test_connect_socket(self):
         socket_path = os.path.join(
             self.tempdir, "rpc", "qubes.SocketService+arg"
