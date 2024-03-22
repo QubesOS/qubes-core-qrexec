@@ -592,21 +592,13 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
 
         /* load service config only for service requests */
         if (cmd->service_descriptor) {
-            int wait_for_session = 0;
-            char *user = NULL;
-
-            if (load_service_config(cmd, &wait_for_session, &user) < 0) {
+            if (load_service_config_v2(cmd) < 0) {
                 LOG(ERROR, "Could not load config for command %s", buf);
                 return;
             }
 
-            if (user != NULL) {
-                free(cmd->username);
-                cmd->username = user;
-            }
-
             /* "nogui:" prefix has priority */
-            if (!cmd->nogui && wait_for_session && wait_for_session_maybe(cmd)) {
+            if (!cmd->nogui && cmd->wait_for_session && wait_for_session_maybe(cmd)) {
                 /* waiting for session, postpone actual call */
                 int slot_index;
                 for (slot_index = 0; slot_index < MAX_FDS; slot_index++)
