@@ -252,11 +252,10 @@ static int find_file(
     }
     return -1;
 }
-int load_service_config(const struct qrexec_parsed_command *cmd,
-                        int *wait_for_session, char **user) {
-    assert(cmd->service_descriptor);
-    assert(*user == NULL);
 
+static int load_service_config_raw(struct qrexec_parsed_command *cmd,
+                                   char **user)
+{
     const char *config_path = getenv("QUBES_RPC_CONFIG_PATH");
     if (!config_path)
         config_path = QUBES_RPC_CONFIG_PATH;
@@ -270,9 +269,29 @@ int load_service_config(const struct qrexec_parsed_command *cmd,
                         config_full_path, sizeof(config_full_path), NULL);
     if (ret < 0)
         return 0;
-
-    return qubes_toml_config_parse(config_full_path, wait_for_session, user);
+    return qubes_toml_config_parse(config_full_path, &cmd->wait_for_session, user);
 }
+
+int load_service_config_v2(struct qrexec_parsed_command *cmd) {
+    assert(cmd->service_descriptor);
+    char *tmp_user = NULL;
+    int res = load_service_config_raw(cmd, &tmp_user);
+    if (res >= 0 && tmp_user != NULL) {
+        free(cmd->username);
+        cmd->username = tmp_user;
+    }
+    return res;
+}
+
+int load_service_config(struct qrexec_parsed_command *cmd,
+                        int *wait_for_session, char **user) {
+    int rc = load_service_config_raw(cmd, user);
+    if (rc >= 0) {
+        *wait_for_session = cmd->wait_for_session;
+    }
+    return rc;
+}
+
 
 struct qrexec_parsed_command *parse_qubes_rpc_command(
     const char *cmdline, bool strip_username) {
