@@ -7,6 +7,7 @@
 #include <limits.h>
 
 #include "libqrexec-utils.h"
+#include "private.h"
 
 // A trivial parser for a subset of TOML
 static bool qubes_isspace(unsigned char c) {

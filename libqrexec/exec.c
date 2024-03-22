@@ -36,6 +36,7 @@
 #include <fcntl.h>
 #include "qrexec.h"
 #include "libqrexec-utils.h"
+#include "private.h"
 
 static do_exec_t *exec_func = NULL;
 void register_exec_func(do_exec_t *func) {
