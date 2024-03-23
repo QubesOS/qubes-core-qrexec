@@ -32,7 +32,7 @@ from ..tools import qrexec_policy_exec
 # pylint: disable=redefined-outer-name
 
 
-class TestPolicy:
+class MockPolicy:
     def __init__(self):
         self.resolution_type = None
         self.targets_for_ask = None
@@ -90,7 +90,7 @@ def policy():
     Mock for FilePolicy object that will evaluate the requests.
     """
 
-    policy = TestPolicy()
+    policy = MockPolicy()
     with mock.patch("qrexec.policy.parser.FilePolicy") as mock_policy:
         mock_policy.return_value = policy
         yield policy
