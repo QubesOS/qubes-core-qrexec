@@ -213,7 +213,6 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
 /* See also qrexec-agent.c:wait_for_session_maybe() */
 static void wait_for_session_maybe(char *cmdline)
 {
-    int wait_for_session = 0;
     struct qrexec_parsed_command *cmd;
     pid_t pid;
     int status;
@@ -228,9 +227,8 @@ static void wait_for_session_maybe(char *cmdline)
     if (!cmd->service_descriptor)
         goto out;
 
-    char *user = NULL;
-    load_service_config(cmd, &wait_for_session, &user);
-    if (!wait_for_session)
+    load_service_config_v2(cmd);
+    if (!cmd->wait_for_session)
         goto out;
 
     pid = fork();
