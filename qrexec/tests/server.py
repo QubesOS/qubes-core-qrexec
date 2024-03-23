@@ -38,7 +38,7 @@ except AttributeError:
     asyncio_fixture = pytest.fixture
 
 
-class TestService(SocketService):
+class MockService(SocketService):
     async def handle_request(self, params, service, source_domain):
         return json.dumps(
             {
@@ -62,7 +62,7 @@ def temp_dir():
 async def server(temp_dir):
     socket_path = os.path.join(temp_dir, "Service")
 
-    service = TestService(socket_path)
+    service = MockService(socket_path)
     server = await service.start()
 
     try:

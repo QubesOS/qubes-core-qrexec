@@ -163,7 +163,7 @@ Miscellaneous and test facilities
    :members:
    :member-order: bysource
 
-.. autoclass:: TestPolicy
+.. autoclass:: MockPolicy
    :members:
    :member-order: bysource
 
