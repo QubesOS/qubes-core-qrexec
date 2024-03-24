@@ -96,8 +96,10 @@ struct qrexec_parsed_command {
 
 /* Parse a command, return NULL on failure. Uses cmd->cmdline
    (do not free until destroy is called) */
+__attribute__((visibility("default")))
 struct qrexec_parsed_command *parse_qubes_rpc_command(
     const char *cmdline, bool strip_username);
+__attribute__((visibility("default")))
 void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
 
 /* Load service configuration.
@@ -111,20 +113,32 @@ void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
  */
 int load_service_config(struct qrexec_parsed_command *cmd_name,
                         int *wait_for_session, char **user)
-    __attribute__((deprecated("use load_service_config_v2() instead")));
-int load_service_config_v2(struct qrexec_parsed_command *cmd);
+    __attribute__((deprecated("use load_service_config_v2() instead"), visibility("default")));
+/* Load service configuration.
+ *
+ * Return:
+ *  1  - config successfuly loaded
+ *  0  - config not found
+ *  -1 - other error
+ */
+__attribute__((visibility("default")))
+int load_service_config_v2(struct qrexec_parsed_command *cmd_name);
 
 typedef void (do_exec_t)(const char *cmdline, const char *user);
+__attribute__((visibility("default")))
 void register_exec_func(do_exec_t *func);
 /*
  * exec() qubes-rpc-multiplexer if *prog* starts with magic "QUBESRPC" keyword,
  * do not return in that case; pass *envp* to execve() as en environment
  * otherwise, return false without any action
  */
+__attribute__((visibility("default")))
 void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]);
 
+__attribute__((visibility("default")))
 int exec_wait_for_session(const char *source_domain);
 
+__attribute__((visibility("default")))
 void buffer_init(struct buffer *b);
 void buffer_free(struct buffer *b);
 void buffer_append(struct buffer *b, const char *data, int len);
@@ -150,6 +164,7 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
  * @return 0 if it spawned (or might have spawned) an external process,
  * nonzero on failure.
  */
+__attribute__((visibility("default")))
 int execute_parsed_qubes_rpc_command(
         struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
         int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer);
@@ -165,8 +180,9 @@ int execute_parsed_qubes_rpc_command(
  * @return 0 if the implementation is found (and, for sockets, connected to)
  * successfully, -1 if not found, -2 if problem.
  */
+__attribute__((visibility("default")))
 int find_qrexec_service(
-        struct qrexec_parsed_command *cmd,
+        const struct qrexec_parsed_command *cmd,
         int *socket_fd, struct buffer *stdin_buffer);
 
 /** Suggested buffer size for the path buffer of find_qrexec_service. */
@@ -189,6 +205,7 @@ int find_qrexec_service(
  * @return 0 if it spawned (or might have spawned) an external process,
  * nonzero on failure.
  */
+__attribute__((visibility("default")))
 int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
                               int *stdout_fd, int *stderr_fd,
                               bool strip_username, struct buffer *buffer);
@@ -196,18 +213,26 @@ int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
  * A version of ppoll() that also correctly handles vchan's event pending
  * flag.  fds[0] is used internally and fds[0].fd must be equal to -1 on entry.
  */
+__attribute__((visibility("default")))
 int ppoll_vchan(libvchan_t *ctrl, struct pollfd *fds, size_t nfds,
                 struct timespec *timeout, const sigset_t *sigmask);
 
+__attribute__((visibility("default")))
 int read_vchan_all(libvchan_t *vchan, void *data, size_t size);
+__attribute__((visibility("default")))
 int write_vchan_all(libvchan_t *vchan, const void *data, size_t size);
+__attribute__((visibility("default")))
 int read_all(int fd, void *buf, int size);
+__attribute__((visibility("default")))
 int write_all(int fd, const void *buf, int size);
+__attribute__((visibility("default")))
 void fix_fds(int fdin, int fdout, int fderr);
 void set_nonblock(int fd);
 void set_block(int fd);
 
+__attribute__((visibility("default")))
 int get_server_socket(const char *);
+__attribute__((visibility("default")))
 int do_accept(int s);
 
 void set_nonblock(int fd);
@@ -234,6 +259,7 @@ struct prefix_data {
     size_t len;
 };
 
+__attribute__((visibility("default")))
 int send_exit_code(libvchan_t *vchan, int status);
 
 /* Set of options for process_io(). */
@@ -277,6 +303,7 @@ struct process_io_request {
  *
  * Returns intended exit code (local or remote), but calls exit() on errors.
  */
+__attribute__((visibility("default")))
 int process_io(const struct process_io_request *req);
 
 // Logging
@@ -301,10 +328,11 @@ int process_io(const struct process_io_request *req);
 
 #endif
 
-
+__attribute__((visibility("default")))
 void qrexec_log(int level, int errnoval, const char *file, int line,
                 const char *func, const char *fmt, ...) __attribute__((format(printf, 6, 7)));
 
+__attribute__((visibility("default")))
 void setup_logging(const char *program_name);
 
 /**
@@ -317,6 +345,7 @@ void setup_logging(const char *program_name);
  * @param len The length of the data returned
  * @return The value on success.  On failure returns NULL and sets errno.
  */
+__attribute__((visibility("default")))
 char *qubesd_call(const char *dest, char *method, char *arg, size_t *len);
 
 /**
@@ -331,6 +360,7 @@ char *qubesd_call(const char *dest, char *method, char *arg, size_t *len);
  * @param[out] len The number of bytes read.
  * @return A buffer to the number of bytes read.  On failure returns NULL and sets errno.
  */
+__attribute__((visibility("default")))
 void *qubes_read_all_to_malloc(int fd, size_t initial_buffer_size, size_t max_bytes, size_t *len);
 
 /**
@@ -338,6 +368,7 @@ void *qubes_read_all_to_malloc(int fd, size_t initial_buffer_size, size_t max_by
  *
  * Returns true on success.  Otherwise returns false setting errno.
  */
+__attribute__((visibility("default")))
 bool qubes_sendmsg_all(struct msghdr *msg, int sock);
 
 /**
@@ -349,6 +380,7 @@ bool qubes_sendmsg_all(struct msghdr *msg, int sock);
  * @param is_server Is this a server or a client vchan?
  * @param timeout The timeout to use.
  */
+__attribute__((visibility("default")))
 int qubes_wait_for_vchan_connection_with_timeout(
         libvchan_t *conn, int wait_fd, bool is_server, time_t timeout);
 #endif /* LIBQREXEC_UTILS_H */
