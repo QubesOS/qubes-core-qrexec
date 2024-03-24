@@ -30,6 +30,7 @@
 #include <unistd.h>
 
 #include "libqrexec-utils.h"
+#include "remote.h"
 
 static _Noreturn void handle_vchan_error(const char *op)
 {
@@ -107,8 +108,8 @@ int process_io(const struct process_io_request *req) {
     bool is_service = req->is_service;
     bool replace_chars_stdout = req->replace_chars_stdout;
     bool replace_chars_stderr = req->replace_chars_stderr;
-    int data_protocol_version = req->data_protocol_version;
-
+    const int data_protocol_version = req->data_protocol_version;
+    const size_t max_chunk_size = max_data_chunk_size(data_protocol_version);
     pid_t local_pid = req->local_pid;
     volatile sig_atomic_t *sigchld = req->sigchld;
     volatile sig_atomic_t *sigusr1 = req->sigusr1;
@@ -124,6 +125,19 @@ int process_io(const struct process_io_request *req) {
     struct timespec zero_timeout = { 0, 0 };
     struct timespec normal_timeout = { 10, 0 };
     struct prefix_data empty = { 0, 0 }, prefix = req->prefix_data;
+
+    struct buffer remote_buffer = {
+        .data = malloc(max_chunk_size),
+        .buflen = max_chunk_size,
+    };
+    if (remote_buffer.data == NULL)
+        handle_vchan_error("remote buffer alloc");
+    struct buffer stdin_buffer = {
+        .data = malloc(max_chunk_size),
+        .buflen = max_chunk_size,
+    };
+    if (stdin_buffer.data == NULL)
+        handle_vchan_error("stdin buffer alloc");
 
     sigemptyset(&pollmask);
     sigaddset(&pollmask, SIGCHLD);
@@ -269,14 +283,14 @@ int process_io(const struct process_io_request *req) {
         }
 
         /* handle_remote_data will check if any data is available */
-        switch (handle_remote_data(
+        switch (handle_remote_data_v2(
                     vchan, stdin_fd,
                     &remote_status,
                     stdin_buf,
-                    data_protocol_version,
                     replace_chars_stdout > 0,
                     replace_chars_stderr > 0,
-                    is_service)) {
+                    is_service,
+                    &remote_buffer)) {
             case REMOTE_ERROR:
                 handle_vchan_error("read");
                 break;
@@ -296,9 +310,9 @@ int process_io(const struct process_io_request *req) {
                 break;
         }
         if (prefix.len > 0 || (stdout_fd >= 0 && fds[FD_STDOUT].revents)) {
-            switch (handle_input(
+            switch (handle_input_v2(
                         vchan, stdout_fd, stdout_msg_type,
-                        data_protocol_version, &prefix)) {
+                        &prefix, &stdin_buffer)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send(handle_input stdout)");
                     break;
@@ -309,9 +323,9 @@ int process_io(const struct process_io_request *req) {
             }
         }
         if (stderr_fd >= 0 && fds[FD_STDERR].revents) {
-            switch (handle_input(
+            switch (handle_input_v2(
                         vchan, stderr_fd, MSG_DATA_STDERR,
-                        data_protocol_version, &empty)) {
+                        &empty, &stdin_buffer)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send(handle_input stderr)");
                     break;
@@ -339,6 +353,9 @@ int process_io(const struct process_io_request *req) {
         } else
             PERROR("waitpid");
     }
+
+    free(remote_buffer.data);
+    free(stdin_buffer.data);
 
     if (!is_service && remote_status)
         return remote_status;

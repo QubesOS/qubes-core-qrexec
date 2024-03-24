@@ -229,45 +229,10 @@ void do_replace_chars(char *buf, int len);
 #define REMOTE_EOF     0
 #define REMOTE_OK      1
 
-/*
- * Handle data from vchan. Sends MSG_DATA_STDIN and MSG_DATA_STDOUT to
- * specified FD (unless it's -1), and MSG_DATA_STDERR to our stderr.
- *
- * Return codes:
- *   REMOTE_EXITED - remote process terminated, do not send more data to it
- *     ("status" will be set)
- *   REMOTE_ERROR - vchan error occured
- *   REMOTE_EOF - EOF received, do not access this FD again
- *   REMOTE_OK - maybe some data processed, call again when buffer space and
- *     more data available
- *
- * Options:
- *   replace_chars_stdout, replace_chars_stderr - remove non-printable
- *     characters from stdout/stderr
- */
-int handle_remote_data(
-    libvchan_t *data_vchan, int stdin_fd, int *status,
-    struct buffer *stdin_buf, int data_protocol_version,
-    bool replace_chars_stdout, bool replace_chars_stderr, bool is_service);
-
 struct prefix_data {
     const char *data;
     size_t len;
 };
-
-/*
- * Handle data from the specified FD (cannot be -1) and send it over vchan
- * with a given message type (MSG_DATA_STDIN/STDOUT/STDERR).
- *
- * Return codes:
- *   REMOTE_ERROR - vchan error occured
- *   REMOTE_EOF - EOF received, do not access this FD again
- *   REMOTE_OK - some data processed, call it again when buffer space and
- *     more data availabla
- */
-int handle_input(
-    libvchan_t *vchan, int fd, int msg_type,
-    int data_protocol_version, struct prefix_data *data);
 
 int send_exit_code(libvchan_t *vchan, int status);
 
