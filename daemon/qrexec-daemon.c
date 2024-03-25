@@ -1063,6 +1063,17 @@ static size_t compute_service_length(const char *const remote_cmdline) {
     return service_length;
 }
 
+/* called from do_fork_exec */
+static _Noreturn void do_exec(const char *prog, const char *username __attribute__((unused)))
+{
+    /* avoid calling qubes-rpc-multiplexer through shell */
+    exec_qubes_rpc_if_requested(prog, environ);
+
+    /* if above haven't executed qubes-rpc-multiplexer, pass it to shell */
+    execl("/bin/bash", "bash", "-c", prog, NULL);
+    PERROR("exec bash");
+    _exit(126);
+}
 
 _Noreturn static void handle_execute_service_child(
         const int remote_domain_id,
@@ -1115,23 +1126,13 @@ _Noreturn static void handle_execute_service_child(
                      type,
                      target_domain) <= 0)
             daemon__exit(126);
-        char *cid;
-        if (asprintf(&cid, "%s,%s,%d", request_id->ident, remote_domain_name, remote_domain_id) <= 0)
-            daemon__exit(126);
-
-        const char *to_exec[] = {
-            "/usr/bin/qrexec-client",
-            "-Ed",
-            target,
-            "-c",
-            cid,
-            "--",
-            cmd,
-            NULL,
-        };
-        execv(to_exec[0], (char **)to_exec);
-        LOG(ERROR, "execve() failed: %m");
-        daemon__exit(126);
+        register_exec_func(&do_exec);
+        daemon__exit(run_qrexec_to_dom0(request_id,
+                           remote_domain_id,
+                           remote_domain_name,
+                           cmd,
+                           5 /* 5 second timeout */,
+                           false /* return 0 not remote status code */));
     } else {
         char *buf;
         if (strncmp("@dispvm:", target, sizeof("@dispvm:") - 1) == 0) {

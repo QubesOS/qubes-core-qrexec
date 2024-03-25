@@ -138,7 +138,7 @@ static int do_fork_exec(const char *user,
                 abort();
             status = errno;
             while (write(statuspipe[1], &status, sizeof status) <= 0) {}
-            exit(-1);
+            _exit(-1);
         }
         default: {
             close(statuspipe[1]);

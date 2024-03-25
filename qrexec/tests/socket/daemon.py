@@ -930,7 +930,6 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
-    @unittest.expectedFailure
     def test_run_dom0_service_socket_no_send_descriptor(self):
         """Socket based service with no service descriptor"""
         config_path = os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg")

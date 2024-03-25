@@ -75,7 +75,7 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer)
         ret = write(fd, data + written, len - written);
         if (ret == 0) {
             PERROR("write_stdin: write returns 0 ???");
-            exit(1);
+            abort();
         }
         if (ret == -1) {
             if (errno != EAGAIN)
