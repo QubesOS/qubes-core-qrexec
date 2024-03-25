@@ -930,7 +930,40 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
+    @unittest.expectedFailure
+    def test_run_dom0_service_socket_no_send_descriptor(self):
+        """Socket based service with no service descriptor"""
+        config_path = os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg")
+        with open(config_path, "w") as f:
+            f.write("skip-service-descriptor = true\n")
+        def callback(source, server):
+            message = b"stdin data"
+            source.send_message(qrexec.MSG_DATA_STDIN, message)
+            source.send_message(qrexec.MSG_DATA_STDIN, b"")
+            self.assertEqual(server.recvall(len(message)), message)
+
+            server.sendall(b"stdout data")
+            server.close()
+        self._test_run_dom0_service_socket_meta(callback)
+
     def test_run_dom0_service_socket(self):
+        """Socket based service"""
+        def callback(source, server):
+            expected = b"qubes.SocketService+arg src_domain name src_domain\0"
+            self.assertEqual(server.recvall(len(expected)), expected)
+
+            message = b"stdin data"
+            source.send_message(qrexec.MSG_DATA_STDIN, message)
+            source.send_message(qrexec.MSG_DATA_STDIN, b"")
+            self.assertEqual(server.recvall(len(message)), message)
+
+            server.sendall(b"stdout data")
+            server.close()
+        self._test_run_dom0_service_socket_meta(callback)
+
+    def _test_run_dom0_service_socket_meta(self, callback):
+        """Socket based service meta test"""
+
         socket_path = os.path.join(
             self.tempdir, "rpc", "qubes.SocketService+arg"
         )
@@ -940,17 +973,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         source = self.connect_service_request(cmd)
 
         server.accept()
-
-        expected = b"qubes.SocketService+arg src_domain name src_domain\0"
-        self.assertEqual(server.recvall(len(expected)), expected)
-
-        message = b"stdin data"
-        source.send_message(qrexec.MSG_DATA_STDIN, message)
-        source.send_message(qrexec.MSG_DATA_STDIN, b"")
-        self.assertEqual(server.recvall(len(message)), message)
-
-        server.sendall(b"stdout data")
-        server.close()
+        callback(source, server)
 
         self.assertEqual(
             source.recv_all_messages(),
@@ -965,58 +988,19 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 
     def test_run_dom0_service_socket_no_read(self):
         """Socket based service that don't read its input stream"""
-
-        socket_path = os.path.join(
-            self.tempdir, "rpc", "qubes.SocketService+arg"
-        )
-        server = qrexec.socket_server(socket_path)
-        self.addCleanup(server.close)
-        cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
-        source = self.connect_service_request(cmd)
-
-        server.accept()
-        server.sendall(b"stdout data")
-        server.close()
-
-        source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data")
-        source.send_message(qrexec.MSG_DATA_STDIN, b"")
-
-        self.assertEqual(
-            source.recv_all_messages(),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
-        self.client.wait()
-        self.assertEqual(self.client.returncode, 0)
+        def callback(source, server):
+            server.sendall(b"stdout data")
+            server.close()
+            source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data")
+            source.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self._test_run_dom0_service_socket_meta(callback)
 
     def test_run_dom0_service_socket_close(self):
         """Socket service closes connection"""
-
-        socket_path = os.path.join(
-            self.tempdir, "rpc", "qubes.SocketService+arg"
-        )
-        server = qrexec.socket_server(socket_path)
-        self.addCleanup(server.close)
-        cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
-        source = self.connect_service_request(cmd)
-
-        server.accept()
-        server.sendall(b"stdout data")
-        server.close()
-
-        self.assertEqual(
-            source.recv_all_messages(),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
-        self.client.wait()
-        self.assertEqual(self.client.returncode, 0)
+        def callback(source, server):
+            server.sendall(b"stdout data")
+            server.close()
+        self._test_run_dom0_service_socket_meta(callback)
 
     def test_run_dom0_service_socket_shutdown_rd(self):
         """Service does shutdown(SHUT_RD)"""
