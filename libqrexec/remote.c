@@ -30,17 +30,24 @@
 #include <assert.h>
 
 #include "libqrexec-utils.h"
+#include "remote.h"
 
-int handle_remote_data(
+int handle_remote_data_v2(
     libvchan_t *data_vchan, int stdin_fd, int *status,
-    struct buffer *stdin_buf, int data_protocol_version,
-    bool replace_chars_stdout, bool replace_chars_stderr, bool is_service)
+    struct buffer *stdin_buf,
+    bool replace_chars_stdout,
+    bool replace_chars_stderr,
+    bool is_service,
+    const struct buffer *buffer)
 {
     struct msg_header hdr;
-    const size_t max_len = max_data_chunk_size(data_protocol_version);
-    char *buf;
+    const size_t max_len = (size_t)buffer->buflen;
+    char *buf = buffer->data;
     int rc = REMOTE_ERROR;
     bool msg_data_warned = false;
+
+    if (buffer->buflen < 0)
+        abort();
 
     /* do not receive any data if we have something already buffered */
     switch (flush_client_data(stdin_fd, stdin_buf)) {
@@ -51,12 +58,6 @@ int handle_remote_data(
         case WRITE_STDIN_ERROR:
             PERROR("write");
             return REMOTE_EOF;
-    }
-
-    buf = malloc(max_len);
-    if (!buf) {
-        PERROR("malloc");
-        return REMOTE_ERROR;
     }
 
     while (libvchan_data_ready(data_vchan) > 0) {
@@ -143,25 +144,22 @@ int handle_remote_data(
     }
     rc = REMOTE_OK;
 out:
-    free(buf);
     return rc;
 }
 
-int handle_input(
+int handle_input_v2(
     libvchan_t *vchan, int fd, int msg_type,
-    int data_protocol_version, struct prefix_data *prefix_data)
+    struct prefix_data *prefix_data,
+    const struct buffer *buffer)
 {
-    const size_t max_len = max_data_chunk_size(data_protocol_version);
-    char *buf;
+    const size_t max_len = (size_t)buffer->buflen;
+    char *buf = buffer->data;
     ssize_t len;
     struct msg_header hdr;
     int rc = REMOTE_ERROR, buf_space;
 
-    buf = malloc(max_len);
-    if (!buf) {
-        PERROR("malloc");
-        return REMOTE_ERROR;
-    }
+    if (buffer->buflen < 0)
+        abort();
 
     static_assert(SSIZE_MAX >= INT_MAX, "can't happen on Linux");
     hdr.type = msg_type;
@@ -204,7 +202,6 @@ int handle_input(
     }
     rc = REMOTE_OK;
 out:
-    free(buf);
     return rc;
 }
 

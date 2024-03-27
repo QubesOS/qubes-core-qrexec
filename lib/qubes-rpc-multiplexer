@@ -34,6 +34,8 @@ export QREXEC_SERVICE_FULL_NAME="$1"
 SERVICE_WITHOUT_ARGUMENT="${1%%+*}"
 if [ "${QREXEC_SERVICE_FULL_NAME}" != "${SERVICE_WITHOUT_ARGUMENT}" ]; then
     export QREXEC_SERVICE_ARGUMENT="${QREXEC_SERVICE_FULL_NAME#*+}"
+else
+    unset QREXEC_SERVICE_ARGUMENT
 fi
 
 
@@ -51,7 +53,6 @@ for DIR in $QREXEC_SERVICE_PATH; do
 done
 IFS=$ifs
 
-# shellcheck disable=SC2086
-exec "$CFG_FILE" ${QREXEC_SERVICE_ARGUMENT}
+exec "$CFG_FILE" ${QREXEC_SERVICE_ARGUMENT:+"$QREXEC_SERVICE_ARGUMENT"}
 echo "$0: failed to execute handler for $1" >&2
 exit 1

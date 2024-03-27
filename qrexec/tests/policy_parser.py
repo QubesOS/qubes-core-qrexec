@@ -1579,7 +1579,6 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.default_target, "@dispvm:default-dvm")
         self.assertEqual(resolution.request.target, "test-vm1")
 
-    @unittest.expectedFailure
     def test_060_eval_to_dom0(self):
         policy = parser.StringPolicy(
             policy="""\
@@ -1589,8 +1588,8 @@ class TC_40_evaluate(unittest.TestCase):
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
-        self.assertEqual(resolution.target, "@adminvm")
-        self.assertEqual(resolution.request.target, "dom0")
+        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(resolution.request.target, "@adminvm")
 
     def test_061_eval_to_dom0_keyword(self):
         policy = parser.StringPolicy(

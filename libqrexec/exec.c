@@ -50,22 +50,28 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
         char *prog_copy;
         char *tok, *savetok;
         char *argv[16]; // right now 6 are used, but allow future extensions
-        size_t i = 0;
+        size_t i = 1;
 
-        prog_copy = strdup(prog);
+        if (prog[RPC_REQUEST_COMMAND_LEN] != ' ') {
+            LOG(ERROR, "\"" RPC_REQUEST_COMMAND "\" not followed by space");
+            _exit(126);
+        }
+
+        prog_copy = strdup(prog + RPC_REQUEST_COMMAND_LEN + 1);
         if (!prog_copy) {
             PERROR("strdup");
-            _exit(1);
+            _exit(126);
         }
 
         tok=strtok_r(prog_copy, " ", &savetok);
-        do {
+        while (tok != NULL) {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
                 LOG(ERROR, "To many arguments to %s", RPC_REQUEST_COMMAND);
-                exit(1);
+                _exit(126);
             }
             argv[i++] = tok;
-        } while ((tok=strtok_r(NULL, " ", &savetok)));
+            tok=strtok_r(NULL, " ", &savetok);
+        }
         argv[i] = NULL;
 
         argv[0] = getenv("QREXEC_MULTIPLEXER_PATH");
@@ -278,12 +284,11 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
 
     struct qrexec_parsed_command *cmd;
 
-    if (!(cmd = malloc(sizeof(*cmd)))) {
-        PERROR("malloc");
+    if (!(cmd = calloc(1, sizeof(*cmd)))) {
+        PERROR("calloc");
         return NULL;
     }
 
-    memset(cmd, 0, sizeof(*cmd));
     cmd->cmdline = cmdline;
 
     if (strip_username) {
@@ -307,13 +312,18 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
     } else
         cmd->nogui = false;
 
-    /* If the command starts with "QUBESRPC ", parse service descriptor */
-    if (strncmp(cmd->command, RPC_REQUEST_COMMAND " ",
-                RPC_REQUEST_COMMAND_LEN + 1) == 0) {
+    /* If the command starts with "QUBESRPC", parse service descriptor */
+    if (strncmp(cmd->command, RPC_REQUEST_COMMAND,
+                RPC_REQUEST_COMMAND_LEN) == 0) {
         const char *start, *end;
 
-        /* Parse service descriptor ("qubes.Service+arg") */
+        /* Check for space after "QUBESRPC" */
+        if (cmd->command[RPC_REQUEST_COMMAND_LEN] != ' ') {
+            LOG(ERROR, "\"" RPC_REQUEST_COMMAND "\" not followed by space");
+            goto err;
+        }
 
+        /* Parse service descriptor ("qubes.Service+arg") */
         start = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
         end = strchr(start, ' ');
         if (!end) {
