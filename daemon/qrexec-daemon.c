@@ -986,6 +986,7 @@ static enum policy_response connect_daemon_socket(
     }
     daemon_socket = fds[0];
 
+    fflush(NULL);
     pid = fork();
     switch (pid) {
         case -1:
@@ -1079,6 +1080,7 @@ static void handle_execute_service(
         return;
     }
 
+    fflush(NULL);
     switch (pid=fork()) {
         case -1:
             PERROR("fork");
