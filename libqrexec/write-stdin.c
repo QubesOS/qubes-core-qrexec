@@ -90,30 +90,3 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer)
     }
     return WRITE_STDIN_OK;
 }
-
-/* 
- * Data feed process has exited, so we need to clear all control structures for 
- * the client. However, if we have buffered data for the client (which is rare btw),
- * fire&forget a separate process to flush them.
- */
-int fork_and_flush_stdin(int fd, struct buffer *buffer)
-{
-    int i;
-    if (!buffer_len(buffer))
-        return 0;
-    switch (fork()) {
-        case -1:
-            PERROR("fork");
-            exit(1);
-        case 0:
-            break;
-        default:
-            return 1;
-    }
-    for (i = 0; i < MAX_FDS; i++)
-        if (i != fd && i != 2)
-            close(i);
-    set_block(fd);
-    write_all(fd, buffer_data(buffer), buffer_len(buffer));
-    _exit(0);
-}
