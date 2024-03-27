@@ -34,12 +34,12 @@ static char *limited_malloc(int len)
         (total_mem > BUFFER_LIMIT) || (len <= 0))
     {
         LOG(ERROR, "attempt to allocate >BUFFER_LIMIT");
-        exit(1);
+        _exit(1);
     }
     ret = malloc((size_t)len);
     if (!ret) {
         PERROR("malloc");
-        exit(1);
+        _exit(1);
     }
     return ret;
 }
@@ -81,11 +81,11 @@ void buffer_append(struct buffer *b, const char *data, int len)
     char *qdata;
     if (b->buflen < 0 || b->buflen > BUFFER_LIMIT) {
         LOG(ERROR, "buffer_append buflen %d", len);
-        exit(1);
+        _exit(1);
     }
     if (len < 0 || len > BUFFER_LIMIT) {
         LOG(ERROR, "buffer_append %d", len);
-        exit(1);
+        _exit(1);
     }
     if (len == 0)
         return;
@@ -104,7 +104,7 @@ void buffer_remove(struct buffer *b, int len)
     char *qdata = NULL;
     if (len < 0 || len > b->buflen) {
         LOG(ERROR, "buffer_remove %d/%d", len, b->buflen);
-        exit(1);
+        _exit(1);
     }
     newsize = b->buflen - len;
     if (newsize > 0) {

@@ -232,8 +232,7 @@ int main(int argc, char **argv)
     strncpy(params.target_domain, argv[optind],
             sizeof(params.target_domain) - 1);
 
-    snprintf(params.request_id.ident,
-            sizeof(params.request_id.ident), "SOCKET");
+    memcpy(params.request_id.ident, "SOCKET", sizeof("SOCKET"));
 
     if (!write_all(trigger_fd, &hdr, sizeof(hdr))) {
         PERROR("write(hdr) to agent");

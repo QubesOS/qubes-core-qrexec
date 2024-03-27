@@ -34,7 +34,7 @@
 static _Noreturn void handle_vchan_error(const char *op)
 {
     LOG(ERROR, "Error while vchan %s, exiting", op);
-    exit(1);
+    _exit(1);
 }
 
 /*

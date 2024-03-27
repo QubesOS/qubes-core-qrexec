@@ -36,6 +36,7 @@
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 #include "../libqrexec/ioall.h"
+#include "qrexec-daemon-common.h"
 
 #define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
 #define QREXEC_SOCKET_PATH "/run/qubes/policy.sock"
@@ -105,7 +106,6 @@ static const char default_user_keyword[] = "DEFAULT:";
 static int opt_quiet = 0;
 static int opt_direct = 0;
 
-static const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
 static const char *policy_program = QREXEC_POLICY_PROGRAM;
 
 #ifdef __GNUC__
@@ -156,15 +156,19 @@ static void unlink_qrexec_socket(void)
     char link_to_socket_name[strlen(remote_domain_name) + sizeof(socket_address)];
 
     int v = snprintf(socket_address, sizeof(socket_address),
-                     "%s/qrexec.%d", socket_dir, remote_domain_id);
-    if (v < (int)sizeof("/qrexec.1") || v >= (int)sizeof(socket_address))
+                     "qrexec.%d", remote_domain_id);
+    if (v < (int)sizeof("qrexec.1") - 1 || v >= (int)sizeof(socket_address))
         abort();
     v = snprintf(link_to_socket_name, sizeof(link_to_socket_name),
-                 "%s/qrexec.%s", socket_dir, remote_domain_name);
-    if (v < (int)sizeof("/qrexec.") || v >= (int)sizeof(link_to_socket_name))
+                 "qrexec.%s", remote_domain_name);
+    if (v < (int)sizeof("qrexec.") - 1 || v >= (int)sizeof(link_to_socket_name))
         abort();
-    unlink(socket_address);
-    unlink(link_to_socket_name);
+    v = unlink(socket_address);
+    if (v != 0 && !(v == -1 && errno == ENOENT))
+        err(1, "unlink(%s)", socket_address);
+    v = unlink(link_to_socket_name);
+    if (v != 0 && !(v == -1 && errno == ENOENT))
+        err(1, "unlink(%s)", link_to_socket_name);
 }
 
 static void handle_vchan_error(const char *op)
@@ -178,12 +182,17 @@ static int create_qrexec_socket(int domid, const char *domname)
 {
     char socket_address[40];
     char link_to_socket_name[strlen(domname) + sizeof(socket_address)];
+    int res;
 
-    snprintf(socket_address, sizeof(socket_address),
-             "%s/qrexec.%d", socket_dir, domid);
-    snprintf(link_to_socket_name, sizeof link_to_socket_name,
-             "%s/qrexec.%s", socket_dir, domname);
-    unlink(link_to_socket_name);
+    if ((unsigned)snprintf(socket_address, sizeof(socket_address),
+                           "qrexec.%d", domid) >= sizeof(socket_address))
+        errx(1, "socket name too long");
+    if ((unsigned)snprintf(link_to_socket_name, sizeof link_to_socket_name,
+                           "qrexec.%s", domname) >= sizeof link_to_socket_name)
+        errx(1, "socket link name too long");
+    res = unlink(link_to_socket_name);
+    if (res != 0 && !(res == -1 && errno == ENOENT))
+        err(1, "unlink(%s)", link_to_socket_name);
 
     /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
     umask(0);
@@ -329,9 +338,16 @@ static void init(int xid)
 
     close(0);
 
+    if (chdir(socket_dir) < 0) {
+        PERROR("chdir %s failed", socket_dir);
+        exit(1);
+    }
+
     if (!opt_direct) {
-        snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
-                 "/var/log/qubes/qrexec.%s.log", remote_domain_name);
+        if ((unsigned)snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
+                               "qrexec.%s.log", remote_domain_name) >=
+                sizeof(qrexec_error_log_name))
+            errx(1, "remote domain name too long");
         umask(0007);        // make the log readable by the "qubes" group
         logfd =
             open(qrexec_error_log_name, O_WRONLY | O_CREAT | O_TRUNC,
@@ -345,10 +361,6 @@ static void init(int xid)
         dup2(logfd, 1);
         dup2(logfd, 2);
 
-        if (chdir("/var/run/qubes") < 0) {
-            PERROR("chdir /var/run/qubes failed");
-            exit(1);
-        }
         if (setsid() < 0) {
             PERROR("setsid()");
             exit(1);
@@ -974,6 +986,7 @@ static enum policy_response connect_daemon_socket(
     }
     daemon_socket = fds[0];
 
+    fflush(NULL);
     pid = fork();
     switch (pid) {
         case -1:
@@ -1028,6 +1041,27 @@ static enum policy_response connect_daemon_socket(
     }
 }
 
+static size_t compute_service_length(const char *const remote_cmdline) {
+    const size_t service_length = strlen(remote_cmdline) + 1;
+    if (service_length < 2 || service_length > MAX_QREXEC_CMD_LEN) {
+        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
+        errx(1, "Bad command: command line too long or empty: length %zu\n", service_length);
+    }
+    return service_length;
+}
+
+/* called from do_fork_exec */
+static _Noreturn void do_exec(const char *prog, const char *username __attribute__((unused)))
+{
+    /* avoid calling qubes-rpc-multiplexer through shell */
+    exec_qubes_rpc_if_requested(prog, environ);
+
+    /* if above haven't executed qubes-rpc-multiplexer, pass it to shell */
+    execl("/bin/bash", "bash", "-c", prog, NULL);
+    PERROR("exec bash");
+    _exit(126);
+}
+
 static void handle_execute_service(
         const int remote_domain_id,
         const char *remote_domain_name,
@@ -1046,6 +1080,7 @@ static void handle_execute_service(
         return;
     }
 
+    fflush(NULL);
     switch (pid=fork()) {
         case -1:
             PERROR("fork");
@@ -1102,6 +1137,13 @@ static void handle_execute_service(
                      type,
                      target_domain) <= 0)
             _exit(126);
+        register_exec_func(&do_exec);
+        run_qrexec_to_dom0(request_id,
+                           remote_domain_id,
+                           remote_domain_name,
+                           cmd,
+                           5 /* 5 second timeout */,
+                           false /* exit with 0 not remote status code */);
     } else {
         char *buf;
         if (strncmp("@dispvm:", target, sizeof("@dispvm:") - 1) == 0) {
@@ -1142,24 +1184,36 @@ static void handle_execute_service(
             }
             free(buf);
         }
-    }
-    char *cid;
-    if (asprintf(&cid, "%s,%s,%d", request_id->ident, remote_domain_name, remote_domain_id) <= 0)
-        _exit(126);
+        int s = connect_unix_socket(target);
+        int data_domain;
+        int data_port;
+        negotiate_connection_params(s,
+                remote_domain_id,
+                MSG_EXEC_CMDLINE,
+                cmd,
+                compute_service_length(cmd),
+                &data_domain,
+                &data_port);
+        int wait_connection_end = -1;
+        if (disposable) {
+            wait_connection_end = s;
+        } else {
+            close(s);
+        }
 
-    const char *to_exec[] = {
-        "/usr/bin/qrexec-client",
-        disposable ? "-EWkd" : "-Ed",
-        target,
-        "-c",
-        cid,
-        "--",
-        cmd,
-        NULL,
-    };
-    execv(to_exec[0], (char **)to_exec);
-    LOG(ERROR, "execve() failed: %m");
-    _exit(126);
+        s = connect_unix_socket_by_id((unsigned)remote_domain_id);
+        send_service_connect(s, request_id->ident, data_domain, data_port);
+        close(s);
+        if (wait_connection_end != -1) {
+            /* wait for EOF */
+            struct pollfd fds[1] = {
+                { .fd = wait_connection_end, .events = POLLIN | POLLHUP, .revents = 0 },
+            };
+            poll(fds, 1, -1);
+            size_t l;
+            qubesd_call(target, "admin.vm.Kill", "", &l);
+        }
+    }
 }
 
 

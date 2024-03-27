@@ -19,6 +19,7 @@
  *
  */
 
+#include <limits.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdio.h>
@@ -38,26 +39,9 @@
 #include <time.h>
 
 #include "libqrexec-utils.h"
-
-// whether qrexec-client should replace problematic bytes with _ before printing the output
-static int replace_chars_stdout = 0;
-static int replace_chars_stderr = 0;
-
-static int exit_with_code = 1;
+#include "qrexec-daemon-common.h"
 
 #define VCHAN_BUFFER_SIZE 65536
-
-#define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
-
-static int local_stdin_fd, local_stdout_fd;
-static pid_t local_pid = 0;
-/* flag if this is "remote" end of service call. In this case swap STDIN/STDOUT
- * msg types and send exit code at the end */
-static int is_service = 0;
-
-static volatile sig_atomic_t sigchld = 0;
-
-static const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
 
 extern char **environ;
 
@@ -77,126 +61,6 @@ static void set_remote_domain(const char *src_domain_name) {
     }
 }
 
-/* initialize data_protocol_version */
-static int handle_agent_handshake(libvchan_t *vchan, int remote_send_first)
-{
-    struct msg_header hdr;
-    struct peer_info info;
-    int data_protocol_version = -1;
-    int who = 0; // even - send to remote, odd - receive from remote
-
-    while (who < 2) {
-        if ((who+remote_send_first) & 1) {
-            if (!read_vchan_all(vchan, &hdr, sizeof(hdr))) {
-                PERROR("daemon handshake");
-                return -1;
-            }
-            if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-                LOG(ERROR, "Invalid daemon MSG_HELLO");
-                return -1;
-            }
-            if (!read_vchan_all(vchan, &info, sizeof(info))) {
-                PERROR("daemon handshake");
-                return -1;
-            }
-
-            data_protocol_version = info.version < QREXEC_PROTOCOL_VERSION ?
-                                    info.version : QREXEC_PROTOCOL_VERSION;
-            if (data_protocol_version < QREXEC_DATA_MIN_VERSION) {
-                LOG(ERROR, "Incompatible daemon protocol version "
-                        "(daemon %d, client %d)",
-                        info.version, QREXEC_PROTOCOL_VERSION);
-                return -1;
-            }
-        } else {
-            hdr.type = MSG_HELLO;
-            hdr.len = sizeof(info);
-            info.version = QREXEC_PROTOCOL_VERSION;
-
-            if (!write_vchan_all(vchan, &hdr, sizeof(hdr))) {
-                LOG(ERROR, "Failed to send MSG_HELLO hdr to daemon");
-                return -1;
-            }
-            if (!write_vchan_all(vchan, &info, sizeof(info))) {
-                LOG(ERROR, "Failed to send MSG_HELLO to daemon");
-                return -1;
-            }
-        }
-        who++;
-    }
-    return data_protocol_version;
-}
-
-static int handle_daemon_handshake(int fd)
-{
-    struct msg_header hdr;
-    struct peer_info info;
-
-    /* daemon send MSG_HELLO first */
-    if (!read_all(fd, &hdr, sizeof(hdr))) {
-        PERROR("daemon handshake");
-        return -1;
-    }
-    if (hdr.type != MSG_HELLO || hdr.len != sizeof(info)) {
-        LOG(ERROR, "Invalid daemon MSG_HELLO");
-        return -1;
-    }
-    if (!read_all(fd, &info, sizeof(info))) {
-        PERROR("daemon handshake");
-        return -1;
-    }
-
-    if (info.version != QREXEC_PROTOCOL_VERSION) {
-        LOG(ERROR, "Incompatible daemon protocol version "
-            "(daemon %d, client %d)",
-            info.version, QREXEC_PROTOCOL_VERSION);
-        return -1;
-    }
-
-    hdr.type = MSG_HELLO;
-    hdr.len = sizeof(info);
-    info.version = QREXEC_PROTOCOL_VERSION;
-
-    if (!write_all(fd, &hdr, sizeof(hdr))) {
-        LOG(ERROR, "Failed to send MSG_HELLO hdr to daemon");
-        return -1;
-    }
-    if (!write_all(fd, &info, sizeof(info))) {
-        LOG(ERROR, "Failed to send MSG_HELLO to daemon");
-        return -1;
-    }
-    return 0;
-}
-
-static int connect_unix_socket(const char *domname)
-{
-    int s, len;
-    struct sockaddr_un remote;
-
-    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        PERROR("socket");
-        return -1;
-    }
-
-    remote.sun_family = AF_UNIX;
-    snprintf(remote.sun_path, sizeof remote.sun_path,
-             "%s/qrexec.%s", socket_dir, domname);
-    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
-    if (connect(s, (struct sockaddr *) &remote, len) == -1) {
-        PERROR("connect");
-        exit(1);
-    }
-    if (handle_daemon_handshake(s) < 0)
-        exit(1);
-    return s;
-}
-
-static void sigchld_handler(int x __attribute__((__unused__)))
-{
-    sigchld = 1;
-    signal(SIGCHLD, sigchld_handler);
-}
-
 /* called from do_fork_exec */
 static _Noreturn void do_exec(const char *prog, const char *username __attribute__((unused)))
 {
@@ -207,179 +71,6 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     execl("/bin/bash", "bash", "-c", prog, NULL);
     PERROR("exec bash");
     exit(1);
-}
-
-
-/* See also qrexec-agent.c:wait_for_session_maybe() */
-static void wait_for_session_maybe(char *cmdline)
-{
-    int wait_for_session = 0;
-    struct qrexec_parsed_command *cmd;
-    pid_t pid;
-    int status;
-
-    cmd = parse_qubes_rpc_command(cmdline, false);
-    if (!cmd)
-        goto out;
-
-    if (cmd->nogui)
-        goto out;
-
-    if (!cmd->service_descriptor)
-        goto out;
-
-    char *user = NULL;
-    load_service_config(cmd, &wait_for_session, &user);
-    if (!wait_for_session)
-        goto out;
-
-    pid = fork();
-    switch (pid) {
-        case 0:
-            close(0);
-            exec_wait_for_session(cmd->source_domain);
-            PERROR("exec");
-            exit(1);
-        case -1:
-            PERROR("fork");
-            goto out;
-    }
-
-    if (waitpid(local_pid, &status, 0) > 0) {
-        if (status != 0)
-            LOG(ERROR, "wait-for-session exited with status %d", status);
-    } else
-        PERROR("waitpid");
-
-out:
-    destroy_qrexec_parsed_command(cmd);
-}
-
-static int prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
-{
-    if (stdin_buffer == NULL)
-        abort();
-    if (!cmdline) {
-        local_stdin_fd = 1;
-        local_stdout_fd = 0;
-        return 0;
-    }
-    signal(SIGCHLD, sigchld_handler);
-    return execute_qubes_rpc_command(cmdline, &local_pid, &local_stdin_fd, &local_stdout_fd,
-            NULL, false, stdin_buffer);
-}
-
-// See also qrexec-agent/qrexec-agent-data.c
-static _Noreturn void handle_failed_exec(libvchan_t *data_vchan)
-{
-    int exit_code = 127;
-    struct msg_header hdr = {
-        .type = MSG_DATA_STDOUT,
-        .len = 0,
-    };
-
-    LOG(ERROR, "failed to spawn process, exiting");
-    /*
-     * TODO: In case we fail to execute a *local* process (is_service false),
-     * we should either
-     *  - exit even before connecting to remote domain, or
-     *  - send stdin EOF and keep waiting for remote exit code.
-     *
-     * That will require a slightly bigger refactoring. Right now it's not
-     * important, because this function should handle QUBESRPC command failure
-     * only (normal commands go through fork+exec), but it will be necessary
-     * when we support sockets as a local process.
-     */
-    if (is_service) {
-        libvchan_send(data_vchan, &hdr, sizeof(hdr));
-        send_exit_code(data_vchan, exit_code);
-        libvchan_close(data_vchan);
-    }
-    exit(exit_code);
-}
-
-/* ask the daemon to allocate vchan port */
-static void negotiate_connection_params(int s, int other_domid, unsigned type,
-        void *cmdline_param, int cmdline_size,
-        int *data_domain, int *data_port)
-{
-    struct msg_header hdr;
-    struct exec_params params;
-    hdr.type = type;
-    hdr.len = sizeof(params) + cmdline_size;
-    params.connect_domain = other_domid;
-    params.connect_port = 0;
-    if (!write_all(s, &hdr, sizeof(hdr))
-            || !write_all(s, &params, sizeof(params))
-            || !write_all(s, cmdline_param, cmdline_size)) {
-        PERROR("write daemon");
-        exit(1);
-    }
-    /* the daemon will respond with the same message with connect_port filled
-     * and empty cmdline */
-    if (!read_all(s, &hdr, sizeof(hdr))) {
-        PERROR("read daemon");
-        exit(1);
-    }
-    assert(hdr.type == type);
-    if (hdr.len != sizeof(params)) {
-        LOG(ERROR, "Invalid response for 0x%x", type);
-        exit(1);
-    }
-    if (!read_all(s, &params, sizeof(params))) {
-        PERROR("read daemon");
-        exit(1);
-    }
-    *data_port = params.connect_port;
-    *data_domain = params.connect_domain;
-}
-
-static void send_service_connect(int s, char *conn_ident,
-        int connect_domain, int connect_port)
-{
-    struct msg_header hdr;
-    struct exec_params exec_params;
-    struct service_params srv_params;
-
-    hdr.type = MSG_SERVICE_CONNECT;
-    hdr.len = sizeof(exec_params) + sizeof(srv_params);
-
-    exec_params.connect_domain = connect_domain;
-    exec_params.connect_port = connect_port;
-    strncpy(srv_params.ident, conn_ident, sizeof(srv_params.ident) - 1);
-    srv_params.ident[sizeof(srv_params.ident) - 1] = '\0';
-
-    if (!write_all(s, &hdr, sizeof(hdr))
-            || !write_all(s, &exec_params, sizeof(exec_params))
-            || !write_all(s, &srv_params, sizeof(srv_params))) {
-        PERROR("write daemon");
-        exit(1);
-    }
-}
-
-static void select_loop(libvchan_t *vchan, int data_protocol_version, struct buffer *stdin_buf)
-{
-    struct process_io_request req = { 0 };
-    int exit_code;
-
-    req.vchan = vchan;
-    req.stdin_buf = stdin_buf;
-    req.stdin_fd = local_stdin_fd;
-    req.stdout_fd = local_stdout_fd;
-    req.stderr_fd = -1;
-    req.local_pid = local_pid;
-    req.is_service = is_service;
-    req.replace_chars_stdout = replace_chars_stdout;
-    req.replace_chars_stderr = replace_chars_stderr;
-    req.data_protocol_version = data_protocol_version;
-    req.sigchld = &sigchld;
-    req.sigusr1 = NULL;
-    req.prefix_data.data = NULL;
-    req.prefix_data.len = 0;
-
-    exit_code = process_io(&req);
-    libvchan_close(vchan);
-    exit(exit_with_code ? exit_code : 0);
 }
 
 static struct option longopts[] = {
@@ -410,48 +101,45 @@ _Noreturn static void usage(const char *const name)
     exit(1);
 }
 
+static int parse_int(const char *str, const char *msg) {
+    long value;
+    char *end = (char *)str;
+
+    if (str[0] < '0' || str[0] > '9')
+        errx(1, "%s '%s' does not start with an ASCII digit", msg, str);
+    errno = 0;
+    value = strtol(str, &end, 0);
+    if (*end != '\0')
+        errx(1, "trailing junk '%s' after %s", end, msg);
+    if (errno == 0 && (value < 0 || value > INT_MAX))
+        errno = ERANGE;
+    if (errno)
+        err(1, "invalid %s '%s': strtol", msg, str);
+    return (int)value;
+}
+
 static void parse_connect(char *str, char **request_id,
         char **src_domain_name, int *src_domain_id)
 {
-    int i=0;
-    char *token = NULL;
-    char *separators = ",";
+    char *token;
 
-    token = strtok(str, separators);
-    while (token)
-    {
-        switch (i)
-        {
-            case 0:
-                *request_id = token;
-                if (strlen(*request_id) >= sizeof(struct service_params)) {
-                    fprintf(stderr, "Invalid -c parameter (request_id too long, max %lu)\n",
-                            sizeof(struct service_params)-1);
-                    exit(1);
-                }
-                break;
-            case 1:
-                *src_domain_name = token;
-                break;
-            case 2:
-                *src_domain_id = atoi(token);
-                break;
-            default:
-                goto bad_c_param;
-        }
-        token = strtok(NULL, separators);
-        i++;
-    }
-    if (i == 3)
-        return;
+    token = strchr(str, ',');
+    if (token == NULL)
+        goto bad_c_param;
+    if ((size_t)(token - str) >= sizeof(struct service_params))
+        errx(1, "Invalid -c parameter (request_id too long, max %zu)\n",
+             sizeof(struct service_params)-1);
+    *token = 0;
+    *request_id = str;
+    *src_domain_name = token + 1;
+    token = strchr(*src_domain_name, ',');
+    if (token == NULL)
+        goto bad_c_param;
+    *token = 0;
+    *src_domain_id = parse_int(token + 1, "source domain ID");
+    return;
 bad_c_param:
     fprintf(stderr, "Invalid -c parameter (should be: \"-c request_id,src_domain_name,src_domain_id\")\n");
-    exit(1);
-}
-
-static void sigalrm_handler(int x __attribute__((__unused__)))
-{
-    LOG(ERROR, "vchan connection timeout");
     exit(1);
 }
 
@@ -523,10 +211,9 @@ int main(int argc, char **argv)
     libvchan_t *data_vchan = NULL;
     int data_port;
     int data_domain;
-    int msg_type;
     int s;
-    int just_exec = 0;
-    int wait_connection_end = 0;
+    bool just_exec = false;
+    int wait_connection_end = -1;
     char *local_cmdline = NULL;
     char *remote_cmdline = NULL;
     char *request_id = NULL;
@@ -534,9 +221,11 @@ int main(int argc, char **argv)
     int src_domain_id = 0; /* if not -c given, the process is run in dom0 */
     int connection_timeout = 5;
     struct service_params svc_params;
-    int data_protocol_version;
     int prepare_ret;
     bool kill = false;
+    bool replace_chars_stdout = false;
+    bool replace_chars_stderr = false;
+    bool exit_with_code = true;
 
     setup_logging("qrexec-client");
 
@@ -549,23 +238,26 @@ int main(int argc, char **argv)
                 local_cmdline = xstrdup(optarg);
                 break;
             case 'e':
-                just_exec = 1;
+                just_exec = true;
                 break;
             case 'E':
-                exit_with_code = 0;
+                exit_with_code = false;
                 break;
             case 'c':
+                if (request_id != NULL) {
+                    warnx("ERROR: -c passed more than once");
+                    usage(argv[0]);
+                }
                 parse_connect(optarg, &request_id, &src_domain_name, &src_domain_id);
-                is_service = 1;
                 break;
             case 't':
-                replace_chars_stdout = 1;
+                replace_chars_stdout = true;
                 break;
             case 'T':
-                replace_chars_stderr = 1;
+                replace_chars_stderr = true;
                 break;
             case 'w':
-                connection_timeout = atoi(optarg);
+                connection_timeout = parse_int(optarg, "connection timeout");
                 break;
             case 'W':
                 wait_connection_end = 1;
@@ -589,88 +281,49 @@ int main(int argc, char **argv)
 
     register_exec_func(&do_exec);
 
-    if (just_exec + (request_id != NULL) + (local_cmdline != 0) > 1) {
+    if (just_exec + (request_id != NULL) + (local_cmdline != NULL) > 1) {
         fprintf(stderr, "ERROR: only one of -e, -l, -c can be specified\n");
         usage(argv[0]);
     }
 
     if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
-        if (request_id != NULL) {
-            msg_type = MSG_SERVICE_CONNECT;
-            strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
-            svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
-        } else {
+        if (request_id == NULL) {
             fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
             usage(argv[0]);
         }
+        strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
+        svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
         if (src_domain_name == NULL) {
             LOG(ERROR, "internal error: src_domain_name should not be NULL here");
             abort();
         }
-        set_remote_domain(src_domain_name);
-        s = connect_unix_socket(src_domain_name);
-        negotiate_connection_params(s,
-                0, /* dom0 */
-                msg_type,
-                request_id ? (void*)&svc_params : (void*)remote_cmdline,
-                request_id ? sizeof(svc_params) : compute_service_length(remote_cmdline, argv[0]),
-                &data_domain,
-                &data_port);
-
-        struct buffer stdin_buffer;
-        buffer_init(&stdin_buffer);
-        wait_for_session_maybe(remote_cmdline);
-        prepare_ret = prepare_local_fds(remote_cmdline, &stdin_buffer);
-        if (request_id) {
-            void (*old_handler)(int);
-
-            /* libvchan_client_init is blocking and does not support connection
-             * timeout, so use alarm(2) for that... */
-            old_handler = signal(SIGALRM, sigalrm_handler);
-            alarm(connection_timeout);
-            data_vchan = libvchan_client_init(data_domain, data_port);
-            alarm(0);
-            signal(SIGALRM, old_handler);
-        } else {
-            data_vchan = libvchan_server_init(data_domain, data_port,
-                    VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
-            wait_for_vchan_client_with_timeout(data_vchan, connection_timeout);
-        }
-        if (!data_vchan || !libvchan_is_open(data_vchan)) {
-            LOG(ERROR, "Failed to open data vchan connection");
-            exit(1);
-        }
-        data_protocol_version = handle_agent_handshake(data_vchan, request_id != NULL);
-        if (data_protocol_version < 0)
-            exit(1);
-        if (prepare_ret < 0)
-            handle_failed_exec(data_vchan);
-        select_loop(data_vchan, data_protocol_version, &stdin_buffer);
+        run_qrexec_to_dom0(&svc_params,
+                           src_domain_id,
+                           src_domain_name,
+                           remote_cmdline,
+                           connection_timeout,
+                           exit_with_code);
     } else {
-        msg_type = just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE;
         s = connect_unix_socket(domname);
         negotiate_connection_params(s,
                 src_domain_id,
-                msg_type,
+                just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE,
                 remote_cmdline,
                 compute_service_length(remote_cmdline, argv[0]),
                 &data_domain,
                 &data_port);
-        if (wait_connection_end && request_id)
-            /* save socket fd, 's' will be reused for the other qrexec-daemon
-             * connection */
-            wait_connection_end = s;
-        else
-            close(s);
-        set_remote_domain(domname);
-        struct buffer stdin_buffer;
-        buffer_init(&stdin_buffer);
-        prepare_ret = prepare_local_fds(local_cmdline, &stdin_buffer);
         if (request_id) {
-            s = connect_unix_socket(src_domain_name);
+            if (wait_connection_end != -1) {
+                /* save socket fd, 's' will be reused for the other qrexec-daemon
+                 * connection */
+                wait_connection_end = s;
+            } else {
+                close(s);
+            }
+            s = connect_unix_socket_by_id(src_domain_id);
             send_service_connect(s, request_id, data_domain, data_port);
             close(s);
-            if (wait_connection_end) {
+            if (wait_connection_end != -1) {
                 /* wait for EOF */
                 struct pollfd fds[1] = {
                     { .fd = wait_connection_end, .events = POLLIN | POLLHUP, .revents = 0 },
@@ -678,6 +331,10 @@ int main(int argc, char **argv)
                 poll(fds, 1, -1);
             }
         } else {
+            set_remote_domain(domname);
+            struct buffer stdin_buffer;
+            buffer_init(&stdin_buffer);
+            prepare_ret = prepare_local_fds(local_cmdline, &stdin_buffer);
             data_vchan = libvchan_server_init(data_domain, data_port,
                     VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
             if (!data_vchan) {
@@ -685,16 +342,16 @@ int main(int argc, char **argv)
                 exit(1);
             }
             wait_for_vchan_client_with_timeout(data_vchan, connection_timeout);
-            if (!libvchan_is_open(data_vchan)) {
-                LOG(ERROR, "Failed to open data vchan connection");
-                exit(1);
-            }
-            data_protocol_version = handle_agent_handshake(data_vchan, 0);
-            if (data_protocol_version < 0)
-                exit(1);
-            if (prepare_ret < 0)
-                handle_failed_exec(data_vchan);
-            select_loop(data_vchan, data_protocol_version, &stdin_buffer);
+            struct handshake_params params = {
+                .data_vchan = data_vchan,
+                .stdin_buffer = &stdin_buffer,
+                .remote_send_first = false,
+                .prepare_ret = prepare_ret,
+                .exit_with_code = exit_with_code,
+                .replace_chars_stdout = replace_chars_stdout,
+                .replace_chars_stderr = replace_chars_stderr,
+            };
+            handshake_and_go(&params);
         }
     }
 

@@ -62,7 +62,7 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
         do {
             if (i >= sizeof(argv)/sizeof(argv[0])-1) {
                 LOG(ERROR, "To many arguments to %s", RPC_REQUEST_COMMAND);
-                exit(1);
+                _exit(1);
             }
             argv[i++] = tok;
         } while ((tok=strtok_r(NULL, " ", &savetok)));
@@ -111,12 +111,12 @@ static int do_fork_exec(const char *user,
             (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe)) ||
             socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, statuspipe)) {
         PERROR("socketpair");
-        exit(1);
+        _exit(1);
     }
     switch (*pid = fork()) {
         case -1:
             PERROR("fork");
-            exit(-1);
+            _exit(-1);
         case 0: {
             int status;
             if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)
@@ -137,7 +137,7 @@ static int do_fork_exec(const char *user,
                 abort();
             status = errno;
             while (write(statuspipe[1], &status, sizeof status) <= 0) {}
-            exit(-1);
+            _exit(-1);
         }
         default: {
             close(statuspipe[1]);
