@@ -124,7 +124,6 @@ void *buffer_data(struct buffer *b);
 
 int flush_client_data(int fd, struct buffer *buffer);
 int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
-int fork_and_flush_stdin(int fd, struct buffer *buffer);
 
 /**
  * @brief Execute an already-parsed Qubes RPC command.
