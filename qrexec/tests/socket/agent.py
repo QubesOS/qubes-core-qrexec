@@ -453,6 +453,47 @@ wait-for-session = 1 # line comment
         )
         self.check_dom0(dom0)
 
+    def exec_service_with_invalid_config(self, invalid_config):
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+""",
+        )
+        with open(
+            os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
+        ) as f:
+            f.write(invalid_config)
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        messages = target.recv_all_messages()
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
+    def test_exec_service_with_invalid_config_1(self):
+        self.exec_service_with_invalid_config("wait-for-session = 00\n")
+
+    def test_exec_service_with_invalid_config_2(self):
+        self.exec_service_with_invalid_config("wait-for-session = 01\n")
+
+    def test_exec_service_with_invalid_config_3(self):
+        self.exec_service_with_invalid_config("wait-for-session = \n")
+
+    def test_exec_service_with_invalid_config_4(self):
+        self.exec_service_with_invalid_config("wait-for-session = \"a\"\n")
+
+    def test_exec_service_with_invalid_config_5(self):
+        self.exec_service_with_invalid_config("wait-for-session\n")
+
     def test_exec_service_with_arg(self):
         self.make_executable_service(
             "local-rpc",
