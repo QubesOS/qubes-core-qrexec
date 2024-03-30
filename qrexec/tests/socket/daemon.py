@@ -759,10 +759,10 @@ echo "wait for session: remote domain: $QREXEC_REMOTE_DOMAIN" >{}
             "rpc",
             "qubes.Service",
             """\
-        #!/bin/sh
-        read input
-        cat {}
-        echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
+#!/bin/sh
+cat {}
+read input
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 """.format(
                 log
             ),
@@ -774,16 +774,16 @@ echo "wait for session: remote domain: $QREXEC_REMOTE_DOMAIN" >{}
 
         cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
+        self.assertEqual(source.recv_message(), (
+            qrexec.MSG_DATA_STDOUT,
+            b"wait for session: remote domain: src_domain\n",
+        ))
 
         source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
         source.send_message(qrexec.MSG_DATA_STDIN, b"")
         self.assertEqual(
             source.recv_all_messages(),
             [
-                (
-                    qrexec.MSG_DATA_STDOUT,
-                    b"wait for session: remote domain: src_domain\n",
-                ),
                 (
                     qrexec.MSG_DATA_STDOUT,
                     b"arg: arg, remote domain: src_domain, "
