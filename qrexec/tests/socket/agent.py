@@ -304,7 +304,16 @@ class TestAgentExecQubesRpc(TestAgentBase):
 
         target = self.connect_target()
         target.handshake()
-        return target
+        return target, dom0
+
+    def check_dom0(self, dom0):
+        self.assertEqual(
+            dom0.recv_message(),
+            (
+                qrexec.MSG_CONNECTION_TERMINATED,
+                struct.pack("<LL", self.target_domain, self.target_port),
+            ),
+        )
 
     def make_executable_service(self, *args):
         util.make_executable_service(self.tempdir, *args)
@@ -319,7 +328,7 @@ class TestAgentExecQubesRpc(TestAgentBase):
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
 """,
         )
-        target = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target, _ = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         messages = target.recv_all_messages()
         self.assertListEqual(
@@ -331,6 +340,36 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+
+    def test_exec_service_with_config(self):
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+""",
+        )
+        with open(
+            os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
+        ) as f:
+            f.write("""\
+wait-for-session = 0
+""")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        messages = target.recv_all_messages()
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"arg: arg, remote domain: domX\n"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
 
     def test_wait_for_session(self):
         log = os.path.join(self.tempdir, "wait-for-session.log")
@@ -359,17 +398,20 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
                 log
             ),
         )
+        user = getpass.getuser()
+        assert "'" not in user
+        assert "\n" not in user
         with open(
             os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
         ) as f:
-            f.write("""\
+            f.write(f"""\
 
 # Test TOML file
+force-user = '{user}'
 wait-for-session = 1 # line comment
 """)
-        user = getpass.getuser()
 
-        target = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         self.assertEqual(target.recv_message(), (
             qrexec.MSG_DATA_STDOUT,
             (
@@ -395,9 +437,10 @@ wait-for-session = 1 # line comment
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_exec_service_fail(self):
-        target = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         messages = target.recv_all_messages()
         self.assertListEqual(
@@ -408,6 +451,7 @@ wait-for-session = 1 # line comment
                 (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_exec_service_with_arg(self):
         self.make_executable_service(
@@ -426,7 +470,7 @@ echo "specific service"
 echo "general service"
 """,
         )
-        target = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         messages = target.recv_all_messages()
         self.assertListEqual(
@@ -438,6 +482,7 @@ echo "general service"
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_connect_socket(self):
         socket_path = os.path.join(
@@ -446,7 +491,7 @@ echo "general service"
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
 
-        target = self.execute_qubesrpc("qubes.SocketService+arg", "domX")
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService+arg", "domX")
 
         server.accept()
         expected = b"qubes.SocketService+arg domX\0"
@@ -469,6 +514,7 @@ echo "general service"
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_service_close_stdout_stderr_early(self):
         self.make_executable_service(
@@ -486,7 +532,7 @@ read code
 exit $code
 """,
         )
-        target = self.execute_qubesrpc("qubes.Service", "domX")
+        target, dom0 = self.execute_qubesrpc("qubes.Service", "domX")
 
         target.send_message(qrexec.MSG_DATA_STDIN, b"\n")
 
@@ -508,6 +554,7 @@ exit $code
             target.recv_message(),
             (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)),
         )
+        self.check_dom0(dom0)
 
 
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
