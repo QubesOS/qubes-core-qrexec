@@ -623,16 +623,20 @@ sleep 1
             f.write("end\n")
             f.flush()
 
+        messages = []
         received_data = b""
         while len(received_data) < data_size:
             message_type, message = target.recv_message()
-            self.assertEqual(message_type, qrexec.MSG_DATA_STDOUT)
-            received_data += message
+            if message_type != qrexec.MSG_DATA_STDOUT:
+                messages.append((message_type, message))
+            else:
+                self.assertEqual(message_type, qrexec.MSG_DATA_STDOUT)
+                received_data += message
 
         self.assertEqual(len(received_data), data_size)
         self.assertEqual(received_data, data)
 
-        messages = target.recv_all_messages()
+        messages += target.recv_all_messages()
         self.assertListEqual(
             util.sort_messages(messages),
             [
