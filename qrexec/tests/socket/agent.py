@@ -353,7 +353,6 @@ echo "wait for session: arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, user: $us
             """\
 #!/bin/sh
 cat {}
-sleep 0.1
 read input
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 """.format(
@@ -371,20 +370,22 @@ wait-for-session = 1 # line comment
         user = getpass.getuser()
 
         target = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        self.assertEqual(target.recv_message(), (
+            qrexec.MSG_DATA_STDOUT,
+            (
+                b"wait for session: arg: , remote domain: domX, user: "
+                + user.encode("ascii", "strict")
+                + b"\n"
+            ),
+        ))
         target.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
-        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        # Do not send EOF. Shell read doesn't need it, and this checks that
+        # qrexec does not wait for EOF on stdin before sending the exit code
+        # from the remote process.
         messages = target.recv_all_messages()
         self.assertListEqual(
             util.sort_messages(messages),
             [
-                (
-                    qrexec.MSG_DATA_STDOUT,
-                    (
-                        b"wait for session: arg: , remote domain: domX, user: "
-                        + user.encode()
-                        + b"\n"
-                    ),
-                ),
                 (
                     qrexec.MSG_DATA_STDOUT,
                     b"arg: arg, remote domain: domX, input: stdin data\n",
