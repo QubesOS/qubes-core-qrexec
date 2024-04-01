@@ -17,4 +17,6 @@ fi
 
 set -x
 
-python3 -m coverage run -m pytest -o python_files=*.py -v qrexec/tests "$@"
+if [[ "$#" = 0 ]]; then set -- -v qrexec/tests; fi
+
+python3 -m coverage run -m pytest -o 'python_files=*.py' "$@"
