@@ -7,6 +7,7 @@
 #include <limits.h>
 
 #include "libqrexec-utils.h"
+#include "private.h"
 
 // A trivial parser for a subset of TOML
 static bool qubes_isspace(unsigned char c) {
@@ -131,7 +132,46 @@ static bool qubes_is_key_byte(unsigned char c) {
     }
 }
 
-int qubes_toml_config_parse(const char *config_full_path, int *wait_for_session, char **user)
+static void toml_invalid_type(enum toml_type ty, const char *file, size_t lineno, const char *msg)
+{
+    const char *bad_type;
+    switch (ty) {
+        case TOML_TYPE_INVALID:
+            bad_type = "<invalid value>";
+            break;
+        case TOML_TYPE_BOOL:
+            bad_type = "Boolean";
+            break;
+        case TOML_TYPE_INTEGER:
+            bad_type = "Integer";
+            break;
+        case TOML_TYPE_STRING:
+            bad_type = "String";
+            break;
+        default:
+            abort();
+    }
+    LOG(ERROR, "%s:%zu: %s not valid for %s", file, lineno, bad_type, msg);
+}
+
+static bool toml_check_dup_key(bool *seen_already, const char *file, size_t lineno, const char *msg)
+{
+    if (*seen_already) {
+        LOG(ERROR, "%s:%zu: Key %s already seen", file, lineno, msg);
+        return true;
+    }
+    *seen_already = true;
+    return false;
+}
+
+static void toml_value_free(union toml_data *value, enum toml_type ty) {
+    if (ty == TOML_TYPE_STRING) {
+        free(value->string);
+        value->string = NULL;
+    }
+}
+
+int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session, char **user, bool *send_service_descriptor)
 {
     int result = -1; /* assume problem */
     FILE *config_file = fopen(config_full_path, "re");
@@ -146,6 +186,23 @@ int qubes_toml_config_parse(const char *config_full_path, int *wait_for_session,
     ssize_t signed_linelen;
     bool seen_wait_for_session = false;
     bool seen_user = false;
+    bool seen_skip_service_descriptor = false;
+    *wait_for_session = 0;
+    *send_service_descriptor = true;
+#define CHECK_DUP_KEY(v) do {                                               \
+    if (toml_check_dup_key(&(v), config_full_path, lineno, current_line)) { \
+        toml_value_free(&value, ty);                                        \
+        goto bad;                                                           \
+    }                                                                       \
+} while (0);
+#define CHECK_TYPE(v, msg) do {                                             \
+    if ((v) != ty) {                                                        \
+        toml_invalid_type(v, config_full_path, lineno, msg);                \
+        toml_value_free(&value, ty);                                        \
+        goto bad;                                                           \
+    }                                                                       \
+} while (0);
+
     while ((signed_linelen = getline(&current_line, &bufsize, config_file)) != -1) {
         lineno++;
         /* Other negative values are invalid.  If nothing at all is read that means EOF. */
@@ -217,55 +274,34 @@ int qubes_toml_config_parse(const char *config_full_path, int *wait_for_session,
         current_line[key_len] = '\0';
         union toml_data value;
         enum toml_type ty = parse_toml_value(config_full_path, lineno, key_cursor, &value);
+        if (ty == TOML_TYPE_INVALID)
+            goto bad;
 
         if (strcmp(current_line, "wait-for-session") == 0) {
-            if (seen_wait_for_session) {
-                LOG(ERROR, "%s:%zu: Key '%s' appears more than once", config_full_path, lineno, current_line);
-                goto bad;
-            }
-            seen_wait_for_session = true;
-            if (ty == TOML_TYPE_BOOL) {
-                *wait_for_session = (int)value.boolean;
-                continue;
-            } else if (ty == TOML_TYPE_INTEGER) {
+            CHECK_DUP_KEY(seen_wait_for_session);
+            if (ty == TOML_TYPE_INTEGER) {
                 if (value.integer < 2) {
                     *wait_for_session = (int)value.integer;
                     continue;
                 }
-                LOG(ERROR, "Integer value %llu used when a boolean was expected", value.integer);
-            } else if (ty == TOML_TYPE_STRING) {
-                LOG(ERROR, "String value '%s' not valid for 'wait-for-session'", value.string);
-                free(value.string);
-                value.string = NULL;
+                LOG(ERROR, "%s:%zu: Unsupported integer value %llu for boolean", config_full_path, lineno, value.integer);
+                goto bad;
+            } else {
+                CHECK_TYPE(TOML_TYPE_BOOL, "wait-for-session");
+                *wait_for_session = value.boolean;
             }
+        } else if (strcmp(current_line, "skip-service-descriptor") == 0) {
+            CHECK_DUP_KEY(seen_skip_service_descriptor);
+            CHECK_TYPE(TOML_TYPE_BOOL, "skip-service-descriptor");
+            *send_service_descriptor = !value.boolean;
         } else if (strcmp(current_line, "force-user") == 0) {
-            if (seen_user) {
-                LOG(ERROR, "%s:%zu: Key '%s' appears more than once", config_full_path, lineno, current_line);
-                goto bad;
-            }
-            seen_user = true;
-            char *bad_type;
-            switch (ty) {
-            case TOML_TYPE_INVALID:
-                goto bad;
-            case TOML_TYPE_BOOL:
-                bad_type = "Boolean";
-                break;
-            case TOML_TYPE_INTEGER:
-                bad_type = "Integer";
-                break;
-            case TOML_TYPE_STRING:
-                *user = value.string;
-                continue;
-            default:
-                abort();
-            }
-            LOG(ERROR, "%s:%zu: %s not valid for user name or user ID", config_full_path, lineno, bad_type);
+            CHECK_DUP_KEY(seen_user);
+            CHECK_TYPE(TOML_TYPE_STRING, "user name or user ID");
+            *user = value.string;
         } else {
             LOG(ERROR, "%s:%zu: Unsupported key %s", config_full_path, lineno, current_line);
-            continue;
+            toml_value_free(&value, ty);
         }
-        goto bad;
     }
 
     result = 1;

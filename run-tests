@@ -5,8 +5,18 @@ if command -v dnf >/dev/null; then
     sudo dnf install python3dist\({coverage,pytest,gbulb,pyinotify,pytest-asyncio}\) || :
 fi
 if pkg-config vchan-socket; then
-    export CFLAGS="--coverage -DCOVERAGE"
-    export LDFLAGS=--coverage
+    if [[ -n "${USE_ASAN-}" ]]; then
+        export CFLAGS=-fsanitize=address,undefined
+        export LDFLAGS=-fsanitize=address,undefined
+        # MUST use clang here.  GCC causes random SIGSEGV crashes
+        # when ASAN and UBSAN is in use.  Release build (no sanitizers)
+        # works fine.
+        export CC=clang
+        export ASAN_OPTIONS=leak_check_at_exit=0
+    else
+        export CFLAGS="--coverage -DCOVERAGE"
+        export LDFLAGS=--coverage
+    fi
     make -C libqrexec BACKEND_VMM=socket clean all
     make -C agent BACKEND_VMM=socket clean all
     make -C daemon BACKEND_VMM=socket clean all
@@ -17,4 +27,6 @@ fi
 
 set -x
 
-python3 -m coverage run -m pytest -o python_files=*.py -v qrexec/tests "$@"
+if [[ "$#" = 0 ]]; then set -- -v qrexec/tests; fi
+
+python3 -m coverage run -m pytest -o 'python_files=*.py' "$@"

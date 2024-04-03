@@ -134,10 +134,12 @@ static int handle_just_exec(struct qrexec_parsed_command *cmd)
 {
     int fdn, pid;
 
+    if (cmd == NULL)
+        return 127;
     switch (pid = fork()) {
         case -1:
             PERROR("fork");
-            return -1;
+            return 127;
         case 0:
             fdn = open("/dev/null", O_RDWR);
             fix_fds(fdn, fdn, fdn);
@@ -271,7 +273,8 @@ static int handle_new_process_common(
             return 0;
         case MSG_EXEC_CMDLINE:
             buffer_init(&stdin_buf);
-            if (execute_parsed_qubes_rpc_command(cmd, &pid, &stdin_fd, &stdout_fd, &stderr_fd, &stdin_buf) < 0) {
+            if (cmd == NULL ||
+                    execute_parsed_qubes_rpc_command(cmd, &pid, &stdin_fd, &stdout_fd, &stderr_fd, &stdin_buf) < 0) {
                 struct msg_header hdr = {
                     .type = MSG_DATA_STDOUT,
                     .len = 0,

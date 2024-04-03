@@ -54,7 +54,10 @@ class QrexecClient:
     def recvall(self, data_len):
         data = b""
         while len(data) < data_len:
-            res = self.conn.recv(data_len - len(data))
+            try:
+                res = self.conn.recv(data_len - len(data))
+            except ConnectionResetError:
+                return data
             if not res:
                 return data
             data += res

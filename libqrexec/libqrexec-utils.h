@@ -52,7 +52,8 @@ struct buffer {
 struct qrexec_parsed_command {
     const char *cmdline;
 
-    /* Username ("user", NULL when strip_username is false) */
+    /* Username ("user", NULL when strip_username is false).
+     * Always safe to pass to free(). */
     char *username;
 
     /* Override to disable "wait for session" */
@@ -75,6 +76,12 @@ struct qrexec_parsed_command {
 
     /* Source domain (the part after service name). */
     char *source_domain;
+
+    /* Should a session be waited for? */
+    bool wait_for_session;
+
+    /* For socket-based services: Should the service descriptor be sent? */
+    bool send_service_descriptor;
 };
 
 /* Parse a command, return NULL on failure. Uses cmd->cmdline
@@ -89,9 +96,13 @@ void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
  *  1  - config successfuly loaded
  *  0  - config not found
  *  -1 - other error
+ *
+ * Deprecated, use load_service_config_v2() instead.
  */
-int load_service_config(const struct qrexec_parsed_command *cmd_name,
-                        int *wait_for_session, char **user);
+int load_service_config(struct qrexec_parsed_command *cmd_name,
+                        int *wait_for_session, char **user)
+    __attribute__((deprecated("use load_service_config_v2() instead")));
+int load_service_config_v2(struct qrexec_parsed_command *cmd);
 
 typedef void (do_exec_t)(const char *cmdline, const char *user);
 void register_exec_func(do_exec_t *func);
@@ -303,7 +314,6 @@ void qrexec_log(int level, int errnoval, const char *file, int line,
                 const char *func, const char *fmt, ...) __attribute__((format(printf, 6, 7)));
 
 void setup_logging(const char *program_name);
-int qubes_toml_config_parse(const char *config_full_path, int *wait_for_session, char **user);
 
 /**
  * Make an Admin API call to qubesd.  The returned buffer must be released by

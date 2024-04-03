@@ -85,6 +85,7 @@ static const char *fork_server_path = QREXEC_FORK_SERVER_SOCKET;
 static void handle_server_exec_request_do(int type, int connect_domain, int connect_port,
                                           struct qrexec_parsed_command *cmd,
                                           char *cmdline);
+static void terminate_connection(uint32_t domain, uint32_t port);
 
 const bool qrexec_is_fork_server = false;
 
@@ -587,26 +588,20 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
         cmd = parse_qubes_rpc_command(buf, true);
         if (cmd == NULL) {
             LOG(ERROR, "Could not parse command line: %s", buf);
-            return;
+            goto doit;
         }
 
         /* load service config only for service requests */
         if (cmd->service_descriptor) {
-            int wait_for_session = 0;
-            char *user = NULL;
-
-            if (load_service_config(cmd, &wait_for_session, &user) < 0) {
+            if (load_service_config_v2(cmd) < 0) {
                 LOG(ERROR, "Could not load config for command %s", buf);
-                return;
-            }
-
-            if (user != NULL) {
-                free(cmd->username);
-                cmd->username = user;
+                destroy_qrexec_parsed_command(cmd);
+                cmd = NULL;
+                goto doit;
             }
 
             /* "nogui:" prefix has priority */
-            if (!cmd->nogui && wait_for_session && wait_for_session_maybe(cmd)) {
+            if (!cmd->nogui && cmd->wait_for_session && wait_for_session_maybe(cmd)) {
                 /* waiting for session, postpone actual call */
                 int slot_index;
                 for (slot_index = 0; slot_index < MAX_FDS; slot_index++)
@@ -628,6 +623,7 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
         }
     }
 
+doit:
     handle_server_exec_request_do(hdr->type, params.connect_domain, params.connect_port, cmd, buf);
     destroy_qrexec_parsed_command(cmd);
     free(buf);
@@ -671,7 +667,7 @@ static void handle_server_exec_request_do(int type,
         return;
     }
 
-    if (!cmd->nogui) {
+    if (cmd != NULL && !cmd->nogui) {
         /* try fork server */
         int child_socket = try_fork_server(type,
                 params.connect_domain, params.connect_port,
@@ -765,18 +761,27 @@ static int find_connection(int pid)
 }
 
 static void release_connection(int id) {
-    struct msg_header hdr;
-    struct exec_params params;
-
-    hdr.type = MSG_CONNECTION_TERMINATED;
-    hdr.len = sizeof(struct exec_params);
-    params.connect_domain = connection_info[id].connect_domain;
-    params.connect_port = connection_info[id].connect_port;
-    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) != sizeof(hdr))
-        handle_vchan_error("send (MSG_CONNECTION_TERMINATED hdr)");
-    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) != sizeof(params))
-        handle_vchan_error("send (MSG_CONNECTION_TERMINATED data)");
+    terminate_connection(connection_info[id].connect_domain,
+                         connection_info[id].connect_port);
     connection_info[id].pid = 0;
+}
+
+static void terminate_connection(uint32_t domain, uint32_t port) {
+    struct {
+        struct msg_header hdr;
+        struct exec_params params;
+    } data = {
+        .hdr = {
+            .type = MSG_CONNECTION_TERMINATED,
+            .len = sizeof(struct exec_params),
+        },
+        .params = {
+            .connect_domain = domain,
+            .connect_port = port,
+        },
+    };
+    if (libvchan_send(ctrl_vchan, &data, sizeof(data)) != sizeof(data))
+        handle_vchan_error("send (MSG_CONNECTION_TERMINATED)");
 }
 
 static void reap_children(void)

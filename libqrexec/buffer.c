@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "libqrexec-utils.h"
 
 #define BUFFER_LIMIT 50000000
@@ -79,6 +80,7 @@ void buffer_append(struct buffer *b, const char *data, int len)
 {
     int newsize;
     char *qdata;
+    assert(data != NULL && "NULL data");
     if (b->buflen < 0 || b->buflen > BUFFER_LIMIT) {
         LOG(ERROR, "buffer_append buflen %d", len);
         exit(1);
@@ -91,7 +93,9 @@ void buffer_append(struct buffer *b, const char *data, int len)
         return;
     newsize = len + b->buflen;
     qdata = limited_malloc(len + b->buflen);
-    memcpy(qdata, b->data, (size_t)b->buflen);
+    if (b->data != 0) {
+        memcpy(qdata, b->data, (size_t)b->buflen);
+    }
     memcpy(qdata + b->buflen, data, (size_t)len);
     buffer_free(b);
     b->buflen = newsize;
