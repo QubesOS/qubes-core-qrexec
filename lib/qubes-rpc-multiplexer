@@ -36,6 +36,9 @@ export QREXEC_SERVICE_FULL_NAME="$1"
 SERVICE_WITHOUT_ARGUMENT="${1%%+*}"
 if [ "${QREXEC_SERVICE_FULL_NAME}" != "${SERVICE_WITHOUT_ARGUMENT}" ]; then
     export QREXEC_SERVICE_ARGUMENT="${QREXEC_SERVICE_FULL_NAME#*+}"
+else
+    # Search for qubes.Service+ if given qubes.Service
+    set -- "$1+" "$2"
 fi
 
 

@@ -282,7 +282,7 @@ static int load_service_config_raw(struct qrexec_parsed_command *cmd,
 
     int ret = find_file(config_path, cmd->service_descriptor,
                         config_full_path, sizeof(config_full_path), NULL);
-    if (ret == -1 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
+    if (ret == -1)
         ret = find_file(config_path, cmd->service_name,
                         config_full_path, sizeof(config_full_path), NULL);
     if (ret < 0)
@@ -311,6 +311,21 @@ int load_service_config(struct qrexec_parsed_command *cmd,
     return rc;
 }
 
+/* Duplicates a buffer and adds a NUL terminator.
+ * Same as strndup(), except that it logs on failure (with PERROR())
+ * and always copies exactly "len" bytes, even if some of them are NUL
+ * bytes.  This guarantees that the output buffer is of the expected
+ * length and saves an unneeded call to strnlen(). */
+static char* memdupnul(const char *ptr, size_t len) {
+    char *buf = malloc(len + 1);
+    if (buf == NULL) {
+        PERROR("malloc");
+        return NULL;
+    }
+    memcpy(buf, ptr, len);
+    buf[len] = '\0';
+    return buf;
+}
 
 struct qrexec_parsed_command *parse_qubes_rpc_command(
     const char *cmdline, bool strip_username) {
@@ -332,11 +347,9 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
             LOG(ERROR, "Bad command from dom0 (%s): no colon", cmdline);
             goto err;
         }
-        cmd->username = strndup(cmdline, (size_t)(colon - cmdline));
-        if (!cmd->username) {
-            PERROR("strndup");
+        cmd->username = memdupnul(cmdline, (size_t)(colon - cmdline));
+        if (!cmd->username)
             goto err;
-        }
         cmd->command = colon + 1;
     } else
         cmd->command = cmdline;
@@ -361,53 +374,47 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
             goto err;
         }
 
-        if (end - start > MAX_SERVICE_NAME_LEN) {
-            LOG(ERROR, "Command too long (length %zu)",
-                end - start);
+        if (end <= start) {
+            LOG(ERROR, "Service descriptor is empty (too many spaces after QUBESRPC?)");
             goto err;
         }
 
-        cmd->service_descriptor = strndup(start, end - start);
-        if (!cmd->service_descriptor) {
-            PERROR("strndup");
+        size_t const descriptor_len = (size_t)(end - start);
+        if (descriptor_len > MAX_SERVICE_NAME_LEN) {
+            LOG(ERROR, "Command too long (length %zu)", descriptor_len);
             goto err;
         }
 
         /* Parse service name ("qubes.Service") */
 
-        const char *plus = memchr(start, '+', end - start);
-        if (plus) {
-            if (plus - start == 0) {
-                LOG(ERROR, "Service name empty");
-                goto err;
-            }
-            if (plus - start > NAME_MAX) {
-                LOG(ERROR, "Service name too long to execute (length %zu)",
-                    plus - start);
-                goto err;
-            }
-            cmd->service_name = strndup(start, plus - start);
-            if (!cmd->service_name) {
-                PERROR("strndup");
-                goto err;
-            }
-        } else {
-            cmd->service_name = strndup(start, end - start);
-            if (!cmd->service_name) {
-                PERROR("strdup");
-                goto err;
-            }
+        const char *const plus = memchr(start, '+', descriptor_len);
+        size_t const name_len = plus != NULL ? (size_t)(plus - start) : descriptor_len;
+        if (name_len > NAME_MAX) {
+            LOG(ERROR, "Service name too long to execute (length %zu)", name_len);
+            goto err;
         }
+        if (name_len < 1) {
+            LOG(ERROR, "Service name empty");
+            goto err;
+        }
+        cmd->service_name = memdupnul(start, name_len);
+        if (!cmd->service_name)
+            goto err;
+
+        /* If there is no service argument, add a trailing "+" to the descriptor */
+        cmd->service_descriptor = memdupnul(start, descriptor_len + (plus == NULL));
+        if (!cmd->service_descriptor)
+            goto err;
+        if (plus == NULL)
+            cmd->service_descriptor[descriptor_len] = '+';
 
         /* Parse source domain */
 
         start = end + 1; /* after the space */
         end = strchrnul(start, ' ');
-        cmd->source_domain = strndup(start, end - start);
-        if (!cmd->source_domain) {
-            PERROR("strndup");
+        cmd->source_domain = memdupnul(start, (size_t)(end - start));
+        if (!cmd->source_domain)
             goto err;
-        }
     }
 
     return cmd;
@@ -480,7 +487,7 @@ static int execute_qrexec_service(
     int ret = find_file(qrexec_service_path, cmd->service_descriptor,
                         service_full_path, sizeof(service_full_path),
                         &statbuf);
-    if (ret == -1 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
+    if (ret == -1)
         ret = find_file(qrexec_service_path, cmd->service_name,
                         service_full_path, sizeof(service_full_path),
                         &statbuf);

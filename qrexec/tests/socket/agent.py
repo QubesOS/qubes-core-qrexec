@@ -585,7 +585,6 @@ echo "general service"
         )
         self.check_dom0(dom0)
 
-    @unittest.expectedFailure
     def test_exec_null_argument_finds_service_for_empty_argument(self):
         self.make_executable_service(
             "local-rpc",
@@ -612,6 +611,42 @@ echo "general service"
                 (qrexec.MSG_DATA_STDOUT, b"specific service: qubes.Service\n"),
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
+    def test_socket_null_argument_finds_service_for_empty_argument(self):
+        good_socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+"
+        )
+        bad_socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        good_server = qrexec.socket_server(good_socket_path)
+        self.addCleanup(good_server.close)
+        bad_server = qrexec.socket_server(bad_socket_path)
+        self.addCleanup(bad_server.close)
+
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService", "domX")
+
+        good_server.accept()
+
+        message = b"stdin data"
+        target.send_message(qrexec.MSG_DATA_STDIN, message)
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        expected = b"qubes.SocketService domX\0" + message
+        self.assertEqual(good_server.recvall(len(expected)), expected)
+
+        good_server.sendall(b"stdout data")
+        good_server.close()
+        messages = target.recv_all_messages()
+        # No stderr
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
+                (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
