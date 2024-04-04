@@ -344,7 +344,6 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
             ],
         )
 
-    @unittest.expectedFailure
     def test_exec_service_keyword(self):
         util.make_executable_service(
             self.tempdir,
