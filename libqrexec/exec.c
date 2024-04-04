@@ -208,7 +208,13 @@ out:
   Returns 0 on success, -1 if the file is definitely absent in all of the
   paths, and -2 on error (broken symlink, I/O error, path too long, out
   of memory, etc).
-  On success, fills buffer and statbuf (unless statbuf is NULL).
+  On success, fills buffer and statbuf (unless statbuf is NULL).  buffer
+  will contain the path to the file, while statbuf will contain metadata
+  about the file as reported by stat(2).
+  If statbuf is not NULL, buffer may be filled with string starting
+  with "/dev/tcp/", which corresponds to the target of the symbolic link.
+  In this case, statbuf will contain the metadata for the symlink itself,
+  not its (hopefully nonexistent) target.
  */
 static int find_file(
     const char *path_list,
@@ -220,13 +226,22 @@ static int find_file(
     struct stat dummy_buf;
     const char *path_start = path_list;
     size_t name_length = strlen(name);
+    char *buf = NULL;
     int res;
+    int rc;
 
     if (name_length > NAME_MAX)
         return -1; /* cannot possibly exist */
 
-    if (!statbuf)
+    if (!statbuf) {
         statbuf = &dummy_buf;
+    } else {
+        buf = malloc(buffer_size);
+        if (buf == NULL) {
+            LOG(ERROR, "Cannot allocate %zu bytes", buffer_size);
+            return -2;
+        }
+    }
 
     while (*path_start) {
         /* Find next path (up to ':') */
@@ -235,7 +250,8 @@ static int find_file(
 
         if (path_length + name_length + 1 >= buffer_size) {
             LOG(ERROR, "find_qrexec_service_file: buffer too small for file path");
-            return -2;
+            rc = -2;
+            goto done;
         }
 
         memcpy(buffer, path_start, path_length);
@@ -244,16 +260,42 @@ static int find_file(
         //LOG(INFO, "stat(%s)", buffer);
         res = lstat(buffer, statbuf);
         if (res == 0 && S_ISLNK(statbuf->st_mode)) {
+            if (buf != NULL) {
+                ssize_t res = readlink(buffer, buf, buffer_size);
+                if (res < 0) {
+                    /* readlink(2) failed */
+                    LOG(ERROR, "readlink(2) failed: %m");
+                    rc = -2;
+                    goto done;
+                }
+                size_t target_len = (size_t)res;
+                if ((target_len >= sizeof("/dev/tcp") && memcmp(buf, "/dev/tcp/", sizeof("/dev/tcp")) == 0) ||
+                    (target_len == sizeof("/dev/tcp") - 1 && memcmp(buf, "/dev/tcp/", sizeof("/dev/tcp") - 1) == 0))
+                {
+                    if (target_len >= buffer_size) {
+                        /* buffer too small */
+                        rc = -2;
+                    } else {
+                        memcpy(buffer, buf, target_len);
+                        buffer[target_len] = '\0';
+                        rc = 0;
+                    }
+                    goto done;
+                }
+            }
             /* check if the symlink is valid */
             res = stat(buffer, statbuf);
             assert(res == -1 || !S_ISLNK(statbuf->st_mode));
         }
         if (res == 0) {
-            return 0;
+            rc = 0;
+            goto done;
         } else {
             assert(res == -1);
             if (errno != ENOENT) {
-                return -2;
+                LOG(ERROR, "stat/lstat(%s): %m", buffer);
+                rc = -2;
+                goto done;
             }
         }
 
@@ -261,7 +303,10 @@ static int find_file(
         while (*path_start == ':')
             path_start++;
     }
-    return -1;
+    rc = -1;
+done:
+    free(buf);
+    return rc;
 }
 
 static int load_service_config_raw(struct qrexec_parsed_command *cmd,
