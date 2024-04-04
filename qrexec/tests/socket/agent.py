@@ -58,6 +58,9 @@ class TestAgentBase(unittest.TestCase):
         env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
         env["VCHAN_DOMAIN"] = str(self.domain)
         env["VCHAN_SOCKET_DIR"] = self.tempdir
+        env["QREXEC_SERVICE_ARGUMENT"] = "%did_not_get_unset"
+        env["QREXEC_REQUESTED_TARGET_KEYWORD"] = "%did_not_get_unset"
+        env["QREXEC_REQUESTED_TARGET"] = "%did_not_get_unset"
         env["QREXEC_SERVICE_PATH"] = ":".join(
             [
                 os.path.join(self.tempdir, "local-rpc"),
@@ -340,6 +343,39 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+
+    @unittest.expectedFailure
+    def test_exec_service_keyword(self):
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh -e
+printf %s\\\\n "arg: ${1+bad}, remote domain: $QREXEC_REMOTE_DOMAIN" \
+"target name: ${QREXEC_REQUESTED_TARGET-NONAME}" \
+"target keyword: ${QREXEC_REQUESTED_TARGET_KEYWORD-NOKEYWORD}" \
+${QREXEC_REQUESTED_TARGET_TYPE+"target type: '${QREXEC_REQUESTED_TARGET_TYPE}'"} \
+${QREXEC_SERVICE_ARGUMENT+"call argument: '${QREXEC_SERVICE_ARGUMENT}'"}
+""",
+        )
+        target, dom0 = self.execute_qubesrpc("qubes.Service", "domX")
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        messages = target.recv_all_messages()
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"""arg: , remote domain: domX
+target name: NONAME
+target keyword: NOKEYWORD
+target type: ''
+"""),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
 
     def test_exec_service_with_config(self):
         util.make_executable_service(

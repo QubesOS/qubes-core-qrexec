@@ -25,8 +25,7 @@ else
     export SKIP_SOCKET_TESTS=1
 fi
 
-set -x
-
 if [[ "$#" = 0 ]]; then set -- -v qrexec/tests; fi
 
+set -x
 python3 -m coverage run -m pytest -o 'python_files=*.py' "$@"
