@@ -525,6 +525,31 @@ echo "general service"
         )
         self.check_dom0(dom0)
 
+    @unittest.expectedFailure
+    def test_exec_broken_specific_service(self):
+        os.symlink("/dev/null/invalid",
+                   os.path.join(self.tempdir, "rpc", "qubes.Service+arg"))
+        self.make_executable_service(
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh
+echo "general service"
+""",
+        )
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        messages = target.recv_all_messages()
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
     def test_connect_socket_no_metadata(self):
         socket_path = os.path.join(
             self.tempdir, "rpc", "qubes.SocketService+arg2"
