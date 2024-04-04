@@ -1262,6 +1262,21 @@ static bool validate_request_id(struct service_params *untrusted_params, const c
 
 #define ENSURE_NULL_TERMINATED(x) x[sizeof(x)-1] = 0
 
+static bool validate_service_name(char *untrusted_service_name)
+{
+    switch (untrusted_service_name[0]) {
+    case '\0':
+        LOG(ERROR, "Empty service name not allowed");
+        return false;
+    case '+':
+        LOG(ERROR, "Service name must not start with '+'");
+        return false;
+    default:
+        sanitize_name(untrusted_service_name, "+");
+        return true;
+    }
+}
+
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 static
 #endif
@@ -1293,6 +1308,10 @@ void handle_message_from_agent(void)
             sanitize_name(untrusted_params.service_name, "+");
             sanitize_name(untrusted_params.target_domain, "@:");
             if (!validate_request_id(&untrusted_params.request_id, "MSG_TRIGGER_SERVICE")) {
+                send_service_refused(vchan, &untrusted_params.request_id);
+                return;
+            }
+            if (!validate_service_name(untrusted_params.service_name)) {
                 send_service_refused(vchan, &untrusted_params.request_id);
                 return;
             }
@@ -1329,38 +1348,30 @@ void handle_message_from_agent(void)
             ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
             sanitize_name(untrusted_params3.target_domain, "@:");
             if (!validate_request_id(&untrusted_params3.request_id, "MSG_TRIGGER_SERVICE3"))
-                goto fail;
+                goto fail3;
             params3 = untrusted_params3;
             if (untrusted_service_name[service_name_len] != 0) {
                 LOG(ERROR, "Service name not NUL-terminated");
-                goto fail;
+                goto fail3;
             }
             nul_offset = strlen(untrusted_service_name);
             if (nul_offset != service_name_len) {
                 LOG(ERROR, "Service name contains NUL byte at offset %zu", nul_offset);
-                goto fail;
+                goto fail3;
             }
-            switch (untrusted_service_name[0]) {
-            case '\0':
-                LOG(ERROR, "Empty service name not allowed");
-                goto fail;
-            case '+':
-                LOG(ERROR, "Service name must not start with '+'");
-                goto fail;
-            default:
-                sanitize_name(untrusted_service_name, "+");
-                service_name = untrusted_service_name;
-                untrusted_service_name = NULL;
-                /* sanitize end */
+            if (!validate_service_name(untrusted_service_name))
+                goto fail3;
+            service_name = untrusted_service_name;
+            untrusted_service_name = NULL;
+            /* sanitize end */
 
-                handle_execute_service(remote_domain_id, remote_domain_name,
-                        params3.target_domain,
-                        service_name,
-                        &params3.request_id);
-                free(service_name);
-                return;
-            }
-fail:
+            handle_execute_service(remote_domain_id, remote_domain_name,
+                    params3.target_domain,
+                    service_name,
+                    &params3.request_id);
+            free(service_name);
+            return;
+fail3:
             send_service_refused(vchan, &untrusted_params3.request_id);
             free(untrusted_service_name);
             return;

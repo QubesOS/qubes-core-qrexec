@@ -203,7 +203,6 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         self.assertEqual(data[:4], b"a\0b\0")
         self.assertEqual(data[4:], b"\0" * 28)
 
-    @unittest.expectedFailure
     def test_bad_old_style_request(self):
         agent = self.start_daemon_with_agent()
         agent.send_message(qrexec.MSG_HELLO, struct.pack("<L", 2))
