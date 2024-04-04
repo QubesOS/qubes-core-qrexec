@@ -212,7 +212,9 @@ static int execute_qrexec_service(
 
 /*
   Find a file in the ':'-delimited list of paths given in path_list.
-  Returns 0 on success, -1 on failure.
+  Returns 0 on success, -1 if the file is definitely absent in all of the
+  paths, and -2 on error (broken symlink, I/O error, path too long, out
+  of memory, etc).
   On success, fills buffer and statbuf (unless statbuf is NULL).
  */
 static int find_file(
@@ -225,6 +227,10 @@ static int find_file(
     struct stat dummy_buf;
     const char *path_start = path_list;
     size_t name_length = strlen(name);
+    int res;
+
+    if (name_length > NAME_MAX)
+        return -1; /* cannot possibly exist */
 
     if (!statbuf)
         statbuf = &dummy_buf;
@@ -236,15 +242,27 @@ static int find_file(
 
         if (path_length + name_length + 1 >= buffer_size) {
             LOG(ERROR, "find_qrexec_service_file: buffer too small for file path");
-            return -1;
+            return -2;
         }
 
         memcpy(buffer, path_start, path_length);
         buffer[path_length] = '/';
         strcpy(buffer + path_length + 1, name);
         //LOG(INFO, "stat(%s)", buffer);
-        if (stat(buffer, statbuf) == 0)
+        res = lstat(buffer, statbuf);
+        if (res == 0 && S_ISLNK(statbuf->st_mode)) {
+            /* check if the symlink is valid */
+            res = stat(buffer, statbuf);
+            assert(res == -1 || !S_ISLNK(statbuf->st_mode));
+        }
+        if (res == 0) {
             return 0;
+        } else {
+            assert(res == -1);
+            if (errno != ENOENT) {
+                return -2;
+            }
+        }
 
         path_start = path_end;
         while (*path_start == ':')
@@ -264,7 +282,7 @@ static int load_service_config_raw(struct qrexec_parsed_command *cmd,
 
     int ret = find_file(config_path, cmd->service_descriptor,
                         config_full_path, sizeof(config_full_path), NULL);
-    if (ret < 0 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
+    if (ret == -1 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
         ret = find_file(config_path, cmd->service_name,
                         config_full_path, sizeof(config_full_path), NULL);
     if (ret < 0)
@@ -462,7 +480,7 @@ static int execute_qrexec_service(
     int ret = find_file(qrexec_service_path, cmd->service_descriptor,
                         service_full_path, sizeof(service_full_path),
                         &statbuf);
-    if (ret < 0 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
+    if (ret == -1 && strcmp(cmd->service_descriptor, cmd->service_name) != 0)
         ret = find_file(qrexec_service_path, cmd->service_name,
                         service_full_path, sizeof(service_full_path),
                         &statbuf);

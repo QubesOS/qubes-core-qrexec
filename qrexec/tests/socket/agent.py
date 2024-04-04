@@ -525,7 +525,6 @@ echo "general service"
         )
         self.check_dom0(dom0)
 
-    @unittest.expectedFailure
     def test_exec_broken_specific_service(self):
         os.symlink("/dev/null/invalid",
                    os.path.join(self.tempdir, "rpc", "qubes.Service+arg"))
