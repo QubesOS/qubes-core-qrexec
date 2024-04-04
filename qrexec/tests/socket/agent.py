@@ -26,6 +26,7 @@ import shutil
 import struct
 import getpass
 import itertools
+import asyncio
 
 import psutil
 import pytest
@@ -580,6 +581,38 @@ echo "general service"
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
                 (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
+    @unittest.expectedFailure
+    def test_exec_null_argument_finds_service_for_empty_argument(self):
+        self.make_executable_service(
+            "local-rpc",
+            "qubes.Service+",
+            """\
+#!/bin/sh --
+echo "specific service: $QREXEC_SERVICE_FULL_NAME"
+""",
+        )
+        self.make_executable_service(
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh
+echo "general service"
+""",
+        )
+        target, dom0 = self.execute_qubesrpc("qubes.Service", "domX")
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        messages = target.recv_all_messages()
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"specific service: qubes.Service\n"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
         self.check_dom0(dom0)
