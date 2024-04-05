@@ -139,7 +139,7 @@ struct trigger_service_params {
 struct trigger_service_params3 {
     char target_domain[64];           /* null terminated ASCII string */
     struct service_params request_id; /* service request id */
-    // char service_name[0];          /* null terminated ASCII string, size = msg_header.len - sizeof(struct trigger_service_params3) */
+    char service_name[];              /* null terminated ASCII string, size = msg_header.len - sizeof(struct trigger_service_params3) */
 };
 
 struct peer_info {

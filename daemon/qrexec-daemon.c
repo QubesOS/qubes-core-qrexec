@@ -1412,55 +1412,48 @@ void handle_message_from_agent(void)
             return;
         }
         case MSG_TRIGGER_SERVICE3: {
-            struct trigger_service_params3 untrusted_params3, params3;
-            size_t service_name_len = hdr.len - sizeof(untrusted_params3), nul_offset;
-            char *untrusted_service_name = malloc(service_name_len), *service_name = NULL;
+            struct trigger_service_params3 *untrusted_params3, *params3;
 
-            if (!untrusted_service_name)
+            untrusted_params3 = malloc(hdr.len);
+            if (!untrusted_params3)
                 handle_vchan_error("malloc(service_name)");
 
-            if (libvchan_recv(vchan, &untrusted_params3, sizeof(untrusted_params3))
-                    != sizeof(untrusted_params3)) {
-                free(untrusted_service_name);
-                handle_vchan_error("recv params3");
-            }
-            if (libvchan_recv(vchan, untrusted_service_name, service_name_len)
-                    != (int)service_name_len) {
-                free(untrusted_service_name);
+            if (libvchan_recv(vchan, untrusted_params3, hdr.len)
+                    != (int)hdr.len) {
+                free(untrusted_params3);
                 handle_vchan_error("recv params3(service_name)");
             }
-            service_name_len -= 1;
+            size_t const service_name_len = hdr.len - sizeof(*untrusted_params3) - 1;
 
             /* sanitize start */
-            ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
-            sanitize_name(untrusted_params3.target_domain, "@:");
-            if (!validate_request_id(&untrusted_params3.request_id, "MSG_TRIGGER_SERVICE3"))
+            ENSURE_NULL_TERMINATED(untrusted_params3->target_domain);
+            sanitize_name(untrusted_params3->target_domain, "@:");
+            if (!validate_request_id(&untrusted_params3->request_id, "MSG_TRIGGER_SERVICE3"))
                 goto fail3;
-            params3 = untrusted_params3;
-            if (untrusted_service_name[service_name_len] != 0) {
+            if (untrusted_params3->service_name[service_name_len] != 0) {
                 LOG(ERROR, "Service name not NUL-terminated");
                 goto fail3;
             }
-            nul_offset = strlen(untrusted_service_name);
+            size_t const nul_offset = strlen(untrusted_params3->service_name);
             if (nul_offset != service_name_len) {
                 LOG(ERROR, "Service name contains NUL byte at offset %zu", nul_offset);
                 goto fail3;
             }
-            if (!validate_service_name(untrusted_service_name))
+            if (!validate_service_name(untrusted_params3->service_name))
                 goto fail3;
-            service_name = untrusted_service_name;
-            untrusted_service_name = NULL;
+            params3 = untrusted_params3;
+            untrusted_params3 = NULL;
             /* sanitize end */
 
             handle_execute_service(remote_domain_id, remote_domain_name,
-                    params3.target_domain,
-                    service_name,
-                    &params3.request_id);
-            free(service_name);
+                    params3->target_domain,
+                    params3->service_name,
+                    &params3->request_id);
+            free(params3);
             return;
 fail3:
-            send_service_refused(vchan, &untrusted_params3.request_id);
-            free(untrusted_service_name);
+            send_service_refused(vchan, &untrusted_params3->request_id);
+            free(untrusted_params3);
             return;
         }
         case MSG_CONNECTION_TERMINATED:

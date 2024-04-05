@@ -819,9 +819,7 @@ static void reap_children(void)
 static void handle_trigger_io(void)
 {
     struct msg_header hdr;
-    struct trigger_service_params3 params;
-    char *command = NULL;
-    size_t command_len;
+    struct trigger_service_params3 *params = NULL;
     int client_fd;
 
     client_fd = do_accept(trigger_fd);
@@ -830,40 +828,32 @@ static void handle_trigger_io(void)
     if (!read_all(client_fd, &hdr, sizeof(hdr)))
         goto error;
     if (hdr.type != MSG_TRIGGER_SERVICE3 ||
-            hdr.len <= sizeof(params) ||
-            hdr.len > sizeof(params) + MAX_SERVICE_NAME_LEN) {
+            hdr.len <= sizeof(*params) ||
+            hdr.len > sizeof(*params) + MAX_SERVICE_NAME_LEN) {
         LOG(ERROR, "Invalid request received from qrexec-client-vm, is it outdated?");
         goto error;
     }
-    if (!read_all(client_fd, &params, sizeof(params)))
+    params = malloc(hdr.len);
+    if (!params)
         goto error;
-    command_len = hdr.len - sizeof(params);
-    command = malloc(command_len);
-    if (!command)
-        goto error;
-    if (!read_all(client_fd, command, command_len))
-        goto error;
-    if (command[command_len-1] != '\0')
+    if (!read_all(client_fd, params, hdr.len))
         goto error;
 
-    int res = snprintf(params.request_id.ident, sizeof(params.request_id), "SOCKET%d", client_fd);
-    if (res < 0 || res >= (int)sizeof(params.request_id))
+    int res = snprintf(params->request_id.ident, sizeof(params->request_id), "SOCKET%d", client_fd);
+    if (res < 0 || res >= (int)sizeof(params->request_id))
         abort();
     if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) != sizeof(hdr))
         handle_vchan_error("write hdr");
-    if (libvchan_send(ctrl_vchan, &params, sizeof(params)) != sizeof(params))
+    if (libvchan_send(ctrl_vchan, params, hdr.len) != (int)hdr.len)
         handle_vchan_error("write params");
-    if (libvchan_send(ctrl_vchan, command, command_len) != (int)command_len)
-        handle_vchan_error("write command");
 
-    free(command);
+    free(params);
     /* do not close client_fd - we'll need it to send the connection details
      * later (when dom0 accepts the request) */
     return;
 error:
     LOG(ERROR, "Failed to retrieve/execute request from qrexec-client-vm");
-    if (command)
-        free(command);
+    free(params);
     close(client_fd);
 }
 
