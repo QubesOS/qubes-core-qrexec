@@ -46,8 +46,6 @@ class TestDaemon(unittest.TestCase):
     domain_name = "domain_name"
 
     # Stub qrexec-policy-exec program.
-    # Strictly speaking, the program should also run qrexec-client in case the
-    # call is allowed, but we will simulate that elsewhere.
     POLICY_PROGRAM = """\
 #!/bin/sh
 
