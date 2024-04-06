@@ -1,22 +1,25 @@
 #!/bin/sh -l
+# we don't use globbing, disable it
+set -f
 
-if [ -z "$QREXEC_SERVICE_PATH" ]; then
+if [ -z "${QREXEC_SERVICE_PATH+x}" ]; then
     QREXEC_SERVICE_PATH=/usr/local/etc/qubes-rpc:/etc/qubes-rpc
 fi
+tmpdir=${XDG_RUNTIME_DIR-/tmp}
 
 # write stderr to both calling party and local log; be very careful about
 # closing file descriptors here - if either stdout or stderr will not be closed
 # when service process does the same - service call will hang (waiting for EOF
 # on stdout/stderr)
-stderr_pipe=/tmp/qrexec-rpc-stderr.$$
-mkfifo $stderr_pipe
+stderr_pipe=$tmpdir/qrexec-rpc-stderr.$$
+mkfifo -- "$stderr_pipe"
 # tee can't write to file descriptor, nor /proc/self/fd/2 (EXIO on open)
-return_stderr_pipe=/tmp/qrexec-rpc-stderr-return.$$
-mkfifo $return_stderr_pipe
-{ cat <$return_stderr_pipe >&2 2>/dev/null; rm -f $return_stderr_pipe; } </dev/null >/dev/null &
-{ tee $return_stderr_pipe <$stderr_pipe |\
-       logger -t "$1-$2"; rm -f $stderr_pipe; } </dev/null >/dev/null 2>&1 &
-exec 2>$stderr_pipe
+return_stderr_pipe=$tmpdir/qrexec-rpc-stderr-return.$$
+mkfifo -- "$return_stderr_pipe"
+{ cat <"$return_stderr_pipe" >&2 2>/dev/null; rm -f -- "$return_stderr_pipe"; } </dev/null >/dev/null &
+{ tee -- "$return_stderr_pipe" <"$stderr_pipe" |
+       logger -t "$1-$2"; rm -f -- "$stderr_pipe"; } </dev/null >/dev/null 2>&1 &
+exec 2>"$stderr_pipe"
 
 if ! [ $# = 2 -o $# = 4 ] ; then
 	echo "$0: bad argument count, usage: $0 SERVICE-NAME REMOTE-DOMAIN-NAME [REQUESTED_TARGET_TYPE REQUESTED_TARGET]" >&2
