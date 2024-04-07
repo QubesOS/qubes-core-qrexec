@@ -76,7 +76,7 @@ static void close_stdout(int fd, bool restore_block) {
     } else if (shutdown(fd, SHUT_RD) == -1) {
         if (errno == ENOTSOCK)
             close(fd);
-        else
+        else if (errno != ENOTCONN) /* can happen with TCP, harmless */
             PERROR("shutdown close_stdout");
     }
 }

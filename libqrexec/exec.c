@@ -27,11 +27,12 @@
 #include <stddef.h>
 #include <limits.h>
 
-#include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include "qrexec.h"
@@ -274,6 +275,10 @@ static int find_file(
                 {
                     if (target_len >= buffer_size) {
                         /* buffer too small */
+                        LOG(ERROR, "Buffer size %zu too small for target length %zu", buffer_size, target_len);
+                        rc = -2;
+                    } else if (target_len == sizeof("/dev/tcp")) {
+                        LOG(ERROR, "/dev/tcp/ not followed by host");
                         rc = -2;
                     } else {
                         memcpy(buffer, buf, target_len);
@@ -425,7 +430,7 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
 
         /* Parse service name ("qubes.Service") */
 
-        const char *const plus = memchr(start, '+', descriptor_len);
+        char *const plus = memchr(start, '+', descriptor_len);
         size_t const name_len = plus != NULL ? (size_t)(plus - start) : descriptor_len;
         if (name_len > NAME_MAX) {
             LOG(ERROR, "Service name too long to execute (length %zu)", name_len);
@@ -445,6 +450,8 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
             goto err;
         if (plus == NULL)
             cmd->service_descriptor[descriptor_len] = '+';
+        else
+            cmd->arg = cmd->service_descriptor + (plus + 1 - start);
 
         /* Parse source domain */
 
@@ -495,7 +502,7 @@ int execute_qubes_rpc_command(const char *cmdline, int *pid, int *stdin_fd,
 }
 
 int execute_parsed_qubes_rpc_command(
-        const struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
+        struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
         int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer) {
     if (cmd->service_descriptor) {
         // Proper Qubes RPC call
@@ -516,9 +523,81 @@ int execute_parsed_qubes_rpc_command(
                            pid, stdin_fd, stdout_fd, stderr_fd);
     }
 }
+static bool validate_port(const char *port) {
+#define MAXPORT "65535"
+#define MAXPORTLEN (sizeof MAXPORT - 1)
+    if (*port < '1' || *port > '9')
+        return false;
+    const char *p = port + 1;
+    for (; *p != '\0'; ++p) {
+        if (*p < '0' || *p > '9')
+            return false;
+    }
+    if (p - port > (ptrdiff_t)MAXPORTLEN)
+        return false;
+    if (p - port < (ptrdiff_t)MAXPORTLEN)
+        return true;
+    return memcmp(port, MAXPORT, MAXPORTLEN) <= 0;
+#undef MAXPORT
+#undef MAXPORTLEN
+}
+
+static int qubes_tcp_connect(const char *host, const char *port)
+{
+    // Work around a glibc bug: overly-large port numbers not rejected
+    if (!validate_port(port)) {
+        LOG(ERROR, "Invalid port number %s", port);
+        return -1;
+    }
+    /* If there is ':' or '%' in the host, then this must be an IPv6 address, not IPv4. */
+    bool const must_be_ipv6_addr = strchr(host, ':') != NULL || strchr(host, '%') != NULL;
+    LOG(DEBUG, "Connecting to %s%s%s:%s",
+               must_be_ipv6_addr ? "[" : "",
+               host,
+               must_be_ipv6_addr ? "]" : "",
+               port);
+    struct addrinfo hints = {
+        .ai_flags = AI_NUMERICSERV | AI_NUMERICHOST,
+        .ai_family = must_be_ipv6_addr ? AF_INET6 : AF_UNSPEC,
+        .ai_socktype = SOCK_STREAM,
+        .ai_protocol = IPPROTO_TCP,
+    }, *addrs;
+    int rc = getaddrinfo(host, port, &hints, &addrs);
+    if (rc != 0) {
+        /* data comes from symlink or from qrexec service argument, which has already
+         * been sanitized */
+        LOG(ERROR, "getaddrinfo(%s, %s) failed: %s", host, port, gai_strerror(rc));
+        return -1;
+    }
+    rc = -1;
+    assert(addrs != NULL && "getaddrinfo() returned zero addresses");
+    assert(addrs->ai_next == NULL &&
+           "getaddrinfo() returned multiple addresses despite AI_NUMERICHOST | AI_NUMERICSERV");
+    int sockfd = socket(addrs->ai_family,
+                        addrs->ai_socktype | SOCK_CLOEXEC,
+                        addrs->ai_protocol);
+    if (sockfd < 0)
+        goto freeaddrs;
+    {
+        int one = 1;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one) != 0)
+            abort();
+    }
+    int res = connect(sockfd, addrs->ai_addr, addrs->ai_addrlen);
+    if (res != 0) {
+        PERROR("connect");
+        close(sockfd);
+    } else {
+        rc = sockfd;
+        LOG(DEBUG, "Connection succeeded");
+    }
+freeaddrs:
+    freeaddrinfo(addrs);
+    return rc;
+}
 
 bool find_qrexec_service(
-        const struct qrexec_parsed_command *cmd,
+        struct qrexec_parsed_command *cmd,
         int *socket_fd, struct buffer *stdin_buffer) {
     assert(cmd->service_descriptor);
 
@@ -564,6 +643,68 @@ bool find_qrexec_service(
         }
 
         *socket_fd = s;
+        return true;
+    } else if (S_ISLNK(statbuf.st_mode)) {
+        /* TCP-based service */
+        assert(path_buffer.buflen >= (int)sizeof("/dev/tcp") - 1);
+        assert(memcmp(path_buffer.data, "/dev/tcp", sizeof("/dev/tcp") - 1) == 0);
+        char *address = path_buffer.data + (sizeof("/dev/tcp") - 1);
+        char *host = NULL, *port = NULL;
+        if (*address == '/') {
+            host = address + 1;
+            char *slash = strchr(host, '/');
+            if (slash != NULL) {
+                *slash = '\0';
+                port = slash + 1;
+            }
+        } else {
+            assert(*address == '\0');
+        }
+        if (port == NULL) {
+            if (cmd->arg == NULL || *cmd->arg == '\0') {
+                LOG(ERROR, "No or empty argument provided, cannot connect to %s",
+                    path_buffer.data);
+                return false;
+            }
+            if (host == NULL) {
+                /* Get both host and port from service arguments */
+                host = cmd->arg;
+                port = strrchr(cmd->arg, '+');
+                if (port == NULL) {
+                    LOG(ERROR, "No port provided, cannot connect to %s", cmd->arg);
+                    return false;
+                }
+                *port = '\0';
+                for (char *p = host; p < port; ++p) {
+                    if (*p == '_') {
+                        LOG(ERROR, "Underscore not allowed in hostname %s", host);
+                        return false;
+                    }
+                    if (*p == '+')
+                        *p = ':';
+                }
+                port++;
+            } else {
+                /* Get just port from service arguments */
+                port = cmd->arg;
+            }
+        } else {
+            if (cmd->arg != NULL && *cmd->arg != '\0') {
+                LOG(ERROR, "Unexpected argument %s to service %s", cmd->arg, path_buffer.data);
+                return false;
+            }
+        }
+
+        if (cmd->send_service_descriptor) {
+            /* send part after "QUBESRPC ", including trailing NUL */
+            const char *desc = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
+            buffer_append(stdin_buffer, desc, strlen(desc) + 1);
+        }
+
+        int res = qubes_tcp_connect(host, port);
+        if (res == -1)
+            return false;
+        *socket_fd = res;
         return true;
     }
 

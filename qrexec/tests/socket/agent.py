@@ -22,6 +22,7 @@ import subprocess
 import os.path
 import os
 import tempfile
+import socket
 import shutil
 import struct
 import getpass
@@ -701,6 +702,201 @@ skip-service-descriptor = true
             ],
         )
         self.check_dom0(dom0)
+
+    def test_connect_socket_tcp(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+"
+        )
+        port = 65534
+        host = "127.0.0.1"
+        os.symlink(f"/dev/tcp/{host}/{port}", socket_path)
+        self._test_tcp(socket.AF_INET, "qubes.SocketService", host, port)
+
+    def _test_tcp_raw(self, family: int, service: str, host: str, port: int, accept=True, skip=True):
+        server = socket.socket(family, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((host, port))
+        server.listen(1)
+        server = qrexec.QrexecServer(server)
+        self.addCleanup(server.close)
+        if skip:
+            with open(os.path.join(self.tempdir, "rpc-config", service), "wb") as config:
+                config.write(b"skip-service-descriptor = true\n")
+                config.flush()
+        target, dom0 = self.execute_qubesrpc(service, "domX")
+        if accept:
+            server.accept()
+        message = b"stdin data"
+        target.send_message(qrexec.MSG_DATA_STDIN, message)
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        if accept:
+            if not skip:
+                message = b" domX\0".join((service.encode("ascii", "strict"), message))
+            self.assertEqual(server.recvall(len(message)), message)
+            server.sendall(b"stdout data")
+        server.close()
+        messages = target.recv_all_messages()
+        self.check_dom0(dom0)
+        return util.sort_messages(messages)
+
+    def _test_tcp(self, family: int, service: str, host: str, port: int) -> None:
+        # No stderr
+        self.assertListEqual(
+            self._test_tcp_raw(family, service, host, port),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+
+    def test_connect_socket_tcp_port_from_arg(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        port = 65533
+        host = "127.0.0.1"
+        os.symlink(f"/dev/tcp/{host}", socket_path)
+        self._test_tcp(socket.AF_INET, f"qubes.SocketService+{port}", host, port)
+
+    def test_connect_socket_tcp_host_and_port_from_arg(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        port = 65535
+        host = "127.0.0.1"
+        os.symlink(f"/dev/tcp", socket_path)
+        self._test_tcp(socket.AF_INET, f"qubes.SocketService+{host}+{port}", host, port)
+
+    def test_connect_socket_tcp_ipv6(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        port = 65532
+        host = "::1"
+        os.symlink(f"/dev/tcp", socket_path)
+        self._test_tcp(socket.AF_INET6, f"qubes.SocketService+{host.replace(':', '+')}+{port}", host, port)
+
+    def test_connect_socket_tcp_ipv6_service_arg(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        port = 65532
+        host = "::1"
+        os.symlink(f"/dev/tcp", socket_path)
+        service = f"qubes.SocketService+{host.replace(':', '+')}+{port}"
+        self.assertListEqual(
+            self._test_tcp_raw(socket.AF_INET6, service, host, port, skip=False),
+            [
+                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+
+    def _test_connect_socket_tcp_unexpected_host(self, host):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        port = 65535
+        path = f"/dev/tcp/{host}"
+        os.symlink(path, socket_path)
+        messages = self._test_tcp_raw(socket.AF_INET, f"qubes.SocketService+{host}+{port}",
+                                      host, port, accept=False)
+        self.assertListEqual(
+            messages,
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+
+    def test_connect_socket_tcp_missing_host(self):
+        """
+        /dev/tcp socket service, neither host nor port provided.
+        """
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        path = "/dev/tcp"
+        os.symlink(path, socket_path)
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService+", "domX")
+        self.assertListEqual(
+            target.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
+    def test_connect_socket_tcp_missing_port(self):
+        """
+        /dev/tcp socket service, host but not port provided.
+        """
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        path = f"/dev/tcp"
+        os.symlink(path, socket_path)
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService+127.0.0.1", "domX")
+        self.assertListEqual(
+            target.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
+    def test_connect_socket_tcp_no_port(self):
+        """
+        /dev/tcp/127.0.0.1 socket service, no port provided
+        """
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        path = "/dev/tcp/127.0.0.1"
+        os.symlink(path, socket_path)
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService", "domX")
+        self.assertListEqual(
+            target.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
+    def test_connect_socket_tcp_no_port_ipv6(self):
+        """
+        /dev/tcp/::1 socket service, no port provided
+        """
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService"
+        )
+        path = "/dev/tcp/::1"
+        os.symlink(path, socket_path)
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService", "domX")
+        self.assertListEqual(
+            target.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\177\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
+    def test_connect_socket_tcp_unexpected_host(self):
+        self._test_connect_socket_tcp_unexpected_host("127.0.0.1")
+
+    def test_connect_socket_tcp_empty_host(self):
+        self._test_connect_socket_tcp_unexpected_host("")
 
     def test_connect_socket(self):
         socket_path = os.path.join(

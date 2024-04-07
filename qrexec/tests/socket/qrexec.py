@@ -147,6 +147,7 @@ def socket_server(socket_path, socket_path_alt=None):
         except FileNotFoundError:
             pass
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(socket_path)
     if socket_path_alt is not None:
         os.symlink(socket_path, socket_path_alt)

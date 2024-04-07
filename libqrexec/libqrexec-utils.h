@@ -49,7 +49,9 @@ struct buffer {
 #define WRITE_STDIN_BUFFERED  1 /* something still in the buffer */
 #define WRITE_STDIN_ERROR     2 /* write error, errno set */
 
-/* Parsed Qubes RPC or legacy command. */
+/* Parsed Qubes RPC or legacy command.
+ * The size of this structure is not part of the public API or ABI.
+ * Only use instances allocated by libqrexec-utils. */
 struct qrexec_parsed_command {
     const char *cmdline;
 
@@ -83,6 +85,13 @@ struct qrexec_parsed_command {
 
     /* For socket-based services: Should the service descriptor be sent? */
     bool send_service_descriptor;
+
+    /* Remaining fields are private to libqrexec-utils.  Do not access them
+     * directly - they may change in any update. */
+
+    /* Pointer to the argument, or NULL if there is no argument.
+     * Same buffer as "service_descriptor". */
+    char *arg;
 };
 
 /* Parse a command, return NULL on failure. Uses cmd->cmdline
@@ -142,7 +151,7 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
  * nonzero on failure.
  */
 int execute_parsed_qubes_rpc_command(
-        const struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
+        struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
         int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer);
 
 /**
@@ -157,7 +166,7 @@ int execute_parsed_qubes_rpc_command(
  * successfully, false on failure.
  */
 bool find_qrexec_service(
-        const struct qrexec_parsed_command *cmd,
+        struct qrexec_parsed_command *cmd,
         int *socket_fd, struct buffer *stdin_buffer);
 
 /** Suggested buffer size for the path buffer of find_qrexec_service. */
