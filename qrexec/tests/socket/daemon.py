@@ -377,7 +377,7 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
     def client_exec(
         self,
         domain: int,
-        cmd: str = "user:echo Hello world",
+        cmd: str = "DEFAULT:echo Hello world",
         message_type: int = qrexec.MSG_JUST_EXEC,
     ):
         client = self.connect_client()

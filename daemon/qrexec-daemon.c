@@ -534,16 +534,16 @@ static void release_vchan_port(int port, int expected_remote_id)
 
 static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
 {
-    struct exec_params params;
+    struct exec_params *params = NULL;
     uint32_t len;
-    char *buf = NULL;
+    char *buf;
     int use_default_user = 0;
     int i;
 
-    if (hdr->len <= sizeof(params)) {
+    if (hdr->len <= sizeof(*params)) {
         LOG(ERROR, "Too-short packet received from client %d: "
                    "type %" PRIu32 ", len %" PRIu32 "(min %zu)",
-                   fd, hdr->type, hdr->len, sizeof(params) + 1);
+                   fd, hdr->type, hdr->len, sizeof(*params) + 1);
         goto terminate;
     }
     if (hdr->len > MAX_QREXEC_CMD_LEN) {
@@ -552,20 +552,18 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
                    fd, hdr->type, hdr->len, MAX_QREXEC_CMD_LEN);
         goto terminate;
     }
-    len = hdr->len - sizeof(params);
+    len = hdr->len - sizeof(*params);
 
-    buf = malloc(len);
-    if (buf == NULL) {
+    params = malloc(hdr->len);
+    if (params == NULL) {
         PERROR("malloc");
         goto terminate;
     }
 
-    if (!read_all(fd, &params, sizeof(params))) {
+    if (!read_all(fd, params, hdr->len)) {
         goto terminate;
     }
-    if (!read_all(fd, buf, len)) {
-        goto terminate;
-    }
+    buf = params->cmdline;
 
     if (buf[len - 1] != '\0') {
         LOG(ERROR, "Client sent buffer of length %" PRIu32 " that is not "
@@ -592,32 +590,32 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         policy_pending[i].response_sent = RESPONSE_ALLOW;
     }
 
-    if (!params.connect_port) {
+    if (!params->connect_port) {
         struct exec_params client_params;
         /* allocate port and send it to the client */
-        params.connect_port = allocate_vchan_port(params.connect_domain);
-        if (params.connect_port <= 0) {
+        params->connect_port = allocate_vchan_port(params->connect_domain);
+        if (params->connect_port <= 0) {
             LOG(ERROR, "Failed to allocate new vchan port, too many clients?");
             goto terminate;
         }
         /* notify the client when this connection got terminated */
-        vchan_port_notify_client[params.connect_port-VCHAN_BASE_DATA_PORT] = fd;
-        client_params.connect_port = params.connect_port;
+        vchan_port_notify_client[params->connect_port-VCHAN_BASE_DATA_PORT] = fd;
+        client_params.connect_port = params->connect_port;
         client_params.connect_domain = remote_domain_id;
         hdr->len = sizeof(client_params);
         if (!write_all(fd, hdr, sizeof(*hdr)) ||
                 !write_all(fd, &client_params, sizeof(client_params))) {
             terminate_client(fd);
-            release_vchan_port(params.connect_port, params.connect_domain);
-            free(buf);
+            release_vchan_port(params->connect_port, params->connect_domain);
+            free(params);
             return 0;
         }
         /* restore original len value */
-        hdr->len = len+sizeof(params);
+        hdr->len = len+sizeof(*params);
     } else {
-        if (!((params.connect_port >= VCHAN_BASE_DATA_PORT) &&
-              (params.connect_port < VCHAN_BASE_DATA_PORT+MAX_CLIENTS))) {
-            LOG(ERROR, "Invalid connect port %" PRIu32, params.connect_port);
+        if (!((params->connect_port >= VCHAN_BASE_DATA_PORT) &&
+              (params->connect_port < VCHAN_BASE_DATA_PORT+MAX_CLIENTS))) {
+            LOG(ERROR, "Invalid connect port %" PRIu32, params->connect_port);
             goto terminate;
         }
     }
@@ -629,24 +627,25 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
     }
     if (libvchan_send(vchan, hdr, sizeof(*hdr)) != sizeof(*hdr))
         handle_vchan_error("send");
-    if (libvchan_send(vchan, &params, sizeof(params)) != sizeof(params))
-        handle_vchan_error("send params");
     if (use_default_user) {
         int send_len = strlen(default_user);
+        if (libvchan_send(vchan, params, sizeof(*params)) != sizeof(*params))
+            handle_vchan_error("send params");
         if (libvchan_send(vchan, default_user, send_len) != send_len)
             handle_vchan_error("send default_user");
         send_len = len-default_user_keyword_len_without_colon;
         if (libvchan_send(vchan, buf+default_user_keyword_len_without_colon,
                     send_len) != send_len)
             handle_vchan_error("send buf");
-    } else
-        if (libvchan_send(vchan, buf, len) < (int)len)
+    } else {
+        if (libvchan_send(vchan, params, hdr->len) != (int)hdr->len)
             handle_vchan_error("send buf");
-    free(buf);
+    }
+    free(params);
     return 1;
 terminate:
     terminate_client(fd);
-    free(buf);
+    free(params);
     return 0;
 }
 
