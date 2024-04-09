@@ -211,25 +211,33 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
 
 
 /* See also qrexec-agent.c:wait_for_session_maybe() */
-static void wait_for_session_maybe(char *cmdline)
+static bool wait_for_session_maybe(char *cmdline)
 {
     struct qrexec_parsed_command *cmd;
     pid_t pid;
     int status;
+    bool rc = false;
 
     cmd = parse_qubes_rpc_command(cmdline, false);
     if (!cmd)
         goto out;
 
-    if (cmd->nogui)
+    if (cmd->nogui) {
+        rc = true;
         goto out;
+    }
 
-    if (!cmd->service_descriptor)
+    if (!cmd->service_descriptor) {
+        rc = true;
         goto out;
+    }
 
-    load_service_config_v2(cmd);
-    if (!cmd->wait_for_session)
+    if (load_service_config_v2(cmd) < 0)
         goto out;
+    if (!cmd->wait_for_session) {
+        rc = true;
+        goto out;
+    }
 
     pid = fork();
     switch (pid) {
@@ -237,10 +245,12 @@ static void wait_for_session_maybe(char *cmdline)
             close(0);
             exec_wait_for_session(cmd->source_domain);
             PERROR("exec");
-            exit(1);
+            _exit(1);
         case -1:
             PERROR("fork");
             goto out;
+        default:
+            rc = true;
     }
 
     if (waitpid(local_pid, &status, 0) > 0) {
@@ -251,6 +261,7 @@ static void wait_for_session_maybe(char *cmdline)
 
 out:
     destroy_qrexec_parsed_command(cmd);
+    return rc;
 }
 
 static int prepare_local_fds(char *cmdline, struct buffer *stdin_buffer)
@@ -617,8 +628,12 @@ int main(int argc, char **argv)
 
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
-        wait_for_session_maybe(remote_cmdline);
-        prepare_ret = prepare_local_fds(remote_cmdline, &stdin_buffer);
+        if (!wait_for_session_maybe(remote_cmdline)) {
+            LOG(ERROR, "Cannot load service configuration, or forking process failed");
+            prepare_ret = -1;
+        } else {
+            prepare_ret = prepare_local_fds(remote_cmdline, &stdin_buffer);
+        }
         if (request_id) {
             void (*old_handler)(int);
 

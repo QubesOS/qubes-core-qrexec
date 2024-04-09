@@ -782,19 +782,56 @@ class TestClient(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
-    def test_run_dom0_service_exec(self):
+    def exec_service_with_invalid_config(self, invalid_config):
+        config_path = os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg")
+        if invalid_config is not None:
+            with open(config_path, "w") as f:
+                f.write(invalid_config)
+        else:
+            os.symlink("/dev/null/doesnotexist", config_path)
         util.make_executable_service(
             self.tempdir,
             "rpc",
             "qubes.Service",
             """\
-        #!/bin/sh
-        read input
-        echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
-        """,
+#!/bin/sh
+read input
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
+""",
+        )
+        self.test_run_dom0_service_failed()
+
+    def test_exec_service_with_invalid_config_1(self):
+        self.exec_service_with_invalid_config("wait-for-session = 00\n")
+
+    def test_exec_service_with_invalid_config_2(self):
+        self.exec_service_with_invalid_config("wait-for-session = 01\n")
+
+    def test_exec_service_with_invalid_config_3(self):
+        self.exec_service_with_invalid_config("wait-for-session = \n")
+
+    def test_exec_service_with_invalid_config_4(self):
+        self.exec_service_with_invalid_config("wait-for-session = \"a\"\n")
+
+    def test_exec_service_with_invalid_config_5(self):
+        self.exec_service_with_invalid_config("wait-for-session\n")
+
+    def test_exec_service_with_invalid_config_6(self):
+        self.exec_service_with_invalid_config(None)
+
+    def _test_run_dom0_service_exec(self, nogui):
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh
+read input
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
+""",
         )
 
-        cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
+        cmd = ("nogui:" if nogui else "") + "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
@@ -813,6 +850,12 @@ class TestClient(unittest.TestCase):
         )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
+
+    def test_run_dom0_service_exec(self):
+        self._test_run_dom0_service_exec(False)
+
+    def test_run_dom0_service_exec_nogui(self):
+        self._test_run_dom0_service_exec(True)
 
     def test_run_dom0_service_failed(self):
         # qubes.Service does not exist
