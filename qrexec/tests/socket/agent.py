@@ -508,10 +508,12 @@ wait-for-session = 1 # line comment
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
 """,
         )
-        with open(
-            os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
-        ) as f:
-            f.write(invalid_config)
+        config_path = os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg")
+        if invalid_config is not None:
+            with open(config_path, "w") as f:
+                f.write(invalid_config)
+        else:
+            os.symlink("/dev/null/doesnotexist", config_path)
         target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         messages = target.recv_all_messages()
         self.assertListEqual(
@@ -538,6 +540,10 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
 
     def test_exec_service_with_invalid_config_5(self):
         self.exec_service_with_invalid_config("wait-for-session\n")
+
+    @unittest.expectedFailure
+    def test_exec_service_with_invalid_config_6(self):
+        self.exec_service_with_invalid_config(None)
 
     def test_exec_service_with_arg(self):
         self.make_executable_service(
