@@ -408,6 +408,10 @@ wait-for-session = 0
         self.check_dom0(dom0)
 
     def test_wait_for_session(self):
+        self._test_wait_for_session("qubes.Service+arg")
+    def test_wait_for_session_config_in_location_sans_argument(self):
+        self._test_wait_for_session("qubes.Service")
+    def _test_wait_for_session(self, config_name):
         log = os.path.join(self.tempdir, "wait-for-session.log")
         util.make_executable_service(
             self.tempdir,
@@ -438,7 +442,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         assert "'" not in user
         assert "\n" not in user
         with open(
-            os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
+            os.path.join(self.tempdir, "rpc-config", config_name), "w"
         ) as f:
             f.write(f"""\
 
