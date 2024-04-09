@@ -409,9 +409,14 @@ wait-for-session = 0
 
     def test_wait_for_session(self):
         self._test_wait_for_session("qubes.Service+arg")
+    @unittest.expectedFailure
+    def test_wait_for_session_huge_path(self):
+        l = 255 - len("qubes.Service+")
+        arg = l * "a"
+        self._test_wait_for_session("qubes.Service", argument=arg)
     def test_wait_for_session_config_in_location_sans_argument(self):
         self._test_wait_for_session("qubes.Service")
-    def _test_wait_for_session(self, config_name):
+    def _test_wait_for_session(self, config_name, service_name="qubes.Service", argument="arg"):
         log = os.path.join(self.tempdir, "wait-for-session.log")
         util.make_executable_service(
             self.tempdir,
@@ -428,7 +433,7 @@ echo "wait for session: arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, user: $us
         util.make_executable_service(
             self.tempdir,
             "rpc",
-            "qubes.Service",
+            service_name,
             """\
 #!/bin/sh
 cat {}
@@ -451,7 +456,7 @@ force-user = '{user}'
 wait-for-session = 1 # line comment
 """)
 
-        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target, dom0 = self.execute_qubesrpc(service_name + "+" + argument, "domX")
         self.assertEqual(target.recv_message(), (
             qrexec.MSG_DATA_STDOUT,
             (
@@ -470,7 +475,8 @@ wait-for-session = 1 # line comment
             [
                 (
                     qrexec.MSG_DATA_STDOUT,
-                    b"arg: arg, remote domain: domX, input: stdin data\n",
+                    b"arg: " + argument.encode("ascii", "strict")
+                    + b", remote domain: domX, input: stdin data\n",
                 ),
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
