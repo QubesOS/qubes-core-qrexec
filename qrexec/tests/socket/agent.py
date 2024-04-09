@@ -409,7 +409,6 @@ wait-for-session = 0
 
     def test_wait_for_session(self):
         self._test_wait_for_session("qubes.Service+arg")
-    @unittest.expectedFailure
     def test_wait_for_session_huge_path(self):
         l = 255 - len("qubes.Service+")
         arg = l * "a"

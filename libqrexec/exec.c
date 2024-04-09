@@ -278,7 +278,7 @@ static int load_service_config_raw(struct qrexec_parsed_command *cmd,
     if (!config_path)
         config_path = QUBES_RPC_CONFIG_PATH;
 
-    char config_full_path[256];
+    char config_full_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
 
     int ret = find_file(config_path, cmd->service_descriptor,
                         config_full_path, sizeof(config_full_path), NULL);
