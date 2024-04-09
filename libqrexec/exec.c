@@ -285,7 +285,7 @@ static int load_service_config_raw(struct qrexec_parsed_command *cmd,
     if (ret == -1)
         ret = find_file(config_path, cmd->service_name,
                         config_full_path, sizeof(config_full_path), NULL);
-    if (ret < 0)
+    if (ret == -1)
         return 0;
     return qubes_toml_config_parse(config_full_path, &cmd->wait_for_session, user,
                                    &cmd->send_service_descriptor);

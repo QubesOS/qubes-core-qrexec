@@ -541,7 +541,6 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
     def test_exec_service_with_invalid_config_5(self):
         self.exec_service_with_invalid_config("wait-for-session\n")
 
-    @unittest.expectedFailure
     def test_exec_service_with_invalid_config_6(self):
         self.exec_service_with_invalid_config(None)
 
