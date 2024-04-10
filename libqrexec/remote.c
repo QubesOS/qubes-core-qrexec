@@ -150,7 +150,8 @@ out:
 int handle_input_v2(
     libvchan_t *vchan, int fd, int msg_type,
     struct prefix_data *prefix_data,
-    const struct buffer *buffer)
+    const struct buffer *buffer,
+    int dup_fd)
 {
     const size_t max_len = (size_t)buffer->buflen;
     char *buf = buffer->data;
@@ -175,6 +176,8 @@ int handle_input_v2(
             prefix_data->len -= len;
         } else {
             len = read(fd, buf, len);
+            if (dup_fd != -1 && len > 0)
+                write_all(dup_fd, buf, (size_t)len);
             /* If the other side of the socket is a process that is already dead,
              * read from such socket could fail with ECONNRESET instead of
              * just 0. */

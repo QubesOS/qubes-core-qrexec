@@ -556,9 +556,6 @@ class TestClient(unittest.TestCase):
                 os.path.join(self.tempdir, "rpc"),
             ]
         )
-        env["QREXEC_MULTIPLEXER_PATH"] = os.path.join(
-            ROOT_PATH, "lib", "qubes-rpc-multiplexer"
-        )
         env["QUBES_RPC_CONFIG_PATH"] = os.path.join(self.tempdir, "rpc-config")
         cmd = [
             os.path.join(ROOT_PATH, "daemon", "qrexec-client"),
@@ -919,12 +916,10 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input, service path
 
     def test_run_dom0_service_3_args(self):
         self._test_run_dom0_service_failed(
-                exit_status=1,
                 cmd = "QUBESRPC qubes.Service+arg src_domain name")
 
     def test_run_dom0_service_5_args(self):
         self._test_run_dom0_service_failed(
-                exit_status=1,
                 cmd = "QUBESRPC qubes.Service+arg src_domain name a b")
 
     def test_run_dom0_service_not_found(self):
