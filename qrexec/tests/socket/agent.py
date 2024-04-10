@@ -113,7 +113,7 @@ class TestAgentBase(unittest.TestCase):
         os.mkdir(os.path.join(self.tempdir, "rpc-config"))
         self.addCleanup(shutil.rmtree, self.tempdir)
 
-    def start_agent(self, fail_exec=False):
+    def start_agent(self):
         if self.agent is not None:
             return
         env = os.environ.copy()
@@ -130,11 +130,6 @@ class TestAgentBase(unittest.TestCase):
             ]
         )
         env["QUBES_RPC_CONFIG_PATH"] = os.path.join(self.tempdir, "rpc-config")
-        env["QREXEC_MULTIPLEXER_PATH"] = (
-            "/dev/null"
-            if fail_exec
-            else os.path.join(ROOT_PATH, "lib", "qubes-rpc-multiplexer")
-        )
         cmd = [
             os.path.join(ROOT_PATH, "agent", "qrexec-agent"),
             "--no-fork-server",
@@ -377,10 +372,8 @@ exit 1
 
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
 class TestAgentExecQubesRpc(TestAgentBase):
-    def execute_qubesrpc(
-        self, service: str, src_domain_name: str, fail_exec: bool = False
-    ):
-        self.start_agent(fail_exec)
+    def execute_qubesrpc(self, service: str, src_domain_name: str):
+        self.start_agent()
 
         dom0 = self.connect_dom0()
 
@@ -596,14 +589,12 @@ wait-for-session = 1 # line comment
         """
         self._test_exec_service_fail(qrexec.QREXEC_EXIT_SERVICE_NOT_FOUND)
 
-    def test_exec_service_bad_multiplexer(self):
+    def test_exec_service_bad_service(self):
         """
-        RPC multiplexer is junk
+        Service to execute is junk (-ENOEXEC from execve())
         """
-        util.make_executable_service(self.tempdir, "rpc", "qubes.Service", "")
-        target, dom0 = self.execute_qubesrpc(
-            "qubes.Service+arg", "domX", fail_exec=True
-        )
+        util.make_executable_service(self.tempdir, "rpc", "qubes.Service", "\0")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         messages = util.sort_messages(target.recv_all_messages())
         self.assertEqual(messages[0], (qrexec.MSG_DATA_STDOUT, b""))

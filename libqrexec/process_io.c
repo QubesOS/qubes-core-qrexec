@@ -96,6 +96,7 @@ int qrexec_process_io(const struct process_io_request *req,
     int stdin_fd = req->stdin_fd;
     int stdout_fd = req->stdout_fd;
     int stderr_fd = req->stderr_fd;
+    int dup_fd = req->logger_fd;
     struct buffer *stdin_buf = req->stdin_buf;
 
     bool const is_service = req->is_service;
@@ -344,7 +345,7 @@ int qrexec_process_io(const struct process_io_request *req,
         if (prefix.len > 0 || (stdout_fd >= 0 && fds[FD_STDOUT].revents)) {
             switch (handle_input_v2(
                         vchan, stdout_fd, stdout_msg_type,
-                        &prefix, &remote_buffer)) {
+                        &prefix, &remote_buffer, -1)) {
                 case REMOTE_ERROR:
                     if (!is_service && remote_status == -1) {
                         /* Even if sending fails, still try to read remaining
@@ -365,7 +366,7 @@ int qrexec_process_io(const struct process_io_request *req,
         if (stderr_fd >= 0 && fds[FD_STDERR].revents) {
             switch (handle_input_v2(
                         vchan, stderr_fd, MSG_DATA_STDERR,
-                        &empty, &remote_buffer)) {
+                        &empty, &remote_buffer, dup_fd)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send(handle_input stderr)");
                     break;

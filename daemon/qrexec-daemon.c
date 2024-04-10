@@ -1131,14 +1131,16 @@ static enum policy_response connect_daemon_socket(
 }
 
 /* called from do_fork_exec */
-static _Noreturn void do_exec(const char *prog, const char *username __attribute__((unused)))
+static _Noreturn void do_exec(const char *prog, const char *cmd, const char *username __attribute__((unused)))
 {
-    /* avoid calling qubes-rpc-multiplexer through shell */
-    exec_qubes_rpc_if_requested(prog, environ);
+    /* Avoid calling RPC command through shell.
+     * Qrexec-daemon is always in a login session already. */
+    exec_qubes_rpc_if_requested2(prog, cmd, environ, true);
 
-    /* if above haven't executed qubes-rpc-multiplexer, pass it to shell */
-    execl("/bin/bash", "bash", "-c", prog, NULL);
+    /* if above haven't executed RPC command, pass it to shell */
+    execl("/bin/bash", "bash", "-c", cmd, NULL);
     PERROR("exec bash");
+    /* treat ENOENT as "problem" because bash should always exist */
     _exit(QREXEC_EXIT_PROBLEM);
 }
 

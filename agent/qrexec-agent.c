@@ -137,7 +137,7 @@ static struct pam_conv conv = {
  * If dom0 sends overly long cmd, it will probably crash qrexec-agent (unless
  * process can allocate up to 4GB on both stack and heap), sorry.
  */
-_Noreturn void do_exec(const char *cmd, const char *user)
+_Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
 {
 #ifdef HAVE_PAM
     int retval, status;
@@ -172,7 +172,8 @@ _Noreturn void do_exec(const char *cmd, const char *user)
             exit(1);
         }
         /* call QUBESRPC if requested */
-        exec_qubes_rpc_if_requested(cmd, environ);
+        /* no point in creating a login shell for test environments */
+        exec_qubes_rpc_if_requested2(prog, cmd, environ, false);
 
         /* otherwise exec shell */
         execl("/bin/sh", "sh", "-c", cmd, NULL);
@@ -278,8 +279,9 @@ _Noreturn void do_exec(const char *cmd, const char *user)
             if (retval == -1)
                 warn("chdir(%s)", pw->pw_dir);
 
-            /* call QUBESRPC if requested */
-            exec_qubes_rpc_if_requested(cmd, env);
+            /* Call QUBESRPC if requested, using a login shell to set up
+             * environment variables. */
+            exec_qubes_rpc_if_requested2(prog, cmd, env, true);
 
             /* otherwise exec shell */
             execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
@@ -316,8 +318,9 @@ error:
     pam_end(pamh, PAM_ABORT);
     exit(1);
 #else
-    /* call QUBESRPC if requested */
-    exec_qubes_rpc_if_requested(cmd, environ);
+    /* Call QUBESRPC if requested, using a login shell to set up
+     * environment variables. */
+    exec_qubes_rpc_if_requested2(prog, cmd, environ, true);
 
     /* otherwise exec shell */
     execl("/bin/su", "su", "-", user, "-c", cmd, NULL);

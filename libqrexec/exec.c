@@ -47,43 +47,180 @@ void register_exec_func(do_exec_t *func) {
     exec_func = func;
 }
 
-void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
-    /* avoid calling qubes-rpc-multiplexer through shell */
-    if (strncmp(prog, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) == 0) {
+#define STR_LITERAL_SIZE(a) (sizeof("" a) - 1)
+#define STARTS_WITH_LITERAL(a, b) (strncmp(a, b, STR_LITERAL_SIZE(b)) == 0)
+
+static bool should_strip_env_var(const char *var)
+{
+    if (!STARTS_WITH_LITERAL(var, "QREXEC"))
+        return false;
+    const char *rest = var + STR_LITERAL_SIZE("QREXEC");
+    return !STARTS_WITH_LITERAL(rest, "_SERVICE_PATH=") &&
+           !STARTS_WITH_LITERAL(rest, "_AGENT_PID=");
+}
+
+void exec_qubes_rpc_if_requested2(const char *program, const char *cmd, char *const envp[],
+                                  bool use_shell) {
+    /* avoid calling RPC service through shell */
+    if (program) {
+        assert(program);
         char *prog_copy;
         char *tok, *savetok;
-        char *argv[16]; // right now 6 are used, but allow future extensions
-        size_t i = 1;
+        const char *argv[10];
+        size_t i = 0;
+#define MAX_ADDED_ENV_VARS 5
+        size_t const extra_env_vars = MAX_ADDED_ENV_VARS;
+        size_t env_amount = extra_env_vars;
 
-        if (prog[RPC_REQUEST_COMMAND_LEN] != ' ') {
-            LOG(ERROR, "\"" RPC_REQUEST_COMMAND "\" not followed by space");
-            _exit(126);
+        if (strncmp(cmd, RPC_REQUEST_COMMAND " ", RPC_REQUEST_COMMAND_LEN + 1) != 0) {
+            LOG(ERROR, "program != NULL, but '%s' does not start with '%s '",
+                cmd, RPC_REQUEST_COMMAND " ");
+            assert(!"Invalid command");
+            _exit(QREXEC_EXIT_PROBLEM);
         }
 
-        prog_copy = strdup(prog + RPC_REQUEST_COMMAND_LEN + 1);
+        for (char *const *env = envp; *env; ++env) {
+            // Set this 0 to 1 if adding new variable settings below,
+            // to ensure that MAX_ADDED_ENV_VARS is correct.
+            if (0 && should_strip_env_var(*env))
+                continue;
+            env_amount++;
+        }
+#define EXTEND(...)                                             \
+        do {                                                    \
+            if (iterator >= env_amount)                         \
+                abort();                                        \
+            if (asprintf(&buf[iterator++], __VA_ARGS__) < 0)    \
+                goto bad_asprintf;                              \
+        } while (0)
+#define EXTEND_RAW(arg)                                         \
+        do {                                                    \
+            if (iterator >= env_amount)                         \
+                abort();                                        \
+            buf[iterator++] = (arg);                            \
+        } while (0)
+
+        char **buf = calloc(env_amount + 1, sizeof(char *));
+        if (buf == NULL) {
+            LOG(ERROR, "calloc(%zu, %zu) failed: %m", env_amount, sizeof(char *));
+            _exit(QREXEC_EXIT_PROBLEM);
+        }
+        size_t iterator = 0;
+        for (char *const *env = envp; *env; ++env) {
+            if (!should_strip_env_var(*env)) {
+                EXTEND_RAW(*env);
+            }
+        }
+
+        prog_copy = strdup(cmd + RPC_REQUEST_COMMAND_LEN + 1);
         if (!prog_copy) {
             PERROR("strdup");
             _exit(QREXEC_EXIT_PROBLEM);
         }
 
+        argv[i++] = program;
         tok=strtok_r(prog_copy, " ", &savetok);
         while (tok != NULL) {
-            if (i >= sizeof(argv)/sizeof(argv[0])-1) {
-                LOG(ERROR, "To many arguments to %s", RPC_REQUEST_COMMAND);
+            if (i >= sizeof(argv)/sizeof(argv[0])) {
+                LOG(ERROR, "Too many arguments to %s", RPC_REQUEST_COMMAND);
                 _exit(QREXEC_EXIT_PROBLEM);
             }
             argv[i++] = tok;
-            tok=strtok_r(NULL, " ", &savetok);
+            tok = strtok_r(NULL, " ", &savetok);
         }
-        argv[i] = NULL;
 
-        argv[0] = getenv("QREXEC_MULTIPLEXER_PATH");
-        if (!argv[0])
-            argv[0] = QUBES_RPC_MULTIPLEXER_PATH;
-        execve(argv[0], argv, envp);
-        bool noent = errno == ENOENT;
-        PERROR("exec qubes-rpc-multiplexer");
-        _exit(noent ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM);
+        if (program[0] != '/') {
+            LOG(ERROR, "Program to execute not absolute path");
+            _exit(QREXEC_EXIT_PROBLEM);
+        }
+        if (i != 3 && i != 5) {
+            LOG(ERROR, "invalid number of arguments: %zu", i);
+            _exit(QREXEC_EXIT_PROBLEM);
+        }
+        const char *full_name = argv[1];
+        const char *remote_domain = argv[2];
+        const char *p = strchr(argv[1], '+');
+
+        // Change the 1 to a 0 to test the shell script generator.
+        if (!use_shell && 1) {
+            if (i == 5) {
+                EXTEND("QREXEC_REQUESTED_TARGET_TYPE=%s", argv[3]);
+                if (strcmp(argv[3], "name") == 0) {
+                    EXTEND("QREXEC_REQUESTED_TARGET=%s", argv[4]);
+                } else if (strcmp(argv[3], "keyword") == 0) {
+                    EXTEND("QREXEC_REQUESTED_TARGET_KEYWORD=%s", argv[4]);
+                } else {
+                    // requested target type unknown or not given, ignore
+                }
+            } else {
+                EXTEND_RAW("QREXEC_REQUESTED_TARGET_TYPE=");
+            }
+            EXTEND("QREXEC_SERVICE_FULL_NAME=%s", full_name);
+            EXTEND("QREXEC_REMOTE_DOMAIN=%s", remote_domain);
+            argv[1] = NULL;
+            if (p != NULL) {
+                EXTEND("QREXEC_SERVICE_ARGUMENT=%s", p + 1);
+                if (p[1] != '\0') {
+                    argv[1] = p + 1;
+                    argv[2] = NULL;
+                }
+            }
+            assert(iterator <= env_amount);
+            buf[iterator] = NULL;
+            execve(program, (char *const *)argv, buf);
+            _exit(errno == ENOENT ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM);
+        }
+
+        // Generate a shell command and call it with the correct arguments.
+        // Note that is_name and is_keyword are mutually exclusive.
+        bool is_name = i == 5 && strcmp(argv[3], "name") == 0;
+        bool is_keyword = i == 5 && strcmp(argv[3], "keyword") == 0;
+        const char *requested_target = i == 5 ? argv[4] : NULL;
+        argv[0] = "/bin/sh";
+        argv[1] = "-lc";
+        // Build a shell script that emulates the old multiplexer.
+        // The shell script is only built from string literals,
+        // never data from the provided command.  Reviewers are
+        // invited to check that the produced script is always
+        // valid no matter what the inputs are.  To improve
+        // readability and maintainability, separating whitespace
+        // is included in the format string, so the arguments do
+        // not need to include it.  This means that the produced
+        // script might have unnecessary whitespace, but this is
+        // harmless.
+        if (asprintf((char **)(argv + 2),
+                    // Unset the variables in case the user's shell init code did something weird,
+                    // like mark them read-only or make them an array.
+                    // Use set -e in case there is a problem.  Note that sh -el does not work
+                    // because the startup files are not compatible with -e.
+                    "set -e\n"
+                    "unset QREXEC_SERVICE_FULL_NAME QREXEC_REMOTE_DOMAIN QREXEC_REQUESTED_TARGET_TYPE "
+                    "QREXEC_SERVICE_ARGUMENT QREXEC_REQUESTED_TARGET QREXEC_REQUESTED_TARGET_KEYWORD\n"
+                    "export \"QREXEC_SERVICE_FULL_NAME=$2\" \"QREXEC_REMOTE_DOMAIN=$3\" QREXEC_REQUESTED_TARGET_TYPE=%s %s\n"
+                    // This could just be written as ${4:+"$4"}, which works just as well.
+                    // I decided to make the C code more complicated so the shell has less work
+                    // to do.
+                    "exec \"$1\" %s",
+                    is_keyword ? "keyword QREXEC_REQUESTED_TARGET_KEYWORD=\"$5\"" :
+                    (is_name ? "name QREXEC_REQUESTED_TARGET=\"$5\"" : ""),
+                    p == NULL ? "" : "\"QREXEC_SERVICE_ARGUMENT=$4\"",
+                    (p != NULL && p[1] != '\0') ? "\"$4\"" : "") < 0)
+            goto bad_asprintf;
+        argv[3] = "sh";
+        argv[4] = program;
+        argv[5] = full_name;
+        argv[6] = remote_domain;
+        argv[7] = p ? p + 1 : "";
+        argv[8] = requested_target;
+        argv[9] = NULL;
+        execve("/bin/sh", (char *const *)argv, buf);
+        /* /bin/sh should always exist */
+        _exit(QREXEC_EXIT_PROBLEM);
+bad_asprintf:
+        PERROR("asprintf");
+        _exit(QREXEC_EXIT_PROBLEM);
+    } else {
+        assert(strncmp(cmd, RPC_REQUEST_COMMAND, RPC_REQUEST_COMMAND_LEN) != 0);
     }
 }
 
@@ -94,7 +231,9 @@ void fix_fds(int fdin, int fdout, int fderr)
             fdin, fdout, fderr);
         _exit(125);
     }
-    if (dup2(fdin, 0) < 0 || dup2(fdout, 1) < 0 || dup2(fderr, 2) < 0) {
+    if ((fdin != 0 && dup2(fdin, 0) < 0) ||
+        (fdout != 1 && dup2(fdout, 1) < 0) ||
+        (fderr != 2 && dup2(fderr, 2) < 0)) {
         PERROR("dup2");
         abort();
     }
@@ -112,7 +251,8 @@ void fix_fds(int fdin, int fdout, int fderr)
         close(i);
 }
 
-static int do_fork_exec(const char *user,
+static int do_fork_exec(const char *prog,
+        const char *user,
         const char *cmdline,
         int *pid,
         int *stdin_fd,
@@ -124,8 +264,12 @@ static int do_fork_exec(const char *user,
 #define SOCK_CLOEXEC 0
 #endif
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, inpipe) ||
-            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, outpipe) ||
-            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, errpipe))) {
+            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, outpipe)) {
+        PERROR("socketpair");
+        /* FD leaks do not matter, we exit soon anyway */
+        return -2;
+    }
+    if (stderr_fd != NULL && pipe2(errpipe, O_CLOEXEC) != 0) {
         PERROR("socketpair");
         /* FD leaks do not matter, we exit soon anyway */
         return -2;
@@ -144,7 +288,7 @@ static int do_fork_exec(const char *user,
                 fix_fds(inpipe[0], outpipe[1], 2);
 
             if (exec_func != NULL)
-                exec_func(cmdline, user);
+                exec_func(prog, cmdline, user);
             abort();
         default:
             retval = 0;
@@ -450,7 +594,7 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
             goto err;
         }
 
-        size_t const descriptor_len = (size_t)(end - start);
+        size_t const descriptor_len = cmd->service_descriptor_len = (size_t)(end - start);
         if (descriptor_len > MAX_SERVICE_NAME_LEN) {
             LOG(ERROR, "Command too long (length %zu)", descriptor_len);
             goto err;
@@ -538,7 +682,9 @@ int execute_parsed_qubes_rpc_command(
         int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer) {
     if (cmd->service_descriptor) {
         // Proper Qubes RPC call
-        int find_res = find_qrexec_service(cmd, stdin_fd, stdin_buffer);
+        char file_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
+        struct buffer buf = { .data = file_path, .buflen = (int)sizeof(file_path) };
+        int find_res = find_qrexec_service(cmd, stdin_fd, stdin_buffer, &buf);
         if (find_res != 0) {
             assert(find_res < 0);
             return find_res;
@@ -550,12 +696,12 @@ int execute_parsed_qubes_rpc_command(
             *pid = 0;
             return 0;
         }
-        return do_fork_exec(cmd->username, cmd->command,
+        return do_fork_exec(buf.data, cmd->username, cmd->command,
                            pid, stdin_fd, stdout_fd, stderr_fd);
     } else {
         // Legacy qrexec behavior: spawn shell directly
-        return do_fork_exec(cmd->username, cmd->command,
-                           pid, stdin_fd, stdout_fd, stderr_fd);
+        return do_fork_exec(NULL, cmd->username, cmd->command,
+                            pid, stdin_fd, stdout_fd, stderr_fd);
     }
 }
 static bool validate_port(const char *port) {
@@ -632,11 +778,11 @@ freeaddrs:
 
 int find_qrexec_service(
         struct qrexec_parsed_command *cmd,
-        int *socket_fd, struct buffer *stdin_buffer) {
+        int *socket_fd, struct buffer *stdin_buffer,
+        struct buffer *path_buffer) {
     assert(cmd->service_descriptor);
+    assert(path_buffer->buflen > NAME_MAX);
 
-    char file_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
-    struct buffer path_buffer = { .data = file_path, .buflen = (int)sizeof(file_path) };
     const char *qrexec_service_path = getenv("QREXEC_SERVICE_PATH");
     if (!qrexec_service_path)
         qrexec_service_path = QREXEC_SERVICE_PATH;
@@ -645,11 +791,11 @@ int find_qrexec_service(
     struct stat statbuf;
 
     int ret = find_file(qrexec_service_path, cmd->service_descriptor,
-                        path_buffer.data, (size_t)path_buffer.buflen,
+                        path_buffer->data, (size_t)path_buffer->buflen,
                         &statbuf);
     if (ret == -1)
         ret = find_file(qrexec_service_path, cmd->service_name,
-                        path_buffer.data, (size_t)path_buffer.buflen,
+                        path_buffer->data, (size_t)path_buffer->buflen,
                         &statbuf);
     if (ret < 0) {
         if (ret == -1)
@@ -662,11 +808,11 @@ int find_qrexec_service(
     if (S_ISSOCK(statbuf.st_mode)) {
         /* Socket-based service. */
         int s;
-        if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        if ((s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1) {
             PERROR("socket");
             return -2;
         }
-        if (qubes_connect(s, path_buffer.data, strlen(path_buffer.data))) {
+        if (qubes_connect(s, path_buffer->data, strlen(path_buffer->data))) {
             PERROR("qubes_connect");
             close(s);
             return -2;
@@ -682,9 +828,9 @@ int find_qrexec_service(
         return 0;
     } else if (S_ISLNK(statbuf.st_mode)) {
         /* TCP-based service */
-        assert(path_buffer.buflen >= (int)sizeof("/dev/tcp") - 1);
-        assert(memcmp(path_buffer.data, "/dev/tcp", sizeof("/dev/tcp") - 1) == 0);
-        char *address = path_buffer.data + (sizeof("/dev/tcp") - 1);
+        assert(path_buffer->buflen >= (int)sizeof("/dev/tcp") - 1);
+        assert(memcmp(path_buffer->data, "/dev/tcp", sizeof("/dev/tcp") - 1) == 0);
+        char *address = path_buffer->data + (sizeof("/dev/tcp") - 1);
         char *host = NULL, *port = NULL;
         if (*address == '/') {
             host = address + 1;
@@ -699,7 +845,7 @@ int find_qrexec_service(
         if (port == NULL) {
             if (cmd->arg == NULL || *cmd->arg == '\0') {
                 LOG(ERROR, "No or empty argument provided, cannot connect to %s",
-                    path_buffer.data);
+                    path_buffer->data);
                 return -2;
             }
             if (host == NULL) {
@@ -726,7 +872,8 @@ int find_qrexec_service(
             }
         } else {
             if (cmd->arg != NULL && *cmd->arg != '\0') {
-                LOG(ERROR, "Unexpected argument %s to service %s", cmd->arg, path_buffer.data);
+                LOG(ERROR, "Unexpected argument %s to service %s", cmd->arg,
+                    path_buffer->data);
                 return -2;
             }
         }
@@ -744,30 +891,30 @@ int find_qrexec_service(
         return 0;
     }
 
-    if (euidaccess(path_buffer.data, X_OK) == 0) {
+    if (euidaccess(path_buffer->data, X_OK) == 0) {
         /* Executable-based service. */
         if (!cmd->send_service_descriptor) {
             LOG(WARNING, "Warning: ignoring skip-service-descriptor=true "
                          "for execute executable service %s",
-                path_buffer.data);
+                path_buffer->data);
         }
         if (cmd->exit_on_stdout_eof) {
             LOG(WARNING, "Warning: ignoring exit-on-service-eof=true "
                          "for executable service %s",
-                path_buffer.data);
+                path_buffer->data);
             cmd->exit_on_stdout_eof = false;
         }
         if (cmd->exit_on_stdin_eof) {
             LOG(WARNING, "Warning: ignoring exit-on-client-eof=true "
                          "for executable service %s",
-                path_buffer.data);
+                path_buffer->data);
             cmd->exit_on_stdin_eof = false;
         }
         return 0;
     }
 
     LOG(ERROR, "Unknown service type (not executable, not a socket): %.*s",
-        path_buffer.buflen, path_buffer.data);
+        path_buffer->buflen, path_buffer->data);
     return -2;
 }
 

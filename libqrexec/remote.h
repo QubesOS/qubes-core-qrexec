@@ -73,9 +73,12 @@ int handle_remote_data_v2(
  * initialized, and will _not_ be anything meaningful on return.  The
  * buffer pointer and length will not be freed or reallocated, though.
  * In Rust terms: this is an &mut [MaybeUninit<u8>].
+ *
+ * If out_fd is not -1, all data written is duplicated to it.
  */
 int handle_input_v2(
     libvchan_t *vchan, int fd, int msg_type,
     struct prefix_data *prefix_data,
-    const struct buffer *buffer);
+    const struct buffer *buffer,
+    int out_fd);
 #pragma GCC visibility pop

@@ -197,6 +197,23 @@ between service types is mostly invisible to callers.
    with ``force-user=`` in the configuration file.  The username must be a string
    user due to PAM limitations.
 
+   If a non-empty string is passed as the service argument, it is passed as the
+   first argument to the service.  The service environment is modified as follows:
+
+   1. All environment variables with names starting with ``QREXEC`` are stripped.
+   2. ``QREXEC_REMOTE_DOMAIN`` is set to the name of the calling VM.
+   3. ``QREXEC_SERVICE_FULL_NAME`` is set to the full name of the service,
+      including the argument if any.
+   4. If the service *is not* running in dom0, ``QREXEC_REQUESTED_TARGET_TYPE`` is
+      set to an empty value.
+   5. If the service *is* running in dom0, and the requested target starts with ``@``,
+      ``QREXEC_REQUESTED_TARGET_TYPE`` is set to ``keyword`` and
+      ``QREXEC_REQUESTED_TARGET_KEYWORD`` is set to the requested target with the
+      leading ``@`` removed.
+   6. If the service *is* running in dom0, and the requested target *does not* start with ``@``,
+      ``QREXEC_REQUESTED_TARGET_TYPE`` is set to ``name`` and
+      ``QREXEC_REQUESTED_TARGET`` is set to the requested target.
+
 2. Socket-based services.  These are ``AF_UNIX`` stream sockets on the filesystem.
    Data passed via stdin will be written to the socket, and data from the socket will
    will be written to stdout.

@@ -37,15 +37,15 @@
 extern char **environ;
 const bool qrexec_is_fork_server = true;
 
-void do_exec(const char *cmd, const char *user __attribute__((unused)))
+void do_exec(const char *prog, const char *cmd, const char *user __attribute__((unused)))
 {
     char *shell;
 
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
 
-    /* call QUBESRPC if requested */
-    exec_qubes_rpc_if_requested(cmd, environ);
+    /* Call QUBESRPC if requested.  This code already runs in a login session. */
+    exec_qubes_rpc_if_requested2(prog, cmd, environ, false);
 
     /* otherwise, pass it to shell */
     shell = getenv("SHELL");

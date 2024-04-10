@@ -104,6 +104,8 @@ struct qrexec_parsed_command {
     /* Pointer to the argument, or NULL if there is no argument.
      * Same buffer as "service_descriptor". */
     char *arg;
+    /* length of the command */
+    size_t service_descriptor_len;
 };
 
 /* Parse a command, return NULL on failure. Uses cmd->cmdline
@@ -137,16 +139,28 @@ int load_service_config(struct qrexec_parsed_command *cmd_name,
 __attribute__((visibility("default")))
 int load_service_config_v2(struct qrexec_parsed_command *cmd_name);
 
-typedef void (do_exec_t)(const char *cmdline, const char *user);
+typedef void (do_exec_t)(const char *program, const char *cmd, const char *user);
 __attribute__((visibility("default")))
 void register_exec_func(do_exec_t *func);
-/*
- * exec() qubes-rpc-multiplexer if *prog* starts with magic "QUBESRPC" keyword,
- * do not return in that case; pass *envp* to execve() as en environment
- * otherwise, return false without any action
+
+/**
+ * \param program Full path to program to execute or NULL.
+ * \param cmd RPC command, including "QUBESRPC " prefix, if *program* is not NULL.
+ *        Otherwise *program* must be NULL and *cmd* must not start with "QUBESRPC".
+ * \param envp Environment passed to execve(), ignored if *program* is NULL.
+ * \param use_shell If true, use a login shell to spawn the program.
+ *
+ * If *program* is not NULL, execute it as an RPC service or call _exit() on failure.
+ * *cmd* is used to set the argument (if any) and "QREXEC_*" environment variables.
+ * Environment variables in *envp* that start with "QREXEC" are ignored, except for
+ * "QREXEC_SERVICE_PATH" and "QREXEC_AGENT_PID", which are inherited.  If *program*
+ * is not NULL and *cmd* does not start with "QUBESRPC ", or if *program* is NULL
+ * and *cmd* starts with "QUBESRPC", fails an assertion.  If *program* is NULL and
+ * *cmd* does not start with "QUBESRPC", returns without doing anything.
  */
 __attribute__((visibility("default")))
-void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]);
+void exec_qubes_rpc_if_requested2(const char *program, const char *cmd, char *const envp[],
+                                  bool use_shell);
 
 /* Execute `qubes.WaitForSession` service, do not return on success, return -1
  * (maybe setting errno) on failure. */
@@ -194,13 +208,17 @@ int execute_parsed_qubes_rpc_command(
  * the socket, or -1 for executable services.
  * @param stdin_buffer This buffer will need to be prepended to the child process’s
  * stdin.
+ * @param path_buffer This buffer (NUL-terminated) holds the service's path.  On
+ * entry it must be at least NAME_MAX bytes.  It will not be freed or reallocated.
+ * Its contents should be ignored if stdout_fd is not -1.
  * @return 0 if the implementation is found (and, for sockets, connected to)
  * successfully, -1 if not found, -2 if problem.
  */
 __attribute__((visibility("default")))
 int find_qrexec_service(
         struct qrexec_parsed_command *cmd,
-        int *socket_fd, struct buffer *stdin_buffer);
+        int *socket_fd, struct buffer *stdin_buffer,
+        struct buffer *path_buffer);
 
 /** Suggested buffer size for the path buffer of find_qrexec_service. */
 #define QUBES_SOCKADDR_UN_MAX_PATH_LEN 1024
@@ -288,7 +306,7 @@ struct process_io_request {
      * *local* process.  For a *remote* process, stdin_fd is the standard
      * *output*, stdout_fd is the standard *input*, and stderr_fd must be -1. */
     // stderr_fd can be -1
-    int stdin_fd, stdout_fd, stderr_fd;
+    int stdin_fd, stdout_fd, stderr_fd, logger_fd;
     // 0 if no child process
     pid_t local_pid;
 
@@ -318,6 +336,9 @@ struct process_io_request {
     volatile sig_atomic_t *sigusr1;
     struct prefix_data prefix_data;
 };
+/** Open an FD to a logger */
+__attribute__((visibility("default")))
+int open_logger(struct qrexec_parsed_command *command, int *pid);
 
 /*
  * Pass IO between vchan and local FDs. See the comments for
