@@ -58,21 +58,49 @@ class TestAgentBase(unittest.TestCase):
             ),
         )
 
-    def assertExpectedStdout(self, target, expected_stdout: bytes, *, exit_code=0):
+    def assertExpectedStdoutStderr(
+        self,
+        target,
+        expected_stdout: bytes,
+        expected_stderr: bytes,
+        *,
+        exit_code: int = 0,
+    ) -> None:
         messages = util.sort_messages(target.recv_all_messages())
-        self.assertListEqual(messages[-3:],
+        self.assertListEqual(
+            messages[-2:],
             [
-                (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", exit_code))
-            ])
-        stdout_entries = []
-        for msg_type, msg_body in messages[:-3]:
-            # messages before last are not empty, hence truthy
-            self.assertTrue(msg_body)
-            self.assertEqual(msg_type, qrexec.MSG_DATA_STDOUT)
-            stdout_entries.append(msg_body)
-        self.assertEqual(b"".join(stdout_entries), expected_stdout)
+                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", exit_code)),
+            ],
+        )
+        stdout_entries, stderr_entries = [], []
+        stdout_eof = False
+        for msg_type, msg_body in messages[:-2]:
+            match msg_type:
+                case qrexec.MSG_DATA_STDOUT:
+                    self.assertFalse(
+                        stdout_eof, "Got MSG_DATA_STDOUT after stdout EOF"
+                    )
+                    stdout_eof = not msg_body
+                    stdout_entries.append(msg_body)
+                case qrexec.MSG_DATA_STDERR:
+                    self.assertTrue(
+                        msg_body, "Got empty MSG_DATA_STDERR before stderr EOF"
+                    )
+                    stderr_entries.append(msg_body)
+                case invalid:
+                    self.fail(f"Invalid message type {invalid!r}")
+        self.assertTrue(stdout_eof, "No EOF on stdout")
+        self.assertEqual(expected_stdout, b"".join(stdout_entries))
+        self.assertEqual(expected_stderr, b"".join(stderr_entries))
+
+    def assertExpectedStdout(
+        self, target, expected_stdout: bytes, *, exit_code=0
+    ):
+        self.assertExpectedStdoutStderr(
+            target, expected_stdout, b"", exit_code=exit_code
+        )
 
     def make_executable_service(self, *args):
         util.make_executable_service(self.tempdir, *args)
@@ -178,10 +206,8 @@ class TestAgent(TestAgentBase):
         target.handshake()
         return target, dom0
 
-    def test_just_exec_socket(self):
-        socket_path = os.path.join(
-            self.tempdir, "rpc", "qubes.SocketService+"
-        )
+    def test_001_just_exec_socket(self):
+        socket_path = os.path.join(self.tempdir, "rpc", "qubes.SocketService+")
         server = qrexec.socket_server(socket_path)
 
         cmd = b"QUBESRPC qubes.SocketService a"
@@ -197,7 +223,7 @@ class TestAgent(TestAgentBase):
 
         self.check_dom0(dom0)
 
-    def test_just_exec(self):
+    def test_002_just_exec(self):
         fifo = os.path.join(self.tempdir, "new_file")
         os.mkfifo(fifo, mode=0o600)
         cmd = ("echo a >> " + shlex.quote(fifo)).encode("ascii", "strict")
@@ -212,15 +238,16 @@ class TestAgent(TestAgentBase):
             self.assertEqual(f.read(), b"a\n")
         self.check_dom0(dom0)
 
-    def test_just_exec_rpc(self):
+    def test_003_just_exec_rpc(self):
         fifo = os.path.join(self.tempdir, "new_file")
         os.mkfifo(fifo, mode=0o600)
         util.make_executable_service(
             self.tempdir,
             "rpc",
             "qubes.Service",
-            fr"""#!/bin/bash -eu
-printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
+            rf"""#!/bin/bash -eu
+printf %s "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
+exit 1
 """,
         )
         cmd = b"QUBESRPC qubes.Service+ domX"
@@ -231,9 +258,8 @@ printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
-
         with open(fifo, "rb") as f:
-            self.assertEqual(f.read(), b"qubes.Service+\n")
+            self.assertEqual(f.read(), b"qubes.Service+")
         self.check_dom0(dom0)
 
     def test_just_exec_rpc_not_found(self):
@@ -389,11 +415,14 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
             """\
 #!/bin/sh
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+printf 'something on stderr' >&2
 """,
         )
         target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
-        self.assertExpectedStdout(target, b"arg: arg, remote domain: domX\n")
+        self.assertExpectedStdoutStderr(
+            target, b"arg: arg, remote domain: domX\n", b"something on stderr"
+        )
         self.check_dom0(dom0)
 
     def test_exec_service_keyword(self):
@@ -656,7 +685,7 @@ echo "specific service: $QREXEC_SERVICE_FULL_NAME"
             "rpc",
             "qubes.Service",
             """\
-#!/bin/sh
+#!/bin/sh --
 echo "general service"
 """,
         )
