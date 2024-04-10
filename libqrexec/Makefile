@@ -22,7 +22,7 @@ endif
 
 
 all: libqrexec-utils.so
-libqrexec-utils.so.$(SO_VER): unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o replace.o remote.o process_io.o log.o toml.o vchan_timeout.o
+libqrexec-utils.so.$(SO_VER): unix-server.o ioall.o buffer.o exec.o txrx-vchan.o write-stdin.o replace.o remote.o process_io.o log.o toml.o open_logger.o vchan_timeout.o
 	$(CC) $(LDFLAGS) -Wl,-soname,$@ -o $@ $^ $(VCHANLIBS)
 
 libqrexec-utils.so: libqrexec-utils.so.$(SO_VER)

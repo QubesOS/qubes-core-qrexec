@@ -1,1 +1,3 @@
-/usr/lib/qubes/qrexec-agent -- gen_context(system_u:object_r:qubes_qrexec_agent_exec_t,s0)
+/usr/lib/qubes/qrexec-agent	--	gen_context(system_u:object_r:qubes_qrexec_agent_exec_t,s0)
+/etc/qubes-rpc(/.*)?	gen_context(system_u:object_r:bin_t,s0)
+/usr/local/etc/qubes-rpc(/.*)?	--	gen_context(system_u:object_r:bin_t,s0)
