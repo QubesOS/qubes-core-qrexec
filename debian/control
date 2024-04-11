@@ -19,7 +19,7 @@ Homepage: https://www.qubes-os.org
 Package: qubes-core-qrexec
 Architecture: any
 Depends:
- libqrexec-utils2 (= ${binary:Version}),
+ libqrexec-utils4 (= ${binary:Version}),
  python3-qrexec,
  ${shlibs:Depends},
  ${misc:Depends}
@@ -36,7 +36,7 @@ Description: Qubes qrexec agent
  Agent part of Qubes RPC system. A daemon responsible for starting processes as
  requested by dom0 or other VMs, according to dom0-enforced policy.
 
-Package: libqrexec-utils2
+Package: libqrexec-utils4
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Breaks: qubes-utils (<< 3.1.4)
@@ -47,7 +47,7 @@ Description: Library of common functions of qrexec agent and daemon
 Package: libqrexec-utils-dev
 Architecture: any
 Section: libdevel
-Depends: libqrexec-utils2 (= ${binary:Version}), ${misc:Depends}
+Depends: libqrexec-utils4 (= ${binary:Version}), ${misc:Depends}
 Breaks: qubes-utils (<< 3.1.4)
 Replaces: qubes-utils (<< 3.1.4)
 Description: Development headers for libqrexec-utils

@@ -10,7 +10,7 @@ CFLAGS += -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
 
 LDFLAGS += -pie -Wl,-z,relro,-z,now -shared
 
-SO_VER=3
+SO_VER=4
 VCHANLIBS := $(shell pkg-config --libs vchan)
 LIBDIR ?= /usr/lib
 INCLUDEDIR ?= /usr/include
