@@ -31,6 +31,8 @@ int fuzz_libvchan_is_open(fuzz_file_t *file);
 int fuzz_libvchan_data_ready(fuzz_file_t *file);
 int fuzz_libvchan_buffer_space(fuzz_file_t *file);
 fuzz_file_t *fuzz_libvchan_client_init(int domain, int port);
+fuzz_file_t *fuzz_libvchan_client_init_async(int domain, int port, int *fd);
+int fuzz_libvchan_client_init_async_finish(fuzz_file_t *file, bool blocking);
 
 ssize_t fuzz_read(int fd, void *buf, size_t count);
 ssize_t fuzz_write(int fd, const void *buf, size_t count);

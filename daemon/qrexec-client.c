@@ -143,57 +143,6 @@ bad_c_param:
     exit(1);
 }
 
-static const long BILLION_NANOSECONDS = 1000000000L;
-
-static void wait_for_vchan_client_with_timeout(libvchan_t *conn, time_t timeout) {
-    struct timespec end_tp, now_tp, timeout_tp;
-
-    if (timeout && clock_gettime(CLOCK_MONOTONIC, &end_tp)) {
-        PERROR("clock_gettime");
-        exit(1);
-    }
-    assert(end_tp.tv_nsec >= 0 && end_tp.tv_nsec < BILLION_NANOSECONDS);
-    end_tp.tv_sec += timeout;
-    int const fd = libvchan_fd_for_select(conn);
-    while (conn && libvchan_is_open(conn) == VCHAN_WAITING) {
-        if (timeout) {
-            bool did_timeout = true;
-            struct pollfd fds = { .fd = fd, .events = POLLIN | POLLHUP, .revents = 0 };
-
-            /* calculate how much time left until connection timeout expire */
-            if (clock_gettime(CLOCK_MONOTONIC, &now_tp)) {
-                PERROR("clock_gettime");
-                exit(1);
-            }
-            assert(now_tp.tv_nsec >= 0 && now_tp.tv_nsec < BILLION_NANOSECONDS);
-            if (now_tp.tv_sec <= end_tp.tv_sec) {
-                timeout_tp.tv_sec = end_tp.tv_sec - now_tp.tv_sec;
-                timeout_tp.tv_nsec = end_tp.tv_nsec - now_tp.tv_nsec;
-                if (timeout_tp.tv_nsec < 0) {
-                    timeout_tp.tv_nsec += BILLION_NANOSECONDS;
-                    timeout_tp.tv_sec--;
-                }
-                did_timeout = timeout_tp.tv_sec < 0;
-            }
-            switch (did_timeout ? 0 : ppoll(&fds, 1, &timeout_tp, NULL)) {
-            case -1:
-                if (errno == EINTR)
-                    break;
-                LOG(ERROR, "vchan connection error");
-                exit(1);
-            case 0:
-                LOG(ERROR, "vchan connection timeout");
-                exit(1);
-            case 1:
-                break;
-            default:
-                abort();
-            }
-        }
-        libvchan_wait(conn);
-    }
-}
-
 static size_t compute_service_length(const char *const remote_cmdline, const char *const prog_name) {
     const size_t service_length = strlen(remote_cmdline) + 1;
     if (service_length < 2 || service_length > MAX_QREXEC_CMD_LEN) {
@@ -365,9 +314,16 @@ int main(int argc, char **argv)
                     VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
             if (!data_vchan) {
                 LOG(ERROR, "Failed to start data vchan server");
-                exit(1);
+                rc = QREXEC_EXIT_PROBLEM;
+                goto cleanup;
             }
-            wait_for_vchan_client_with_timeout(data_vchan, connection_timeout);
+            int fd = libvchan_fd_for_select(data_vchan);
+            if (qubes_wait_for_vchan_connection_with_timeout(
+                        data_vchan, fd, true, connection_timeout) < 0) {
+                LOG(ERROR, "qrexec connection timeout");
+                rc = QREXEC_EXIT_PROBLEM;
+                goto cleanup;
+            }
             struct handshake_params params = {
                 .data_vchan = data_vchan,
                 .stdin_buffer = &stdin_buffer,

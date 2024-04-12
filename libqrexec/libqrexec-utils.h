@@ -32,6 +32,7 @@
 #include <poll.h>
 #include <sys/socket.h>
 
+#include <libvchan.h>
 #include <qrexec.h>
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -347,4 +348,15 @@ void *qubes_read_all_to_malloc(int fd, size_t initial_buffer_size, size_t max_by
  */
 bool qubes_sendmsg_all(struct msghdr *msg, int sock);
 
+/**
+ * Wait for a vchan connection with a timeout.
+ *
+ * @param conn the vchan
+ * @param wait_fd The FD set by libvchan_client_init_async() for clients,
+ *                or the FD returned by libvchan_fd_for_select() for servers.
+ * @param is_server Is this a server or a client vchan?
+ * @param timeout The timeout to use.
+ */
+int qubes_wait_for_vchan_connection_with_timeout(
+        libvchan_t *conn, int wait_fd, bool is_server, time_t timeout);
 #endif /* LIBQREXEC_UTILS_H */
