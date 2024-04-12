@@ -36,7 +36,7 @@ int get_server_socket(const char *socket_address)
 
     unlink(socket_address);
 
-    s = socket(AF_UNIX, SOCK_STREAM, 0);
+    s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (s < 0) {
         PERROR("socket");
         exit(1);
