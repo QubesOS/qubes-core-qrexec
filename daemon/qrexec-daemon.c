@@ -120,7 +120,6 @@ static const char *policy_program = QREXEC_POLICY_PROGRAM;
 #  define UNUSED(x) UNUSED_ ## x
 #endif
 
-static volatile int children_count;
 static volatile int child_exited;
 static volatile int terminate_requested;
 
@@ -134,24 +133,6 @@ libvchan_t *vchan;
 static
 #endif
 int protocol_version;
-
-static void sigusr1_handler(int UNUSED(x))
-{
-    if (!opt_quiet)
-        LOG(INFO, "Connected to VM");
-    exit(0);
-}
-
-static void sigchld_parent_handler(int UNUSED(x))
-{
-    children_count--;
-    /* starting value is 0 so we see dead real qrexec-daemon as -1 */
-    if (children_count < 0) {
-        LOG(ERROR, "Connection to the VM failed");
-        exit(1);
-    }
-}
-
 
 static char *remote_domain_name;	// guess what
 static int remote_domain_id;
@@ -308,29 +289,41 @@ static void init(int xid)
             startup_timeout = MAX_STARTUP_TIME_DEFAULT;
     }
 
+    int pipes[2];
     if (!opt_direct) {
-        struct sigaction action = {
-            .sa_handler = sigusr1_handler,
-            .sa_flags = 0,
-        };
-        if (sigaction(SIGUSR1, &action, NULL))
-            err(1, "sigaction");
-        action.sa_handler = sigchld_parent_handler;
-        if (sigaction(SIGCHLD, &action, NULL))
-            err(1, "sigaction");
+        if (pipe2(pipes, O_CLOEXEC))
+            err(1, "pipe2()");
         switch (pid=fork()) {
             case -1:
                 PERROR("fork");
                 exit(1);
             case 0:
+                close(pipes[0]);
                 break;
             default:
                 if (getenv("QREXEC_STARTUP_NOWAIT"))
                     exit(0);
+                close(pipes[1]);
                 if (!opt_quiet)
                     LOG(ERROR, "Waiting for VM's qrexec agent.");
+                struct pollfd fds[1] = {{ .fd = pipes[0], .events = POLLIN | POLLHUP, .revents = 0 }};
                 for (i=0;i<startup_timeout;i++) {
-                    sleep(1);
+                    int res = poll(fds, 1, 1000);
+                    if (res < 0)
+                        err(1, "poll()");
+                    if (res) {
+                        char buf[1];
+                        ssize_t bytes = read(pipes[0], buf, sizeof buf);
+                        if (bytes < 0)
+                            err(1, "read()");
+                        if (bytes == 0) {
+                            LOG(ERROR, "Connection to the VM failed");
+                            exit(1);
+                        }
+                        if (!opt_quiet)
+                            LOG(INFO, "Connected to VM");
+                        exit(0);
+                    }
                     if (!opt_quiet)
                         fprintf(stderr, ".");
                     if (i==startup_timeout-1) {
@@ -419,12 +412,13 @@ static void init(int xid)
         err(1, "signal");
     if (sigaction(SIGCHLD, &sigchld_action, NULL))
         err(1, "sigaction");
-    if (signal(SIGUSR1, SIG_DFL) == SIG_ERR)
-        err(1, "signal");
     if (sigaction(SIGTERM, &sigterm_action, NULL))
         err(1, "sigaction");
-    if (!opt_direct)
-        kill(getppid(), SIGUSR1);   // let the parent know we are ready
+    if (!opt_direct) {
+        if (write(pipes[1], "", 1) != 1)
+            err(1, "write(pipe)");
+        close(pipes[1]);
+    }
 }
 
 static int send_client_hello(int fd)
