@@ -413,6 +413,8 @@ static void init(int xid)
         .sa_handler = signal_handler,
         .sa_flags = 0,
     };
+    sigemptyset(&sigchld_action.sa_mask);
+    sigemptyset(&sigterm_action.sa_mask);
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
         err(1, "signal");
     if (sigaction(SIGCHLD, &sigchld_action, NULL))
