@@ -74,8 +74,14 @@ static void sigusr1_handler(int __attribute__((__unused__))x)
 void prepare_child_env(void) {
     char pid_s[10];
 
-    signal(SIGCHLD, sigchld_handler);
-    signal(SIGUSR1, sigusr1_handler);
+    struct sigaction action = {
+        .sa_handler = sigchld_handler,
+        .sa_flags = 0,
+    };
+    sigemptyset(&action.sa_mask);
+    if (sigaction(SIGCHLD, &action, NULL)) abort();
+    action.sa_handler = sigusr1_handler;
+    if (sigaction(SIGUSR1, &action, NULL)) abort();
     int res = snprintf(pid_s, sizeof(pid_s), "%d", getpid());
     if (res < 0) abort();
     if (res >= (int)sizeof(pid_s)) abort();

@@ -219,7 +219,6 @@ int handle_agent_handshake(libvchan_t *vchan, bool remote_send_first)
 static void sigchld_handler(int x __attribute__((__unused__)))
 {
     sigchld = 1;
-    signal(SIGCHLD, sigchld_handler);
 }
 
 /* See also qrexec-agent.c:wait_for_session_maybe() */
@@ -271,7 +270,12 @@ int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdi
 {
     if (stdin_buffer == NULL)
         abort();
-    if (signal(SIGCHLD, sigchld_handler) == SIG_ERR)
+    struct sigaction action = {
+        .sa_handler = sigchld_handler,
+        .sa_flags = 0,
+    };
+    sigemptyset(&action.sa_mask);
+    if (sigaction(SIGCHLD, &action, NULL))
         return 126;
     return execute_parsed_qubes_rpc_command(command, &local_pid, &local_stdin_fd, &local_stdout_fd,
             NULL, stdin_buffer);
