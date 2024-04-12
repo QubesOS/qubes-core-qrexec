@@ -307,7 +307,7 @@ static void init(int xid)
                 if (!opt_quiet)
                     LOG(ERROR, "Waiting for VM's qrexec agent.");
                 struct pollfd fds[1] = {{ .fd = pipes[0], .events = POLLIN | POLLHUP, .revents = 0 }};
-                for (i=0;i<startup_timeout;i++) {
+                for (;;) {
                     int res = poll(fds, 1, 1000);
                     if (res < 0)
                         err(1, "poll()");
@@ -320,18 +320,21 @@ static void init(int xid)
                             LOG(ERROR, "Connection to the VM failed");
                             exit(1);
                         }
-                        if (!opt_quiet)
-                            LOG(INFO, "Connected to VM");
-                        exit(0);
+                        switch (buf[0]) {
+                        case 0:
+                            if (!opt_quiet)
+                                LOG(INFO, "Connected to VM");
+                            exit(0);
+                        case 1:
+                            LOG(ERROR, "Cannot connect to '%s' qrexec agent for %d seconds, giving up", remote_domain_name, startup_timeout);
+                            exit(3);
+                        default:
+                            abort();
+                        }
                     }
                     if (!opt_quiet)
                         fprintf(stderr, ".");
-                    if (i==startup_timeout-1) {
-                        break;
-                    }
                 }
-                LOG(ERROR, "Cannot connect to '%s' qrexec agent for %d seconds, giving up", remote_domain_name, startup_timeout);
-                exit(3);
         }
     }
 
@@ -366,10 +369,17 @@ static void init(int xid)
         }
     }
 
-    vchan = libvchan_client_init(xid, VCHAN_BASE_PORT);
+    int wait_fd;
+    vchan = libvchan_client_init_async(xid, VCHAN_BASE_PORT, &wait_fd);
     if (!vchan) {
-        PERROR("cannot connect to qrexec agent");
-        exit(1);
+        LOG(ERROR, "Cannot create data vchan connection");
+        exit(3);
+    }
+    if (qubes_wait_for_vchan_connection_with_timeout(
+                vchan, wait_fd, false, startup_timeout) < 0) {
+        if (write(pipes[1], "\1", 1)) {}
+        LOG(ERROR, "qrexec connection timeout");
+        exit(3);
     }
 
     protocol_version = handle_agent_hello(vchan, remote_domain_name);
