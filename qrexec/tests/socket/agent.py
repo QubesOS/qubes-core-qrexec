@@ -938,10 +938,10 @@ skip-service-descriptor = true
 #!/bin/sh
 read
 echo closing stdout
-exec >&-
+exec >/dev/null
 read
 echo closing stderr >&2
-exec 2>&-
+exec 2>/dev/null
 read code
 exit $code
 """,
@@ -1028,7 +1028,7 @@ class TestAgentStreams(TestAgentBase):
         target, dom0 = self.execute(
             """
 read
-exec <&-
+exec </dev/null
 echo "closed stdin"
 sleep 1
 """
