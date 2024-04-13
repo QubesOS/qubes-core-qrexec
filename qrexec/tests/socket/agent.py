@@ -47,6 +47,15 @@ class TestAgentBase(unittest.TestCase):
     target_domain = 43
     target_port = 1024
 
+    def check_dom0(self, dom0):
+        self.assertEqual(
+            dom0.recv_message(),
+            (
+                qrexec.MSG_CONNECTION_TERMINATED,
+                struct.pack("<LL", self.target_domain, self.target_port),
+            ),
+        )
+
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
         os.mkdir(os.path.join(self.tempdir, "local-rpc"))
@@ -157,14 +166,7 @@ class TestAgent(TestAgentBase):
             lambda: os.path.exists(os.path.join(self.tempdir, "new_file")),
             "file created",
         )
-
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
+        self.check_dom0(dom0)
 
     def test_exec_cmdline(self):
         self.start_agent()
@@ -196,14 +198,7 @@ class TestAgent(TestAgentBase):
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
-
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
+        self.check_dom0(dom0)
 
     def test_trigger_service(self):
         self.start_agent()
@@ -229,13 +224,7 @@ class TestAgent(TestAgentBase):
         )
 
         client.close()
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
+        self.check_dom0(dom0)
 
     def test_trigger_service_refused(self):
         self.start_agent()
@@ -310,15 +299,6 @@ class TestAgentExecQubesRpc(TestAgentBase):
         target.handshake()
         return target, dom0
 
-    def check_dom0(self, dom0):
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
-
     def make_executable_service(self, *args):
         util.make_executable_service(self.tempdir, *args)
 
@@ -332,7 +312,7 @@ class TestAgentExecQubesRpc(TestAgentBase):
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
 """,
         )
-        target, _ = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         messages = target.recv_all_messages()
         self.assertListEqual(
@@ -344,6 +324,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_exec_service_keyword(self):
         util.make_executable_service(
@@ -793,10 +774,10 @@ class TestAgentStreams(TestAgentBase):
 
         target = self.connect_target()
         target.handshake()
-        return target
+        return target, dom0
 
     def test_stdin_stderr(self):
-        target = self.execute('echo "stdout"; echo "stderr" >&2')
+        target, dom0 = self.execute('echo "stdout"; echo "stderr" >&2')
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
 
         messages = target.recv_all_messages()
@@ -812,7 +793,7 @@ class TestAgentStreams(TestAgentBase):
         )
 
     def test_pass_stdin(self):
-        target = self.execute("cat")
+        target, dom0 = self.execute("cat")
 
         target.send_message(qrexec.MSG_DATA_STDIN, b"data 1")
         self.assertEqual(
@@ -834,15 +815,16 @@ class TestAgentStreams(TestAgentBase):
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_close_stdin_early(self):
         # Make sure that we cover the error on writing stdin into living
         # process.
-        target = self.execute(
+        target, dom0 = self.execute(
             """
 read
 exec <&-
-echo closed stdin
+echo "closed stdin"
 sleep 1
 """
         )
@@ -862,6 +844,7 @@ sleep 1
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_buffer_stdin(self):
         # Test to trigger WRITE_STDIN_BUFFERED.
@@ -877,7 +860,7 @@ sleep 1
 
         fifo = os.path.join(self.tempdir, "fifo")
         os.mkfifo(fifo)
-        target = self.execute("read <{}; cat".format(fifo))
+        target, dom0 = self.execute("read <{}; cat".format(fifo))
 
         for i in range(0, data_size, msg_size):
             msg = data[i : i + msg_size]
@@ -911,9 +894,10 @@ sleep 1
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_close_stdout_stderr_early(self):
-        target = self.execute(
+        target, dom0 = self.execute(
             """\
 read
 echo closing stdout
@@ -946,9 +930,10 @@ exit $code
             target.recv_message(),
             (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)),
         )
+        self.check_dom0(dom0)
 
     def test_stdio_socket(self):
-        target = self.execute(
+        target, dom0 = self.execute(
             """\
 kill -USR1 $QREXEC_AGENT_PID
 echo hello world >&0
@@ -973,11 +958,12 @@ echo "received: $x" >&0
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ],
         )
+        self.check_dom0(dom0)
 
     def test_exit_before_closing_streams(self):
         fifo = os.path.join(self.tempdir, "fifo")
         os.mkfifo(fifo)
-        target = self.execute(
+        target, dom0 = self.execute(
             """\
 # duplicate original stdin to fd 3, because bash will
 # close original stdin in child process
@@ -1021,6 +1007,7 @@ exit 42
                 (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)),
             ],
         )
+        self.check_dom0(dom0)
 
 
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
