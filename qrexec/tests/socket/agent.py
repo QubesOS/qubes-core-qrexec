@@ -47,6 +47,30 @@ class TestAgentBase(unittest.TestCase):
     target_domain = 43
     target_port = 1024
 
+    def check_dom0(self, dom0):
+        self.assertEqual(
+            dom0.recv_message(),
+            (
+                qrexec.MSG_CONNECTION_TERMINATED,
+                struct.pack("<LL", self.target_domain, self.target_port),
+            ),
+        )
+
+    def assertExpectedStdout(self, target, expected_stdout: bytes, *, exit_code=0):
+        messages = util.sort_messages(target.recv_all_messages())
+        self.assertListEqual(messages[-3:],
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", exit_code))
+            ])
+        stdout_entries = []
+        for msg_type, msg_body in messages[:-3]:
+            # messages before last are not empty, hence truthy
+            self.assertTrue(msg_body)
+            self.assertEqual(msg_type, qrexec.MSG_DATA_STDOUT)
+            stdout_entries.append(msg_body)
+
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
         os.mkdir(os.path.join(self.tempdir, "local-rpc"))
@@ -157,14 +181,7 @@ class TestAgent(TestAgentBase):
             lambda: os.path.exists(os.path.join(self.tempdir, "new_file")),
             "file created",
         )
-
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
+        self.check_dom0(dom0)
 
     def test_exec_cmdline(self):
         self.start_agent()
@@ -186,24 +203,8 @@ class TestAgent(TestAgentBase):
 
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
 
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"Hello world\n"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
-
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
+        self.assertExpectedStdout(target, b"Hello world\n")
+        self.check_dom0(dom0)
 
     def test_trigger_service(self):
         self.start_agent()
@@ -229,13 +230,7 @@ class TestAgent(TestAgentBase):
         )
 
         client.close()
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
+        self.check_dom0(dom0)
 
     def test_trigger_service_refused(self):
         self.start_agent()
@@ -310,15 +305,6 @@ class TestAgentExecQubesRpc(TestAgentBase):
         target.handshake()
         return target, dom0
 
-    def check_dom0(self, dom0):
-        self.assertEqual(
-            dom0.recv_message(),
-            (
-                qrexec.MSG_CONNECTION_TERMINATED,
-                struct.pack("<LL", self.target_domain, self.target_port),
-            ),
-        )
-
     def make_executable_service(self, *args):
         util.make_executable_service(self.tempdir, *args)
 
@@ -332,18 +318,10 @@ class TestAgentExecQubesRpc(TestAgentBase):
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
 """,
         )
-        target, _ = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"arg: arg, remote domain: domX\n"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"arg: arg, remote domain: domX\n")
+        self.check_dom0(dom0)
 
     def test_exec_service_keyword(self):
         util.make_executable_service(
@@ -361,20 +339,11 @@ ${QREXEC_SERVICE_ARGUMENT+"call argument: '${QREXEC_SERVICE_ARGUMENT}'"}
         )
         target, dom0 = self.execute_qubesrpc("qubes.Service", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"""arg: , remote domain: domX
+        self.assertExpectedStdout(target, b"""arg: , remote domain: domX
 target name: NONAME
 target keyword: NOKEYWORD
 target type: ''
-"""),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+""")
         self.check_dom0(dom0)
 
     def test_exec_service_with_config(self):
@@ -395,16 +364,7 @@ wait-for-session = 0
 """)
         target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"arg: arg, remote domain: domX\n"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"arg: arg, remote domain: domX\n")
         self.check_dom0(dom0)
 
     def test_wait_for_session(self):
@@ -468,20 +428,9 @@ wait-for-session = 1 # line comment
         # Do not send EOF. Shell read doesn't need it, and this checks that
         # qrexec does not wait for EOF on stdin before sending the exit code
         # from the remote process.
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (
-                    qrexec.MSG_DATA_STDOUT,
-                    b"arg: " + argument.encode("ascii", "strict")
-                    + b", remote domain: domX, input: stdin data\n",
-                ),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        expected_stdout = (b"arg: " + argument.encode("ascii", "strict")
+                           + b", remote domain: domX, input: stdin data\n")
+        self.assertExpectedStdout(target, expected_stdout)
         self.check_dom0(dom0)
 
     def test_exec_service_fail(self):
@@ -618,16 +567,7 @@ echo "general service"
         )
         target, dom0 = self.execute_qubesrpc("qubes.Service", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"specific service: qubes.Service\n"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"specific service: qubes.Service\n")
         self.check_dom0(dom0)
 
     def test_socket_null_argument_finds_service_for_empty_argument(self):
@@ -793,10 +733,10 @@ class TestAgentStreams(TestAgentBase):
 
         target = self.connect_target()
         target.handshake()
-        return target
+        return target, dom0
 
     def test_stdin_stderr(self):
-        target = self.execute('echo "stdout"; echo "stderr" >&2')
+        target, dom0 = self.execute('echo "stdout"; echo "stderr" >&2')
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
 
         messages = target.recv_all_messages()
@@ -812,7 +752,7 @@ class TestAgentStreams(TestAgentBase):
         )
 
     def test_pass_stdin(self):
-        target = self.execute("cat")
+        target, dom0 = self.execute("cat")
 
         target.send_message(qrexec.MSG_DATA_STDIN, b"data 1")
         self.assertEqual(
@@ -825,24 +765,16 @@ class TestAgentStreams(TestAgentBase):
         )
 
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"")
 
     def test_close_stdin_early(self):
         # Make sure that we cover the error on writing stdin into living
         # process.
-        target = self.execute(
+        target, dom0 = self.execute(
             """
 read
 exec <&-
-echo closed stdin
+echo "closed stdin"
 sleep 1
 """
         )
@@ -853,15 +785,8 @@ sleep 1
         target.send_message(qrexec.MSG_DATA_STDIN, b"data 2\n")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
 
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"")
+        self.check_dom0(dom0)
 
     def test_buffer_stdin(self):
         # Test to trigger WRITE_STDIN_BUFFERED.
@@ -877,7 +802,7 @@ sleep 1
 
         fifo = os.path.join(self.tempdir, "fifo")
         os.mkfifo(fifo)
-        target = self.execute("read <{}; cat".format(fifo))
+        target, dom0 = self.execute("read <{}; cat".format(fifo))
 
         for i in range(0, data_size, msg_size):
             msg = data[i : i + msg_size]
@@ -888,32 +813,11 @@ sleep 1
         with open(fifo, "a") as f:
             f.write("end\n")
             f.flush()
-
-        messages = []
-        received_data = b""
-        while len(received_data) < data_size:
-            message_type, message = target.recv_message()
-            if message_type != qrexec.MSG_DATA_STDOUT:
-                messages.append((message_type, message))
-            else:
-                self.assertEqual(message_type, qrexec.MSG_DATA_STDOUT)
-                received_data += message
-
-        self.assertEqual(len(received_data), data_size)
-        self.assertEqual(received_data, data)
-
-        messages += target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, data)
+        self.check_dom0(dom0)
 
     def test_close_stdout_stderr_early(self):
-        target = self.execute(
+        target, dom0 = self.execute(
             """\
 read
 echo closing stdout
@@ -946,9 +850,10 @@ exit $code
             target.recv_message(),
             (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)),
         )
+        self.check_dom0(dom0)
 
     def test_stdio_socket(self):
-        target = self.execute(
+        target, dom0 = self.execute(
             """\
 kill -USR1 $QREXEC_AGENT_PID
 echo hello world >&0
@@ -963,21 +868,13 @@ echo "received: $x" >&0
         target.send_message(qrexec.MSG_DATA_STDIN, b"stdin\n")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
 
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"received: stdin\n"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"received: stdin\n")
+        self.check_dom0(dom0)
 
     def test_exit_before_closing_streams(self):
         fifo = os.path.join(self.tempdir, "fifo")
         os.mkfifo(fifo)
-        target = self.execute(
+        target, dom0 = self.execute(
             """\
 # duplicate original stdin to fd 3, because bash will
 # close original stdin in child process
@@ -1009,18 +906,8 @@ exit 42
         with open(fifo, "a") as f:
             f.write("end\n")
             f.flush()
-        self.assertEqual(
-            target.recv_message(), (qrexec.MSG_DATA_STDOUT, b"child exiting\n")
-        )
-        messages = target.recv_all_messages()
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)),
-            ],
-        )
+        self.assertExpectedStdout(target, b"child exiting\n", exit_code=42)
+        self.check_dom0(dom0)
 
 
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
