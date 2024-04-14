@@ -162,8 +162,6 @@ static int do_fork_exec(const char *user,
     return retval;
 }
 
-#define QUBES_SOCKADDR_UN_MAX_PATH_LEN 1024
-
 static int qubes_connect(int s, const char *connect_path, const size_t total_path_length) {
     // Avoiding an extra copy is NOT worth it!
 #define QUBES_TMP_DIRECTORY "/tmp/qrexec-XXXXXX"
@@ -204,11 +202,6 @@ out:
     errno = dummy_errno;
     return result;
 }
-
-static int execute_qrexec_service(
-    const struct qrexec_parsed_command *cmd,
-    int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd,
-    struct buffer *stdin_buffer);
 
 /*
   Find a file in the ':'-delimited list of paths given in path_list.
@@ -461,8 +454,17 @@ int execute_parsed_qubes_rpc_command(
         int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer) {
     if (cmd->service_descriptor) {
         // Proper Qubes RPC call
-        return execute_qrexec_service(
-            cmd, pid, stdin_fd, stdout_fd, stderr_fd, stdin_buffer);
+        if (!find_qrexec_service(cmd, stdin_fd, stdin_buffer))
+            return -1;
+        if (*stdin_fd > -1) {
+            *stdout_fd = *stdin_fd;
+            if (stderr_fd)
+                *stderr_fd = -1;
+            *pid = 0;
+            return 0;
+        }
+        return do_fork_exec(cmd->username, cmd->command,
+                           pid, stdin_fd, stdout_fd, stderr_fd);
     } else {
         // Legacy qrexec behavior: spawn shell directly
         return do_fork_exec(cmd->username, cmd->command,
@@ -470,31 +472,31 @@ int execute_parsed_qubes_rpc_command(
     }
 }
 
-static int execute_qrexec_service(
+bool find_qrexec_service(
         const struct qrexec_parsed_command *cmd,
-        int *pid, int *stdin_fd, int *stdout_fd, int *stderr_fd,
-        struct buffer *stdin_buffer) {
-
+        int *socket_fd, struct buffer *stdin_buffer) {
     assert(cmd->service_descriptor);
 
+    char file_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
+    struct buffer path_buffer = { .data = file_path, .buflen = (int)sizeof(file_path) };
     const char *qrexec_service_path = getenv("QREXEC_SERVICE_PATH");
     if (!qrexec_service_path)
         qrexec_service_path = QREXEC_SERVICE_PATH;
+    *socket_fd = -1;
 
-    char service_full_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
     struct stat statbuf;
 
     int ret = find_file(qrexec_service_path, cmd->service_descriptor,
-                        service_full_path, sizeof(service_full_path),
+                        path_buffer.data, (size_t)path_buffer.buflen,
                         &statbuf);
     if (ret == -1)
         ret = find_file(qrexec_service_path, cmd->service_name,
-                        service_full_path, sizeof(service_full_path),
+                        path_buffer.data, (size_t)path_buffer.buflen,
                         &statbuf);
     if (ret < 0) {
         LOG(ERROR, "Service not found: %s",
             cmd->service_descriptor);
-        return -1;
+        return false;
     }
 
     if (S_ISSOCK(statbuf.st_mode)) {
@@ -502,42 +504,32 @@ static int execute_qrexec_service(
         int s;
         if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
             PERROR("socket");
-            return -1;
+            return false;
         }
-        if (qubes_connect(s, service_full_path, strlen(service_full_path))) {
+        if (qubes_connect(s, path_buffer.data, strlen(path_buffer.data))) {
             PERROR("qubes_connect");
             close(s);
-            return -1;
+            return false;
         }
-
-        *stdout_fd = *stdin_fd = s;
-        if (stderr_fd)
-            *stderr_fd = -1;
-        *pid = 0;
-        set_nonblock(s);
 
         if (cmd->send_service_descriptor) {
             /* send part after "QUBESRPC ", including trailing NUL */
             const char *desc = cmd->command + RPC_REQUEST_COMMAND_LEN + 1;
             buffer_append(stdin_buffer, desc, strlen(desc) + 1);
         }
-        return 0;
+
+        *socket_fd = s;
+        return true;
     }
 
-    if (euidaccess(service_full_path, X_OK) == 0) {
-        /*
-          Executable-based service.
-
-          Note that this delegates to qubes-rpc-multiplexer, which, for the
-          moment, searches for the right file again.
-        */
-        return do_fork_exec(cmd->username, cmd->command,
-                            pid, stdin_fd, stdout_fd, stderr_fd);
+    if (euidaccess(path_buffer.data, X_OK) == 0) {
+        /* Executable-based service. */
+        return true;
     }
 
-    LOG(ERROR, "Unknown service type (not executable, not a socket): %s",
-        service_full_path);
-    return -1;
+    LOG(ERROR, "Unknown service type (not executable, not a socket): %.*s",
+        path_buffer.buflen, path_buffer.data);
+    return false;
 }
 
 int exec_wait_for_session(const char *source_domain) {

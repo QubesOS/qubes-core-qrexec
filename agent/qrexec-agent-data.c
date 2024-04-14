@@ -136,6 +136,16 @@ static int handle_just_exec(struct qrexec_parsed_command *cmd)
 
     if (cmd == NULL)
         return 127;
+
+    if (cmd->service_descriptor) {
+        int socket_fd;
+        struct buffer stdin_buffer;
+        buffer_init(&stdin_buffer);
+        if (!find_qrexec_service(cmd, &socket_fd, &stdin_buffer))
+            return 127;
+        if (socket_fd != -1)
+            return write_all(socket_fd, stdin_buffer.data, stdin_buffer.buflen) ? 0 : 127;
+    }
     switch (pid = fork()) {
         case -1:
             PERROR("fork");

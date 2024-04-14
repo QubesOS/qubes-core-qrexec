@@ -27,6 +27,7 @@ import struct
 import getpass
 import itertools
 import asyncio
+import shlex
 
 import psutil
 import pytest
@@ -70,6 +71,9 @@ class TestAgentBase(unittest.TestCase):
             self.assertTrue(msg_body)
             self.assertEqual(msg_type, qrexec.MSG_DATA_STDOUT)
             stdout_entries.append(msg_body)
+
+    def make_executable_service(self, *args):
+        util.make_executable_service(self.tempdir, *args)
 
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
@@ -139,7 +143,6 @@ class TestAgentBase(unittest.TestCase):
         self.addCleanup(client.close)
         return client
 
-
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
 class TestAgent(TestAgentBase):
     def test_handshake(self):
@@ -148,7 +151,7 @@ class TestAgent(TestAgentBase):
         dom0 = self.connect_dom0()
         dom0.handshake()
 
-    def test_just_exec(self):
+    def _test_just_exec(self, cmd):
         self.start_agent()
 
         dom0 = self.connect_dom0()
@@ -156,9 +159,6 @@ class TestAgent(TestAgentBase):
 
         user = getpass.getuser().encode("ascii")
 
-        cmd = ("touch " + os.path.join(self.tempdir, "new_file")).encode(
-            "ascii"
-        )
         dom0.send_message(
             qrexec.MSG_JUST_EXEC,
             struct.pack("<LL", self.target_domain, self.target_port)
@@ -170,6 +170,18 @@ class TestAgent(TestAgentBase):
 
         target = self.connect_target()
         target.handshake()
+        return target, dom0
+
+    def test_just_exec_socket(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+"
+        )
+        server = qrexec.socket_server(socket_path)
+
+        cmd = b"QUBESRPC qubes.SocketService a"
+        target, dom0 = self._test_just_exec(cmd)
+        server.accept()
+        self.assertEqual(server.recvall(len(cmd)), cmd[9:] + b"\0")
         self.assertListEqual(
             target.recv_all_messages(),
             [
@@ -177,10 +189,45 @@ class TestAgent(TestAgentBase):
             ],
         )
 
-        util.wait_until(
-            lambda: os.path.exists(os.path.join(self.tempdir, "new_file")),
-            "file created",
+        self.check_dom0(dom0)
+
+    def test_just_exec(self):
+        fifo = os.path.join(self.tempdir, "new_file")
+        os.mkfifo(fifo, mode=0o600)
+        cmd = ("echo a >> " + shlex.quote(fifo)).encode("ascii", "strict")
+        target, dom0 = self._test_just_exec(cmd)
+        self.assertListEqual(
+            target.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
         )
+        with open(fifo, "rb") as f:
+            self.assertEqual(f.read(), b"a\n")
+        self.check_dom0(dom0)
+
+    def test_just_exec_rpc(self):
+        fifo = os.path.join(self.tempdir, "new_file")
+        os.mkfifo(fifo, mode=0o600)
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            fr"""#!/bin/bash -eu
+printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
+""",
+        )
+        cmd = b"QUBESRPC qubes.Service+ domX"
+        target, dom0 = self._test_just_exec(cmd)
+        self.assertListEqual(
+            target.recv_all_messages(),
+            [
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+
+        with open(fifo, "rb") as f:
+            self.assertEqual(f.read(), b"qubes.Service+\n")
         self.check_dom0(dom0)
 
     def test_exec_cmdline(self):
@@ -304,9 +351,6 @@ class TestAgentExecQubesRpc(TestAgentBase):
         target = self.connect_target()
         target.handshake()
         return target, dom0
-
-    def make_executable_service(self, *args):
-        util.make_executable_service(self.tempdir, *args)
 
     def test_exec_service(self):
         util.make_executable_service(
