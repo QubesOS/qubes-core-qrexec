@@ -1095,15 +1095,6 @@ static enum policy_response connect_daemon_socket(
     }
 }
 
-static size_t compute_service_length(const char *const remote_cmdline) {
-    const size_t service_length = strlen(remote_cmdline) + 1;
-    if (service_length < 2 || service_length > MAX_QREXEC_CMD_LEN) {
-        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
-        errx(1, "Bad command: command line too long or empty: length %zu\n", service_length);
-    }
-    return service_length;
-}
-
 /* called from do_fork_exec */
 static _Noreturn void do_exec(const char *prog, const char *username __attribute__((unused)))
 {
@@ -1139,8 +1130,6 @@ _Noreturn static void handle_execute_service_child(
     /* Replace the target domain with the version normalized by the policy engine */
     target_domain = requested_target;
     char *cmd = NULL;
-    bool disposable = false;
-    size_t resp_len;
 
     /*
      * If there was no service argument, pretend that an empty argument was
@@ -1175,78 +1164,18 @@ _Noreturn static void handle_execute_service_child(
                            5 /* 5 second timeout */,
                            false /* return 0 not remote status code */));
     } else {
-        char *buf;
-        if (strncmp("@dispvm:", target, sizeof("@dispvm:") - 1) == 0) {
-            disposable = true;
-            buf = qubesd_call(target + 8, "admin.vm.CreateDisposable", "", &resp_len);
-            if (!buf) // error already printed by qubesd_call
-                daemon__exit(QREXEC_EXIT_PROBLEM);
-            if (memcmp(buf, "0", 2) == 0) {
-                /* we exec later so memory leaks do not matter */
-                target = buf + 2;
-            } else {
-                if (memcmp(buf, "2", 2) == 0) {
-                    LOG(ERROR, "qubesd could not create disposable VM: %s", buf + 2);
-                } else {
-                    LOG(ERROR, "invalid response to admin.vm.CreateDisposable");
-                }
-                daemon__exit(QREXEC_EXIT_PROBLEM);
-            }
-        }
-        if (asprintf(&cmd, "%s:QUBESRPC %s%s %s",
-                    user,
-                    service_name,
-                    trailer,
-                    remote_domain_name) <= 0)
+        int service_length = asprintf(&cmd, "%s:QUBESRPC %s%s %s",
+                                      user,
+                                      service_name,
+                                      trailer,
+                                      remote_domain_name);
+        if (service_length < 0)
             daemon__exit(QREXEC_EXIT_PROBLEM);
-        if (autostart) {
-            buf = qubesd_call(target, "admin.vm.Start", "", &resp_len);
-            if (!buf) // error already printed by qubesd_call
-                daemon__exit(QREXEC_EXIT_PROBLEM);
-            if (!((memcmp(buf, "0", 2) == 0) ||
-                  (resp_len >= 24 && memcmp(buf, "2\0QubesVMNotHaltedError", 24) == 0))) {
-                if (memcmp(buf, "2", 2) == 0) {
-                    LOG(ERROR, "qubesd could not start VM %s: %s", target, buf + 2);
-                } else {
-                    LOG(ERROR, "invalid response to admin.vm.Start");
-                }
-                daemon__exit(QREXEC_EXIT_PROBLEM);
-            }
-            free(buf);
-        }
-        int s = connect_unix_socket(target);
-        int data_domain;
-        int data_port;
-        int rc = QREXEC_EXIT_PROBLEM;
-        if (!negotiate_connection_params(s,
-                remote_domain_id,
-                MSG_EXEC_CMDLINE,
-                cmd,
-                compute_service_length(cmd),
-                &data_domain,
-                &data_port))
-            daemon__exit(QREXEC_EXIT_PROBLEM);
-        int wait_connection_end = -1;
-        if (disposable) {
-            wait_connection_end = s;
-        } else {
-            close(s);
-        }
-
-        s = connect_unix_socket_by_id((unsigned)remote_domain_id);
-        if (send_service_connect(s, request_id->ident, data_domain, data_port))
-            rc = 0;
-        close(s);
-        if (wait_connection_end != -1) {
-            /* wait for EOF */
-            struct pollfd fds[1] = {
-                { .fd = wait_connection_end, .events = POLLIN | POLLHUP, .revents = 0 },
-            };
-            poll(fds, 1, -1);
-            size_t l;
-            qubesd_call(target, "admin.vm.Kill", "", &l);
-        }
-        daemon__exit(rc);
+        daemon__exit(qrexec_execute_vm(target, autostart, remote_domain_id,
+                                       cmd,
+                                       (size_t)service_length + 1,
+                                       request_id->ident, false, false)
+                ? 0 : QREXEC_EXIT_PROBLEM);
     }
 }
 

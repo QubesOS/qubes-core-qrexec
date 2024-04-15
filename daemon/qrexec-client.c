@@ -143,16 +143,6 @@ bad_c_param:
     exit(1);
 }
 
-static size_t compute_service_length(const char *const remote_cmdline, const char *const prog_name) {
-    const size_t service_length = strlen(remote_cmdline) + 1;
-    if (service_length < 2 || service_length > MAX_QREXEC_CMD_LEN) {
-        /* This is arbitrary, but it helps reduce the risk of overflows in other code */
-        fprintf(stderr, "Bad command: command line too long or empty: length %zu\n", service_length);
-        usage(prog_name);
-    }
-    return service_length;
-}
-
 int main(int argc, char **argv)
 {
     int opt;
@@ -162,7 +152,6 @@ int main(int argc, char **argv)
     int data_domain;
     int s;
     bool just_exec = false;
-    int wait_connection_end = -1;
     char *local_cmdline = NULL;
     char *remote_cmdline = NULL;
     char *request_id = NULL;
@@ -174,6 +163,7 @@ int main(int argc, char **argv)
     bool kill = false;
     bool replace_chars_stdout = false;
     bool replace_chars_stderr = false;
+    bool wait_connection_end = false;
     bool exit_with_code = true;
     int rc = QREXEC_EXIT_PROBLEM;
 
@@ -215,7 +205,7 @@ int main(int argc, char **argv)
                 connection_timeout = parse_int(optarg, "connection timeout");
                 break;
             case 'W':
-                wait_connection_end = 1;
+                wait_connection_end = true;
                 break;
             case 'd' + 128:
                 socket_dir = strdup(optarg);
@@ -259,41 +249,22 @@ int main(int argc, char **argv)
                            connection_timeout,
                            exit_with_code);
     } else {
-        s = connect_unix_socket(domname);
-        if (!negotiate_connection_params(s,
-                src_domain_id,
-                just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE,
-                remote_cmdline,
-                compute_service_length(remote_cmdline, argv[0]),
-                &data_domain,
-                &data_port)) {
-            goto cleanup;
-        }
         if (request_id) {
-            if (wait_connection_end != -1) {
-                /* save socket fd, 's' will be reused for the other qrexec-daemon
-                 * connection */
-                wait_connection_end = s;
-            } else {
-                close(s);
-            }
-            s = connect_unix_socket_by_id(src_domain_id);
-            if (s == -1) {
-                goto cleanup;
-            }
-            if (!send_service_connect(s, request_id, data_domain, data_port)) {
-                goto cleanup;
-            }
-            close(s);
-            if (wait_connection_end != -1) {
-                /* wait for EOF */
-                struct pollfd fds[1] = {
-                    { .fd = wait_connection_end, .events = POLLIN | POLLHUP, .revents = 0 },
-                };
-                poll(fds, 1, -1);
-            }
-            rc = 0;
+            rc = qrexec_execute_vm(domname, false, src_domain_id,
+                                   remote_cmdline, strlen(remote_cmdline) + 1,
+                                   request_id, just_exec,
+                                   wait_connection_end) ? 0 : 137;
         } else {
+            s = connect_unix_socket(domname);
+            if (!negotiate_connection_params(s,
+                        src_domain_id,
+                        just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE,
+                        remote_cmdline,
+                        strlen(remote_cmdline) + 1,
+                        &data_domain,
+                        &data_port)) {
+                goto cleanup;
+            }
             set_remote_domain(domname);
             struct buffer stdin_buffer;
             buffer_init(&stdin_buffer);
@@ -334,13 +305,12 @@ int main(int argc, char **argv)
                 .replace_chars_stderr = replace_chars_stderr,
             };
             rc = handshake_and_go(&params);
-        }
-    }
-
 cleanup:
-    if (kill && domname) {
-        size_t l;
-        qubesd_call(domname, "admin.vm.Kill", "", &l);
+            if (kill && domname) {
+                size_t l;
+                qubesd_call(domname, "admin.vm.Kill", "", &l);
+            }
+        }
     }
 
     return rc;

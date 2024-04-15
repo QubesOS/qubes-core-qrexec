@@ -38,3 +38,7 @@ __attribute__((warn_unused_result))
 int handle_agent_handshake(libvchan_t *vchan, bool remote_send_first);
 __attribute__((warn_unused_result))
 int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdin_buffer);
+__attribute__((warn_unused_result))
+bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
+                       const char *cmd, size_t service_length, const char *request_id,
+                       bool just_exec, bool wait_connection_end);
