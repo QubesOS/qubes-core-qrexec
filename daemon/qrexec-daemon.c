@@ -588,6 +588,19 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
             goto terminate;
         }
         policy_pending[i].response_sent = RESPONSE_ALLOW;
+    } else {
+        if (hdr->type != MSG_JUST_EXEC && hdr->type != MSG_EXEC_CMDLINE) {
+            // Sending such a message would just cause the agent to terminate.
+            LOG(ERROR, "Invalid message type %" PRIu32 " from client", hdr->type);
+            goto terminate;
+        }
+        if (params->connect_port != 0) {
+            // This is wrong, so log it, but allow it in case any code relies
+            // on it.  I did not find any such code.
+            LOG(ERROR, "Client provided port %" PRIu32
+                    " in non-MSG_SERVICE_CONNECT request (type %" PRIu32 ")",
+                    params->connect_port, hdr->type);
+        }
     }
 
     if (!params->connect_port) {
