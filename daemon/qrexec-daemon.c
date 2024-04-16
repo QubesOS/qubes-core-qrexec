@@ -1107,7 +1107,8 @@ static enum policy_response connect_daemon_socket(
 static _Noreturn void do_exec(const char *prog, const char *cmd, const char *username __attribute__((unused)))
 {
     /* avoid calling RPC command through shell */
-    exec_qubes_rpc_if_requested(prog, cmd, environ);
+    if (prog)
+        exec_qubes_rpc(prog, cmd, environ);
 
     /* if above haven't executed RPC command, pass it to shell */
     execl("/bin/bash", "bash", "-c", cmd, NULL);

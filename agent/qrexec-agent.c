@@ -172,7 +172,8 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             exit(1);
         }
         /* call QUBESRPC if requested */
-        exec_qubes_rpc_if_requested(prog, cmd, environ);
+        if (prog)
+            exec_qubes_rpc(prog, cmd, environ);
 
         /* otherwise exec shell */
         execl("/bin/sh", "sh", "-c", cmd, NULL);
@@ -279,7 +280,8 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
                 warn("chdir(%s)", pw->pw_dir);
 
             /* call QUBESRPC if requested */
-            exec_qubes_rpc_if_requested(prog, cmd, env);
+            if (prog)
+                exec_qubes_rpc(prog, cmd, env);
 
             /* otherwise exec shell */
             execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
@@ -317,7 +319,8 @@ error:
     exit(1);
 #else
     /* call QUBESRPC if requested */
-    exec_qubes_rpc_if_requested(prog, cmd, environ);
+    if (prog)
+        exec_qubes_rpc(prog, cmd, environ);
 
     /* otherwise exec shell */
     execl("/bin/su", "su", "-", user, "-c", cmd, NULL);
