@@ -1133,9 +1133,11 @@ static enum policy_response connect_daemon_socket(
 /* called from do_fork_exec */
 static _Noreturn void do_exec(const char *prog, const char *cmd, const char *username __attribute__((unused)))
 {
-    /* Avoid calling RPC command through shell.
-     * Qrexec-daemon is always in a login session already. */
-    exec_qubes_rpc_if_requested2(prog, cmd, environ, true);
+    /* avoid calling RPC command through shell */
+    if (prog) {
+        /* qrexec-daemon is always in a login session already */
+        exec_qubes_rpc2(prog, cmd, environ, false);
+    }
 
     /* if above haven't executed RPC command, pass it to shell */
     execl("/bin/bash", "bash", "-c", cmd, NULL);

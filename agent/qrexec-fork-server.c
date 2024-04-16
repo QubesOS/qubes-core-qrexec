@@ -44,8 +44,11 @@ void do_exec(const char *prog, const char *cmd, const char *user __attribute__((
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
 
-    /* Call QUBESRPC if requested.  This code already runs in a login session. */
-    exec_qubes_rpc_if_requested2(prog, cmd, environ, false);
+    /* call QUBESRPC if requested */
+    if (prog != NULL) {
+        /* Already in login session. */
+        exec_qubes_rpc2(prog, cmd, environ, false);
+    }
 
     /* otherwise, pass it to shell */
     shell = getenv("SHELL");

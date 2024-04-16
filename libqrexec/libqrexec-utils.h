@@ -66,7 +66,8 @@ struct qrexec_parsed_command {
     /* Override to disable "wait for session" */
     bool nogui;
 
-    /* Command (the part after "user:") */
+    /* Command (the part after "user:").  If this is an RPC command
+     * then the "QUBESRPC " prefix is not included. */
     const char *command;
 
     /* The below parameters are NULL for legacy (non-"QUBESRPC") commands. */
@@ -144,23 +145,19 @@ __attribute__((visibility("default")))
 void register_exec_func(do_exec_t *func);
 
 /**
- * \param program Full path to program to execute or NULL.
- * \param cmd RPC command, including "QUBESRPC " prefix, if *program* is not NULL.
- *        Otherwise *program* must be NULL and *cmd* must not start with "QUBESRPC".
- * \param envp Environment passed to execve(), ignored if *program* is NULL.
+ * \param program Full path to program to execute.
+ * \param cmd RPC command, excluding "QUBESRPC " prefix.
+ * \param envp Environment passed to execve().
  * \param use_shell If true, use a login shell to spawn the program.
  *
- * If *program* is not NULL, execute it as an RPC service or call _exit() on failure.
+ * Execute *program* as an RPC service or call _exit() on failure.
  * *cmd* is used to set the argument (if any) and "QREXEC_*" environment variables.
  * Environment variables in *envp* that start with "QREXEC" are ignored, except for
- * "QREXEC_SERVICE_PATH" and "QREXEC_AGENT_PID", which are inherited.  If *program*
- * is not NULL and *cmd* does not start with "QUBESRPC ", or if *program* is NULL
- * and *cmd* starts with "QUBESRPC", fails an assertion.  If *program* is NULL and
- * *cmd* does not start with "QUBESRPC", returns without doing anything.
+ * "QREXEC_SERVICE_PATH" and "QREXEC_AGENT_PID", which are inherited.
  */
 __attribute__((visibility("default")))
-void exec_qubes_rpc_if_requested2(const char *program, const char *cmd, char *const envp[],
-                                  bool use_shell);
+_Noreturn void exec_qubes_rpc2(const char *program, const char *cmd, char *const envp[],
+                               bool use_shell);
 
 /* Execute `qubes.WaitForSession` service, do not return on success, return -1
  * (maybe setting errno) on failure. */

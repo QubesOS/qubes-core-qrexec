@@ -172,8 +172,10 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             exit(1);
         }
         /* call QUBESRPC if requested */
-        /* no point in creating a login shell for test environments */
-        exec_qubes_rpc_if_requested2(prog, cmd, environ, false);
+        if (prog) {
+            /* no point in creating a login shell for test environments */
+            exec_qubes_rpc2(prog, cmd, environ, false);
+        }
 
         /* otherwise exec shell */
         execl("/bin/sh", "sh", "-c", cmd, NULL);
@@ -279,10 +281,11 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             if (retval == -1)
                 warn("chdir(%s)", pw->pw_dir);
 
-            /* Call QUBESRPC if requested, using a login shell to set up
-             * environment variables. */
-            exec_qubes_rpc_if_requested2(prog, cmd, env, true);
-
+            /* call QUBESRPC if requested */
+            if (prog) {
+                /* Set up environment variables for a login shell. */
+                exec_qubes_rpc2(prog, cmd, env, true);
+            }
             /* otherwise exec shell */
             execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
             _exit(QREXEC_EXIT_PROBLEM);
@@ -318,10 +321,11 @@ error:
     pam_end(pamh, PAM_ABORT);
     exit(1);
 #else
-    /* Call QUBESRPC if requested, using a login shell to set up
-     * environment variables. */
-    exec_qubes_rpc_if_requested2(prog, cmd, environ, true);
-
+    /* call QUBESRPC if requested */
+    if (prog) {
+        /* Set up environment variables for a login session. */
+        exec_qubes_rpc2(prog, cmd, environ, true);
+    }
     /* otherwise exec shell */
     execl("/bin/su", "su", "-", user, "-c", cmd, NULL);
     PERROR("execl");
