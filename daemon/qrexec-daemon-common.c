@@ -4,6 +4,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "qrexec.h"
 #include "libqrexec-utils.h"
