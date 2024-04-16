@@ -66,7 +66,8 @@ struct qrexec_parsed_command {
     /* Override to disable "wait for session" */
     bool nogui;
 
-    /* Command (the part after "user:") */
+    /* Command (the part after "user:").  If this is an RPC command
+     * then the "QUBESRPC " prefix is not included. */
     const char *command;
 
     /* The below parameters are NULL for legacy (non-"QUBESRPC") commands. */
@@ -158,7 +159,7 @@ void register_exec_func(do_exec_t *func);
  * returns without doing anything.
  */
 __attribute__((visibility("default")))
-void exec_qubes_rpc_if_requested(const char *program, const char *cmd, char *const envp[]);
+_Noreturn void exec_qubes_rpc(const char *program, const char *cmd, char *const envp[]);
 
 /* Execute `qubes.WaitForSession` service, do not return on success, return -1
  * (maybe setting errno) on failure. */
