@@ -154,10 +154,6 @@ _Noreturn void do_exec(const char *cmd, const char *user)
 #endif
     sigset_t sigmask;
 
-    /* ignore "nogui:" prefix in linux agent */
-    if (strncmp(cmd, NOGUI_CMD_PREFIX, NOGUI_CMD_PREFIX_LEN) == 0)
-        cmd += NOGUI_CMD_PREFIX_LEN;
-
     sigemptyset(&sigmask);
     sigprocmask(SIG_SETMASK, &sigmask, NULL);
     signal(SIGCHLD, SIG_DFL);
