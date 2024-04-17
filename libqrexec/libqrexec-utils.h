@@ -127,7 +127,7 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
 
 /**
  * @brief Execute an already-parsed Qubes RPC command.
- * @param cmdline Null-terminated command to execute.
+ * @param cmd Already-parsed command to execute.
  * @param pid On return, holds the PID of the child process.
  * @param stdin_fd On return, holds a file descriptor connected to the child's
  * stdin.
@@ -143,6 +143,24 @@ int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
 int execute_parsed_qubes_rpc_command(
         const struct qrexec_parsed_command *cmd, int *pid, int *stdin_fd,
         int *stdout_fd, int *stderr_fd, struct buffer *stdin_buffer);
+
+/**
+ * @brief Find the implementation of a Qubes RPC command. If it is a socket,
+ *        connect to it.
+ * @param[in] cmdline Null-terminated command to execute.
+ * @param[out] socket_fd On return, holds a file descriptor connected to the socket,
+ * or -1 for executable services.
+ * @param stdin_buffer This buffer will need to be prepended to the child process’s
+ * stdin.
+ * @return true if the implementation is found (and, for sockets, connected to)
+ * successfully, false on failure.
+ */
+bool find_qrexec_service(
+        const struct qrexec_parsed_command *cmd,
+        int *socket_fd, struct buffer *stdin_buffer);
+
+/** Suggested buffer size for the path buffer of find_qrexec_service. */
+#define QUBES_SOCKADDR_UN_MAX_PATH_LEN 1024
 
 /**
  * @brief Execute a Qubes RPC command.
