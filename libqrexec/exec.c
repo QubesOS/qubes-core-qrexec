@@ -468,6 +468,10 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
 
         start = end + 1; /* after the space */
         end = strchrnul(start, ' ');
+        if (end <= start) {
+            LOG(ERROR, "Source domain is empty (too many spaces after service descriptor?)");
+            goto err;
+        }
         cmd->source_domain = memdupnul(start, (size_t)(end - start));
         if (!cmd->source_domain)
             goto err;
