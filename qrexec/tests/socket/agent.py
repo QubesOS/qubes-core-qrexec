@@ -352,6 +352,22 @@ class TestAgentExecQubesRpc(TestAgentBase):
         target.handshake()
         return target, dom0
 
+    def test_exec_symlink(self):
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            ".qubes.Service",
+            """\
+#!/bin/sh
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+""",
+        )
+        os.symlink(".qubes.Service", os.path.join(self.tempdir, "rpc/qubes.Service"))
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self.assertExpectedStdout(target, b"arg: arg, remote domain: domX\n")
+        self.check_dom0(dom0)
+
     def test_exec_service(self):
         util.make_executable_service(
             self.tempdir,
