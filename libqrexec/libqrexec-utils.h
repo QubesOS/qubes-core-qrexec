@@ -39,8 +39,12 @@
 #include "mock-fuzz.h"
 #endif
 
+/** A (usually) heap-allocated buffer type.  The buffer_* functions
+ * assume the buffer is heap-allocated. */
 struct buffer {
+    /** Pointer to the data. */
     char *data;
+    /* Length of the data; never negative. */
     int buflen;
 };
 
@@ -107,6 +111,7 @@ struct qrexec_parsed_command {
 __attribute__((visibility("default")))
 struct qrexec_parsed_command *parse_qubes_rpc_command(
     const char *cmdline, bool strip_username);
+/* Free a parsed command */
 __attribute__((visibility("default")))
 void destroy_qrexec_parsed_command(struct qrexec_parsed_command *cmd);
 
@@ -143,11 +148,15 @@ void register_exec_func(do_exec_t *func);
 __attribute__((visibility("default")))
 void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]);
 
+/* Execute `qubes.WaitForSession` service, do not return on success, return -1
+ * (maybe setting errno) on failure. */
 __attribute__((visibility("default")))
 int exec_wait_for_session(const char *source_domain);
 
+/* Initialize a buffer */
 __attribute__((visibility("default")))
 void buffer_init(struct buffer *b);
+/* Free a buffer, setting its pointer to NULL and length to zero. */
 void buffer_free(struct buffer *b);
 void buffer_append(struct buffer *b, const char *data, int len);
 void buffer_remove(struct buffer *b, int len);

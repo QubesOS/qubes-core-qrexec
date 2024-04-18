@@ -10,6 +10,9 @@ Welcome to qubes-core-qrexec's documentation!
    qrexec-policy-parser_compat
    qrexec-exc
    qrexec-utils
+   execution
+   qrexec-policy-daemon
+   qubes-policy
 
 
 Indices and tables
