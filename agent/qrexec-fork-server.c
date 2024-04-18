@@ -124,10 +124,6 @@ int main(int argc, char **argv) {
     }
 
     s = get_server_socket(socket_path);
-    if (fcntl(s, F_SETFD, O_CLOEXEC) < 0) {
-        PERROR("fcntl");
-        exit(1);
-    }
     /* fork into background */
     switch (fork()) {
         case -1:

@@ -173,4 +173,11 @@ enum {
 // support only very small configuration files,
 #define MAX_CONFIG_SIZE 4096
 
+// Exit codes
+
+// Service call refused
+#define QREXEC_EXIT_REQUEST_REFUSED 126
+// Problem with qrexec itself
+#define QREXEC_EXIT_PROBLEM 125
+
 #endif /* QREXEC_H */

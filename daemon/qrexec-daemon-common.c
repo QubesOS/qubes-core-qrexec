@@ -220,7 +220,6 @@ int handle_agent_handshake(libvchan_t *vchan, bool remote_send_first)
 static void sigchld_handler(int x __attribute__((__unused__)))
 {
     sigchld = 1;
-    signal(SIGCHLD, sigchld_handler);
 }
 
 /* See also qrexec-agent.c:wait_for_session_maybe() */
@@ -272,7 +271,12 @@ int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdi
 {
     if (stdin_buffer == NULL)
         abort();
-    if (signal(SIGCHLD, sigchld_handler) == SIG_ERR)
+    struct sigaction action = {
+        .sa_handler = sigchld_handler,
+        .sa_flags = 0,
+    };
+    sigemptyset(&action.sa_mask);
+    if (sigaction(SIGCHLD, &action, NULL))
         return 126;
     return execute_parsed_qubes_rpc_command(command, &local_pid, &local_stdin_fd, &local_stdout_fd,
             NULL, stdin_buffer);
@@ -331,12 +335,6 @@ static int select_loop(struct handshake_params *params)
     return (params->exit_with_code ? exit_code : 0);
 }
 
-static void sigalrm_handler(int x __attribute__((__unused__)))
-{
-    LOG(ERROR, "vchan connection timeout");
-    _exit(1);
-}
-
 int run_qrexec_to_dom0(const struct service_params *svc_params,
                         int src_domain_id,
                         const char *src_domain_name,
@@ -375,15 +373,18 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
     } else {
         prepare_ret = prepare_local_fds(command, &stdin_buffer);
     }
-    void (*old_handler)(int);
+    int wait_fd;
+    data_vchan = libvchan_client_init_async(data_domain, data_port, &wait_fd);
+    if (!data_vchan) {
+        LOG(ERROR, "Cannot create data vchan connection");
+        return QREXEC_EXIT_PROBLEM;
+    }
+    if (qubes_wait_for_vchan_connection_with_timeout(
+                data_vchan, wait_fd, false, connection_timeout) < 0) {
+        LOG(ERROR, "qrexec connection timeout");
+        return QREXEC_EXIT_PROBLEM;
+    }
 
-    /* libvchan_client_init is blocking and does not support connection
-     * timeout, so use alarm(2) for that... */
-    old_handler = signal(SIGALRM, sigalrm_handler);
-    alarm(connection_timeout);
-    data_vchan = libvchan_client_init(data_domain, data_port);
-    alarm(0);
-    signal(SIGALRM, old_handler);
     struct handshake_params params = {
         .data_vchan = data_vchan,
         .stdin_buffer = &stdin_buffer,

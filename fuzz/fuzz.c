@@ -140,7 +140,18 @@ ssize_t fuzz_write(int fd, const void *buf, size_t count) {
     return count;
 }
 
+typedef int EVTCHN;
 fuzz_file_t *fuzz_libvchan_client_init(int domain, int port) {
+    /* not implemented yet */
+    abort();
+}
+
+fuzz_file_t *fuzz_libvchan_client_init_async(int domain, int port, EVTCHN *watch_fd) {
+    /* not implemented yet */
+    abort();
+}
+
+int fuzz_libvchan_client_init_async_finish(fuzz_file_t *ctrl, bool blocking) {
     /* not implemented yet */
     abort();
 }

@@ -74,8 +74,14 @@ static void sigusr1_handler(int __attribute__((__unused__))x)
 void prepare_child_env(void) {
     char pid_s[10];
 
-    signal(SIGCHLD, sigchld_handler);
-    signal(SIGUSR1, sigusr1_handler);
+    struct sigaction action = {
+        .sa_handler = sigchld_handler,
+        .sa_flags = 0,
+    };
+    sigemptyset(&action.sa_mask);
+    if (sigaction(SIGCHLD, &action, NULL)) abort();
+    action.sa_handler = sigusr1_handler;
+    if (sigaction(SIGUSR1, &action, NULL)) abort();
     int res = snprintf(pid_s, sizeof(pid_s), "%d", getpid());
     if (res < 0) abort();
     if (res >= (int)sizeof(pid_s)) abort();
@@ -160,69 +166,6 @@ static int handle_just_exec(struct qrexec_parsed_command *cmd)
     return 0;
 }
 
-static const long BILLION_NANOSECONDS = 1000000000L;
-
-static int wait_for_vchan_connection_with_timeout(
-        libvchan_t *conn, int wait_fd, bool is_server, time_t timeout) {
-    struct timespec end_tp, now_tp, timeout_tp;
-
-    if (timeout && clock_gettime(CLOCK_MONOTONIC, &end_tp)) {
-        PERROR("clock_gettime");
-        return -1;
-    }
-    assert(end_tp.tv_nsec >= 0 && end_tp.tv_nsec < BILLION_NANOSECONDS);
-    end_tp.tv_sec += timeout;
-    while (true) {
-        bool did_timeout = true;
-        struct pollfd fds = { .fd = wait_fd, .events = POLLIN | POLLHUP, .revents = 0 };
-
-        /* calculate how much time left until connection timeout expire */
-        if (clock_gettime(CLOCK_MONOTONIC, &now_tp)) {
-            PERROR("clock_gettime");
-            return -1;
-        }
-        assert(now_tp.tv_nsec >= 0 && now_tp.tv_nsec < BILLION_NANOSECONDS);
-        if (now_tp.tv_sec <= end_tp.tv_sec) {
-            timeout_tp.tv_sec = end_tp.tv_sec - now_tp.tv_sec;
-            timeout_tp.tv_nsec = end_tp.tv_nsec - now_tp.tv_nsec;
-            if (timeout_tp.tv_nsec < 0) {
-                timeout_tp.tv_nsec += BILLION_NANOSECONDS;
-                timeout_tp.tv_sec--;
-            }
-            did_timeout = timeout_tp.tv_sec < 0;
-        }
-        switch (did_timeout ? 0 : ppoll(&fds, 1, &timeout_tp, NULL)) {
-            case -1:
-                if (errno == EINTR)
-                    break;
-                LOG(ERROR, "vchan connection error");
-                return -1;
-            case 0:
-                LOG(ERROR, "vchan connection timeout");
-                return -1;
-            case 1:
-                break;
-            default:
-                abort();
-        }
-        if (fds.revents & POLLIN) {
-            if (is_server) {
-                libvchan_wait(conn);
-                return 0;
-            } else {
-                int connect_ret = libvchan_client_init_async_finish(conn, true);
-
-                if (connect_ret < 0) {
-                    LOG(ERROR, "vchan connection error");
-                    return -1;
-                } else if (connect_ret == 0) {
-                    return 0;
-                }
-            }
-        }
-    }
-}
-
 
 /* Behaviour depends on type parameter:
  *  MSG_JUST_EXEC - connect to vchan server, fork+exec process given by cmdline
@@ -263,7 +206,8 @@ static int handle_new_process_common(
         LOG(ERROR, "Data vchan connection failed");
         exit(1);
     }
-    if (wait_for_vchan_connection_with_timeout(data_vchan, wait_fd, false, connection_timeout) < 0) {
+    if (qubes_wait_for_vchan_connection_with_timeout(
+                data_vchan, wait_fd, false, connection_timeout) < 0) {
         LOG(ERROR, "Data vchan connection failed");
         exit(1);
     }
@@ -391,7 +335,7 @@ int handle_data_client(
         LOG(ERROR, "Data vchan connection failed");
         exit(1);
     }
-    if (wait_for_vchan_connection_with_timeout(
+    if (qubes_wait_for_vchan_connection_with_timeout(
             data_vchan, libvchan_fd_for_select(data_vchan), true, connection_timeout) < 0) {
         LOG(ERROR, "Data vchan connection failed");
         exit(1);

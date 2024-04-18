@@ -928,8 +928,14 @@ int main(int argc, char **argv)
     }
 
     init();
-    signal(SIGCHLD, sigchld_handler);
-    signal(SIGTERM, sigterm_handler);
+    struct sigaction action = {
+        .sa_handler = sigchld_handler,
+        .sa_flags = SA_RESTART,
+    };
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGCHLD, &action, NULL);
+    action.sa_handler = sigterm_handler;
+    sigaction(SIGTERM, &action, NULL);
     signal(SIGPIPE, SIG_IGN);
 
     sigemptyset(&selectmask);
