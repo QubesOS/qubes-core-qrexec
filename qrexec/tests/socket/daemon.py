@@ -734,7 +734,7 @@ class TestClient(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
 
-    def connect_service_request(self, cmd):
+    def connect_service_request(self, cmd, timeout=None):
         request_id = "SOCKET11"
         src_domain_name = "src_domain"
         src_domain = 43
@@ -749,6 +749,7 @@ class TestClient(unittest.TestCase):
                 "dom0",
                 "-c",
                 "{},{},{}".format(request_id, src_domain_name, src_domain),
+                *([f"-w{timeout}"] if timeout is not None else []),
                 cmd,
             ]
         )
@@ -1010,7 +1011,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
         cmd = "QUBESRPC qubes.SocketService+arg src_domain name src_domain"
-        source = self.connect_service_request(cmd)
+        source = self.connect_service_request(cmd, timeout=0)
 
         server.accept()
         header = cmd[len("QUBESRPC ") :].encode() + b"\0"

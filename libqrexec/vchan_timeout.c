@@ -16,25 +16,27 @@ int qubes_wait_for_vchan_connection_with_timeout(
     assert(end_tp.tv_nsec >= 0 && end_tp.tv_nsec < BILLION_NANOSECONDS);
     end_tp.tv_sec += timeout;
     for (;;) {
-        bool did_timeout = true;
         struct pollfd fds = { .fd = wait_fd, .events = POLLIN | POLLHUP, .revents = 0 };
+        bool did_timeout = timeout > 0;
 
         /* calculate how much time left until connection timeout expire */
-        if (clock_gettime(CLOCK_MONOTONIC, &now_tp)) {
-            PERROR("clock_gettime");
-            return -1;
-        }
-        assert(now_tp.tv_nsec >= 0 && now_tp.tv_nsec < BILLION_NANOSECONDS);
-        if (now_tp.tv_sec <= end_tp.tv_sec) {
-            timeout_tp.tv_sec = end_tp.tv_sec - now_tp.tv_sec;
-            timeout_tp.tv_nsec = end_tp.tv_nsec - now_tp.tv_nsec;
-            if (timeout_tp.tv_nsec < 0) {
-                timeout_tp.tv_nsec += BILLION_NANOSECONDS;
-                timeout_tp.tv_sec--;
+        if (did_timeout) {
+            if (clock_gettime(CLOCK_MONOTONIC, &now_tp)) {
+                PERROR("clock_gettime");
+                return -1;
             }
-            did_timeout = timeout_tp.tv_sec < 0;
+            assert(now_tp.tv_nsec >= 0 && now_tp.tv_nsec < BILLION_NANOSECONDS);
+            if (now_tp.tv_sec <= end_tp.tv_sec) {
+                timeout_tp.tv_sec = end_tp.tv_sec - now_tp.tv_sec;
+                timeout_tp.tv_nsec = end_tp.tv_nsec - now_tp.tv_nsec;
+                if (timeout_tp.tv_nsec < 0) {
+                    timeout_tp.tv_nsec += BILLION_NANOSECONDS;
+                    timeout_tp.tv_sec--;
+                }
+                did_timeout = timeout_tp.tv_sec < 0;
+            }
         }
-        switch (did_timeout ? 0 : ppoll(&fds, 1, &timeout_tp, NULL)) {
+        switch (did_timeout ? 0 : ppoll(&fds, 1, timeout > 0 ? &timeout_tp : NULL, NULL)) {
             case -1:
                 if (errno == EINTR)
                     break;
