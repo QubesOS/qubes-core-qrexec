@@ -112,6 +112,10 @@ static const char default_user_keyword[] = "DEFAULT:";
 static int opt_quiet = 0;
 static int opt_direct = 0;
 
+/* validate the target of a request. allow_empty is true for requests from VM,
+ * false for normalized values from policy engine */
+static bool validate_request_target(const char *untrusted_target, bool allow_empty);
+
 static const char *policy_program = QREXEC_POLICY_PROGRAM;
 
 #ifdef __GNUC__
@@ -1080,6 +1084,9 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     _exit(126);
 }
 
+/* do we re-validate trusted data? */
+static const bool validate_trusted_data = false;
+
 _Noreturn static void handle_execute_service_child(
         const int remote_domain_id,
         const char *remote_domain_name,
@@ -1116,6 +1123,12 @@ _Noreturn static void handle_execute_service_child(
     bool target_is_dom0 = strcmp(target, "@adminvm") == 0 ||
                           strcmp(target, "dom0") == 0;
     if (target_is_dom0) {
+        /* ensure that commands are syntactically correct by construction,
+         * but only if validate_trusted_data is set */
+        if (validate_trusted_data && !validate_request_target(target_domain, false)) {
+            LOG(ERROR, "BUG: policy engine returned invalid target '%s'", target_domain);
+            daemon__exit(126);
+        }
         char *type;
         bool target_is_keyword = target_domain[0] == '@';
         if (target_is_keyword) {
@@ -1314,6 +1327,43 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
     }
 }
 
+static bool validate_request_target(const char *untrusted_target, bool allow_empty)
+{
+    switch (untrusted_target[0]) {
+    case 'A' ... 'Z':
+    case 'a' ... 'z':
+    case '@':
+        break;
+    case '\0':
+        if (allow_empty)
+            return true;
+        LOG(ERROR, "Empty target not allowed");
+        return false;
+    default:
+        LOG(ERROR, "Invalid start byte in request target: %u", untrusted_target[0]);
+        return false;
+    }
+    for (size_t i = 1;; ++i) {
+        switch (untrusted_target[i]) {
+        case '0' ... '9':
+        case 'A' ... 'Z':
+        case 'a' ... 'z':
+        case '_':
+        case ':':
+        case '@':
+        case '-':
+        case '.':
+            continue;
+        case '\0':
+            // TODO: should there be a check for NUL bytes after the NUL terminator?
+            return true;
+        default:
+            LOG(ERROR, "Bad byte %u at offset %zu for request target", untrusted_target[i], i);
+            return false;
+        }
+    }
+}
+
 static bool validate_request_id(struct service_params *untrusted_params, const char *msg)
 {
     for (size_t i = 0; i < sizeof(untrusted_params->ident); ++i) {
@@ -1392,13 +1442,9 @@ void handle_message_from_agent(void)
             /* sanitize start */
             ENSURE_NULL_TERMINATED(untrusted_params.service_name);
             ENSURE_NULL_TERMINATED(untrusted_params.target_domain);
-            sanitize_name(untrusted_params.service_name, "+");
-            sanitize_name(untrusted_params.target_domain, "@:");
-            if (!validate_request_id(&untrusted_params.request_id, "MSG_TRIGGER_SERVICE")) {
-                send_service_refused(vchan, &untrusted_params.request_id);
-                return;
-            }
-            if (!validate_service_name(untrusted_params.service_name)) {
+            if (!validate_request_id(&untrusted_params.request_id, "MSG_TRIGGER_SERVICE") ||
+                    !validate_service_name(untrusted_params.service_name) ||
+                    !validate_request_target(untrusted_params.target_domain, true)) {
                 send_service_refused(vchan, &untrusted_params.request_id);
                 return;
             }
@@ -1433,8 +1479,9 @@ void handle_message_from_agent(void)
 
             /* sanitize start */
             ENSURE_NULL_TERMINATED(untrusted_params3.target_domain);
-            sanitize_name(untrusted_params3.target_domain, "@:");
             if (!validate_request_id(&untrusted_params3.request_id, "MSG_TRIGGER_SERVICE3"))
+                goto fail3;
+            if (!validate_request_target(untrusted_params3.target_domain, true))
                 goto fail3;
             params3 = untrusted_params3;
             if (untrusted_service_name[service_name_len] != 0) {
@@ -1611,6 +1658,8 @@ int main(int argc, char **argv)
     }
     remote_domain_id = atoi(argv[optind]);
     remote_domain_name = argv[optind+1];
+    if (validate_trusted_data && !validate_request_target(remote_domain_name, false))
+        errx(1, "Invalid remote domain name %s", remote_domain_name);
     if (argc - optind >= 3)
         default_user = argv[optind+2];
     init(remote_domain_id);

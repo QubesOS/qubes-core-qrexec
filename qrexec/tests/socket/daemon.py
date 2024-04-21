@@ -203,6 +203,26 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         self.assertEqual(data[:4], b"a\0b\0")
         self.assertEqual(data[4:], b"\0" * 28)
 
+    def recv_refused(self, agent, id, msg="Call went to policy engine"):
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
+        self.assertEqual(len(data), 32)
+        self.assertEqual(data, struct.pack("<32s", id))
+        self.assertFalse(os.path.exists(
+            os.path.join(self.tempdir, "qrexec-policy-params")
+        ),msg),
+
+    def _test_bad_target(self, agent, ident, go):
+        expanded_ident = ident.encode("ascii", "strict")
+        for first_byte in range(1, 256):
+            if ((97 <= first_byte <= 122) or (64 <= first_byte <= 90)):
+                continue
+            go(bytes([first_byte]), expanded_ident)
+            if ((45 <= first_byte <= 46) or (48 <= first_byte <= 58) or
+                (first_byte == 95)):
+                continue
+            go(bytes([ord('a'), first_byte]), expanded_ident)
+
     def test_bad_old_style_request(self):
         agent = self.start_daemon_with_agent()
         agent.send_message(qrexec.MSG_HELLO, struct.pack("<L", 2))
@@ -211,7 +231,7 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
         (ver,) = struct.unpack("<L", data)
         self.assertEqual(ver, 3)
 
-        target_domain_name = "target_domain"
+        target_domain_name = b"target_domain"
         ident = b"ab"
 
         self.set_policy_params(1, 0)
@@ -220,16 +240,18 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
             agent.send_message(
                 qrexec.MSG_TRIGGER_SERVICE,
                 struct.pack("<64s32s32s", service_name,
-                            target_domain_name.encode(), ident)
+                            target_domain_name, ident)
             )
-            message_type, data = agent.recv_message()
-            self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
-            self.assertEqual(len(data), 32)
-            self.assertEqual(data[:len(ident)], ident)
-            self.assertEqual(data[len(ident):], b"\0" * (32 - len(ident)))
-            self.assertFalse(os.path.exists(
-                os.path.join(self.tempdir, "qrexec-policy-params")
-            )),
+            self.recv_refused(agent, ident)
+        def go(target, ident):
+            agent.send_message(
+                qrexec.MSG_TRIGGER_SERVICE,
+                struct.pack("<64s32s32s", b"a+b",
+                            target, ident)
+            )
+            self.recv_refused(agent, ident,
+                              f"Call with target {target!r} got to policy engine")
+        self._test_bad_target(agent, ident.decode(), go)
 
     def test_bad_new_style_request(self):
         """
@@ -240,18 +262,9 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
 
         target_domain_name = "target_domain"
         ident = "ab"
+        expanded_ident = ident.encode()
 
         self.set_policy_params(1, 0)
-
-        def recv_refused(agent):
-            message_type, data = agent.recv_message()
-            self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
-            self.assertEqual(len(data), 32)
-            self.assertEqual(data[:2], b"ab")
-            self.assertEqual(data[2:], b"\0" * 30)
-            self.assertFalse(os.path.exists(
-                os.path.join(self.tempdir, "qrexec-policy-params")
-            )),
 
         # missing NUL terminator
         agent.send_message(
@@ -259,7 +272,7 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
             struct.pack("<64s32s", target_domain_name.encode(), ident.encode())
             + b"a",
         )
-        recv_refused(agent)
+        self.recv_refused(agent, expanded_ident)
 
         # leading, interior or trailing NUL before NUL terminator,
         # empty service name with argument, or empty service name with no
@@ -268,7 +281,19 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
             self.send_trigger_service(
                 agent, target_domain_name, service_name, ident
             )
-            recv_refused(agent)
+            self.recv_refused(agent, expanded_ident)
+
+        # invalid targets
+        for target in ("+", ":", " ", "-a", "_a", "#", " ", "\n", "\t", "?", "*", "[",
+                       "a#", "b\n", "cd\t", "effff "):
+            self.send_trigger_service(agent, target, "a+b", ident)
+            self.recv_refused(agent, expanded_ident)
+        def go(target, ident):
+            self.send_trigger_service_raw(agent, target, b"a+b", ident)
+            self.recv_refused(agent, ident,
+                              f"Call with target {target!r} got to policy engine")
+        self._test_bad_target(agent, ident, go)
+
 
     def test_qsb_089(self):
         """
@@ -291,14 +316,24 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
             os.path.join(self.tempdir, "qrexec-policy-params")
         ))
 
-    def send_trigger_service(
-        self, agent, target_domain_name: str, service_name: str, ident: str
+    def send_trigger_service_raw(
+        self, agent, target_domain_name: bytes, service_name: bytes, ident: bytes
     ):
         agent.send_message(
             qrexec.MSG_TRIGGER_SERVICE3,
-            struct.pack("<64s32s", target_domain_name.encode(), ident.encode())
-            + service_name.encode()
+            struct.pack("<64s32s", target_domain_name, ident)
+            + service_name
             + b"\0",
+        )
+
+    def send_trigger_service(
+        self, agent, target_domain_name: str, service_name: str, ident: str
+    ):
+        self.send_trigger_service_raw(
+            agent,
+            target_domain_name.encode("ascii", "strict"),
+            service_name.encode("ascii", "strict"),
+            ident.encode("ascii", "strict")
         )
 
     def trigger_service(
