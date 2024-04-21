@@ -1080,6 +1080,39 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     _exit(126);
 }
 
+static bool validate_request_target(const char *untrusted_target)
+{
+    switch (untrusted_target[0]) {
+    case 'A' ... 'Z':
+    case 'a' ... 'z':
+        break;
+    case '\0':
+        LOG(ERROR, "Empty target not allowed");
+        return false;
+    default:
+        LOG(ERROR, "Invalid start byte in request target: %u", untrusted_target[0]);
+        return false;
+    }
+    for (size_t i = 1;; ++i) {
+        switch (untrusted_target[i]) {
+        case '0' ... '9':
+        case 'A' ... 'Z':
+        case 'a' ... 'z':
+        case '_':
+        case ':':
+        case '-':
+        case '.':
+            continue;
+        case '\0':
+            // TODO: should there be a check for NUL bytes after the NUL terminator?
+            return true;
+        default:
+            LOG(ERROR, "Bad byte %u at offset %zu for request target", untrusted_target[i], i);
+            return false;
+        }
+    }
+}
+
 _Noreturn static void handle_execute_service_child(
         const int remote_domain_id,
         const char *remote_domain_name,
@@ -1123,6 +1156,11 @@ _Noreturn static void handle_execute_service_child(
             type = "keyword";
         } else {
             type = "name";
+        }
+        /* ensure that commands are syntactically correct by construction */
+        if (!validate_request_target(target_domain)) {
+            LOG(ERROR, "BUG: policy engine returned invalid target '%s'", target_domain);
+            daemon__exit(126);
         }
         if (asprintf(&cmd, "QUBESRPC %s%s %s %s %s",
                      service_name,
@@ -1611,6 +1649,8 @@ int main(int argc, char **argv)
     }
     remote_domain_id = atoi(argv[optind]);
     remote_domain_name = argv[optind+1];
+    if (!validate_request_target(remote_domain_name))
+        errx(1, "Invalid remote domain name %s", remote_domain_name);
     if (argc - optind >= 3)
         default_user = argv[optind+2];
     init(remote_domain_id);
