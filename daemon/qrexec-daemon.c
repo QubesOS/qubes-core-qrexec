@@ -1115,6 +1115,18 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     _exit(QREXEC_EXIT_PROBLEM);
 }
 
+/* check that the input is non-empty with only printable ASCII characters */
+static bool check_single_word(const char *token)
+{
+    const char *cursor = token;
+    do {
+        if (*cursor < 0x21 || *cursor > 0x7E)
+            return false;
+        cursor++;
+    } while (*cursor != 0);
+    return true;
+}
+
 _Noreturn static void handle_execute_service_child(
         const int remote_domain_id,
         const char *remote_domain_name,
@@ -1175,6 +1187,11 @@ _Noreturn static void handle_execute_service_child(
             type = "keyword";
         } else {
             type = "name";
+        }
+        /* ensure that commands are syntactically correct by construction */
+        if (!check_single_word(target_domain)) {
+            LOG(ERROR, "BUG: policy engine returned invalid target '%s'", target_domain);
+            daemon__exit(126);
         }
         if (asprintf(&cmd, "QUBESRPC %s%s %s %s %s",
                      service_name,
@@ -1595,6 +1612,9 @@ int main(int argc, char **argv)
     }
     remote_domain_id = atoi(argv[optind]);
     remote_domain_name = argv[optind+1];
+    /* this is inserted into the generated command line */
+    if (!check_single_word(remote_domain_name))
+        errx(1, "Invalid remote domain name %s", remote_domain_name);
     if (argc - optind >= 3)
         default_user = argv[optind+2];
     /* qubes_parse_rpc_command() considers ':' to terminate the username */
