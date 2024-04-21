@@ -791,26 +791,6 @@ static int find_policy_pending_slot(void) {
     return -1;
 }
 
-static void sanitize_name(char * untrusted_s_signed, char *extra_allowed_chars)
-{
-    unsigned char * untrusted_s;
-    for (untrusted_s=(unsigned char*)untrusted_s_signed; *untrusted_s; untrusted_s++) {
-        if (*untrusted_s >= 'a' && *untrusted_s <= 'z')
-            continue;
-        if (*untrusted_s >= 'A' && *untrusted_s <= 'Z')
-            continue;
-        if (*untrusted_s >= '0' && *untrusted_s <= '9')
-            continue;
-        if (*untrusted_s == '_' ||
-               *untrusted_s == '-' ||
-               *untrusted_s == '.')
-            continue;
-        if (extra_allowed_chars && strchr(extra_allowed_chars, *untrusted_s))
-            continue;
-        *untrusted_s = '_';
-    }
-}
-
 static int parse_policy_response(
     char *response,
     size_t result_bytes,
@@ -1409,9 +1389,24 @@ static bool validate_service_name(char *untrusted_service_name)
         LOG(ERROR, "Service name must not start with '+'");
         return false;
     default:
-        sanitize_name(untrusted_service_name, "+");
-        return true;
+        break;
     }
+    unsigned char * untrusted_s;
+    for (untrusted_s=(unsigned char*)untrusted_service_name; *untrusted_s; untrusted_s++) {
+        if (*untrusted_s >= 'a' && *untrusted_s <= 'z')
+            continue;
+        if (*untrusted_s >= 'A' && *untrusted_s <= 'Z')
+            continue;
+        if (*untrusted_s >= '0' && *untrusted_s <= '9')
+            continue;
+        if (*untrusted_s == '_' ||
+               *untrusted_s == '-' ||
+               *untrusted_s == '.' ||
+               *untrusted_s == '+')
+            continue;
+        *untrusted_s = '_';
+    }
+    return true;
 }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
