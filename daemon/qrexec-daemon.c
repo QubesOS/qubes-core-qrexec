@@ -110,7 +110,6 @@ static const char default_user_keyword[] = "DEFAULT:";
 #define default_user_keyword_len_without_colon (sizeof(default_user_keyword)-2)
 
 static int opt_quiet = 0;
-static int opt_direct = 0;
 
 static const char *policy_program = QREXEC_POLICY_PROGRAM;
 
@@ -268,7 +267,7 @@ static int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 static void signal_handler(int sig);
 
 /* do the preparatory tasks, needed before entering the main event loop */
-static void init(int xid)
+static void init(int xid, bool opt_direct)
 {
     char qrexec_error_log_name[256];
     int logfd;
@@ -376,7 +375,7 @@ static void init(int xid)
     }
     if (qubes_wait_for_vchan_connection_with_timeout(
                 vchan, wait_fd, false, startup_timeout) < 0) {
-        if (write(pipes[1], "\1", 1)) {}
+        if (!opt_direct && write(pipes[1], "\1", 1)) {}
         LOG(ERROR, "qrexec connection timeout");
         exit(3);
     }
@@ -1570,6 +1569,7 @@ int main(int argc, char **argv)
 {
     int i, opt;
     sigset_t selectmask;
+    bool opt_direct = false;
 
     {
         int null_fd = open("/dev/null", O_RDONLY|O_NOCTTY);
@@ -1613,7 +1613,7 @@ int main(int argc, char **argv)
     remote_domain_name = argv[optind+1];
     if (argc - optind >= 3)
         default_user = argv[optind+2];
-    init(remote_domain_id);
+    init(remote_domain_id, opt_direct);
 
     sigemptyset(&selectmask);
     sigaddset(&selectmask, SIGCHLD);
