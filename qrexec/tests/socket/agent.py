@@ -77,6 +77,7 @@ class TestAgentBase(unittest.TestCase):
         util.make_executable_service(self.tempdir, *args)
 
     def setUp(self):
+        self.agent = self.dom0 = None
         self.tempdir = tempfile.mkdtemp()
         os.mkdir(os.path.join(self.tempdir, "local-rpc"))
         os.mkdir(os.path.join(self.tempdir, "rpc"))
@@ -84,6 +85,8 @@ class TestAgentBase(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tempdir)
 
     def start_agent(self):
+        if self.agent is not None:
+            return
         env = os.environ.copy()
         env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
         env["VCHAN_DOMAIN"] = str(self.domain)
@@ -127,8 +130,11 @@ class TestAgentBase(unittest.TestCase):
         psutil.wait_procs(children)
 
     def connect_dom0(self):
-        dom0 = qrexec.vchan_client(self.tempdir, self.domain, 0, 512)
+        if self.dom0 is not None:
+            return self.dom0
+        dom0 = self.dom0 = qrexec.vchan_client(self.tempdir, self.domain, 0, 512)
         self.addCleanup(dom0.close)
+        dom0.handshake()
         return dom0
 
     def connect_target(self):
@@ -150,13 +156,11 @@ class TestAgent(TestAgentBase):
         self.start_agent()
 
         dom0 = self.connect_dom0()
-        dom0.handshake()
 
     def _test_just_exec(self, cmd):
         self.start_agent()
 
         dom0 = self.connect_dom0()
-        dom0.handshake()
 
         user = getpass.getuser().encode("ascii")
 
@@ -235,7 +239,6 @@ printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
         self.start_agent()
 
         dom0 = self.connect_dom0()
-        dom0.handshake()
 
         user = getpass.getuser().encode("ascii")
 
@@ -260,7 +263,6 @@ printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
         target_domain_name = b"target_domain"
 
         dom0 = self.connect_dom0()
-        dom0.handshake()
 
         client = self.connect_client()
         ident = self.trigger_service(
@@ -286,7 +288,6 @@ printf %s\\n "$QREXEC_SERVICE_FULL_NAME" >> {shlex.quote(fifo)}
         target_domain_name = b"target_domain"
 
         dom0 = self.connect_dom0()
-        dom0.handshake()
 
         client = self.connect_client()
         ident = self.trigger_service(
@@ -337,7 +338,6 @@ class TestAgentExecQubesRpc(TestAgentBase):
         self.start_agent()
 
         dom0 = self.connect_dom0()
-        dom0.handshake()
 
         user = getpass.getuser()
         cmdline = "{}:QUBESRPC {} {}\0".format(
@@ -977,7 +977,6 @@ class TestAgentStreams(TestAgentBase):
         self.start_agent()
 
         dom0 = self.connect_dom0()
-        dom0.handshake()
 
         user = getpass.getuser()
         cmdline = "{}:{}\0".format(user, cmd).encode("ascii")
