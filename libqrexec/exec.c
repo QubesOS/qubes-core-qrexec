@@ -120,12 +120,14 @@ static int do_fork_exec(const char *user,
             (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe)) ||
             socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, statuspipe)) {
         PERROR("socketpair");
-        exit(1);
+        /* FD leaks do not matter, we exit soon anyway */
+        return -2;
     }
     switch (*pid = fork()) {
         case -1:
             PERROR("fork");
-            exit(-1);
+            /* ditto */
+            return -2;
         case 0: {
             int status;
             if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)

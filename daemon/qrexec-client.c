@@ -292,6 +292,7 @@ int main(int argc, char **argv)
             if (qubes_wait_for_vchan_connection_with_timeout(
                         data_vchan, fd, true, connection_timeout) < 0) {
                 LOG(ERROR, "qrexec connection timeout");
+                libvchan_close(data_vchan);
                 rc = QREXEC_EXIT_PROBLEM;
                 goto cleanup;
             }

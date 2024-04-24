@@ -182,7 +182,7 @@ int execute_parsed_qubes_rpc_command(
  */
 __attribute__((visibility("default")))
 int find_qrexec_service(
-        const struct qrexec_parsed_command *cmd,
+        struct qrexec_parsed_command *cmd,
         int *socket_fd, struct buffer *stdin_buffer);
 
 /** Suggested buffer size for the path buffer of find_qrexec_service. */

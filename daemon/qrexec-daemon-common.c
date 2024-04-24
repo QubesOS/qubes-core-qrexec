@@ -479,6 +479,7 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
     if (qubes_wait_for_vchan_connection_with_timeout(
                 data_vchan, wait_fd, false, connection_timeout) < 0) {
         LOG(ERROR, "qrexec connection timeout");
+        libvchan_close(data_vchan);
         return QREXEC_EXIT_PROBLEM;
     }
 
@@ -496,23 +497,25 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
 
 int handshake_and_go(struct handshake_params *params)
 {
+    int rc = QREXEC_EXIT_PROBLEM;
     if (params->data_vchan == NULL || !libvchan_is_open(params->data_vchan)) {
         LOG(ERROR, "Failed to open data vchan connection");
-        return QREXEC_EXIT_PROBLEM;
+        goto cleanup;
     }
-    int rc;
     int data_protocol_version = handle_agent_handshake(params->data_vchan,
                                                        params->remote_send_first);
-    if (data_protocol_version < 0) {
-        rc = QREXEC_EXIT_PROBLEM;
-    } else if (params->prepare_ret != 0) {
-        rc = params->prepare_ret == -1 ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM;
-        handle_failed_exec(params->data_vchan, params->remote_send_first, rc);
-    } else {
-        params->data_protocol_version = data_protocol_version;
-        rc = select_loop(params);
+    if (data_protocol_version >= 0) {
+        if (params->prepare_ret != 0) {
+            rc = params->prepare_ret == -1 ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM;
+            handle_failed_exec(params->data_vchan, params->remote_send_first, rc);
+        } else {
+            params->data_protocol_version = data_protocol_version;
+            rc = select_loop(params);
+        }
     }
-    libvchan_close(params->data_vchan);
+cleanup:
+    if (params->data_vchan != NULL)
+        libvchan_close(params->data_vchan);
     params->data_vchan = NULL;
     return rc;
 }
