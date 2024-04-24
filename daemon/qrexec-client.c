@@ -101,23 +101,6 @@ _Noreturn static void usage(const char *const name)
     exit(1);
 }
 
-static int parse_int(const char *str, const char *msg) {
-    long value;
-    char *end = (char *)str;
-
-    if (str[0] < '0' || str[0] > '9')
-        errx(1, "%s '%s' does not start with an ASCII digit", msg, str);
-    errno = 0;
-    value = strtol(str, &end, 0);
-    if (*end != '\0')
-        errx(1, "trailing junk '%s' after %s", end, msg);
-    if (errno == 0 && (value < 0 || value > INT_MAX))
-        errno = ERANGE;
-    if (errno)
-        err(1, "invalid %s '%s': strtol", msg, str);
-    return (int)value;
-}
-
 static void parse_connect(char *str, char **request_id,
         char **src_domain_name, int *src_domain_id)
 {

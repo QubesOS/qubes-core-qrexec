@@ -38,3 +38,12 @@ __attribute__((warn_unused_result))
 int handle_agent_handshake(libvchan_t *vchan, bool remote_send_first);
 __attribute__((warn_unused_result))
 int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdin_buffer);
+/**
+ * Parse an integer, which must not be negative.
+ *
+ * @param str The integer.
+ * @param message A human-readable string that will be used in error messages.
+ *
+ * Returns a non-negative int on success.  Calls exit(1) on failure.
+ */
+int parse_int(const char *str, const char *msg);
