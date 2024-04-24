@@ -277,7 +277,7 @@ static void init(int xid, bool opt_direct)
     }
     startup_timeout_str = getenv("QREXEC_STARTUP_TIMEOUT");
     if (startup_timeout_str) {
-        startup_timeout = atoi(startup_timeout_str);
+        startup_timeout = parse_int(startup_timeout_str, "startup timeout");
         if (startup_timeout <= 0)
             // invalid or negative number
             startup_timeout = MAX_STARTUP_TIME_DEFAULT;
@@ -1610,7 +1610,7 @@ int main(int argc, char **argv)
     if (argc - optind < 2 || argc - optind > 3) {
         usage(argv[0]);
     }
-    remote_domain_id = atoi(argv[optind]);
+    remote_domain_id = parse_int(argv[optind], "remote domain ID");
     remote_domain_name = argv[optind+1];
     /* this is inserted into the generated command line */
     if (!check_single_word(remote_domain_name))
