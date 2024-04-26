@@ -360,8 +360,10 @@ static void init(int xid, bool opt_direct)
             exit(1);
         }
 
-        dup2(logfd, 1);
-        dup2(logfd, 2);
+        if (dup2(logfd, 1) != 1 || dup2(logfd, 2) != 2)
+            err(1, "dup2()");
+        if (logfd > 2)
+            close(logfd);
 
         if (setsid() < 0) {
             PERROR("setsid()");
