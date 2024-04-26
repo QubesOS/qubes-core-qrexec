@@ -288,19 +288,21 @@ static void init(int xid, bool opt_direct)
             startup_timeout = MAX_STARTUP_TIME_DEFAULT;
     }
 
-    int pipes[2];
+    int pipes[2] = { -1, -1 };
+    bool have_timeout = getenv("QREXEC_STARTUP_NOWAIT") == NULL;
     if (!opt_direct) {
-        if (pipe2(pipes, O_CLOEXEC))
+        if (have_timeout && pipe2(pipes, O_CLOEXEC))
             err(1, "pipe2()");
         switch (pid=fork()) {
             case -1:
                 PERROR("fork");
                 exit(1);
             case 0:
-                close(pipes[0]);
+                if (have_timeout)
+                    close(pipes[0]);
                 break;
             default:
-                if (getenv("QREXEC_STARTUP_NOWAIT"))
+                if (!have_timeout)
                     exit(0);
                 close(pipes[1]);
                 if (!opt_quiet)
@@ -368,18 +370,22 @@ static void init(int xid, bool opt_direct)
     }
 
     int wait_fd;
-    vchan = libvchan_client_init_async(xid, VCHAN_BASE_PORT, &wait_fd);
+    if (have_timeout) {
+        vchan = libvchan_client_init_async(xid, VCHAN_BASE_PORT, &wait_fd);
+        if (vchan != NULL && qubes_wait_for_vchan_connection_with_timeout(
+                    vchan, wait_fd, false, startup_timeout) < 0) {
+            if (!opt_direct && write(pipes[1], "\1", 1)) {}
+            LOG(ERROR, "qrexec connection timeout");
+            exit(3);
+        }
+    } else {
+        /* No timeout in this case */
+        vchan = libvchan_client_init(xid, VCHAN_BASE_PORT);
+    }
     if (!vchan) {
         LOG(ERROR, "Cannot create data vchan connection");
         exit(3);
     }
-    if (qubes_wait_for_vchan_connection_with_timeout(
-                vchan, wait_fd, false, startup_timeout) < 0) {
-        if (!opt_direct && write(pipes[1], "\1", 1)) {}
-        LOG(ERROR, "qrexec connection timeout");
-        exit(3);
-    }
-
     protocol_version = handle_agent_hello(vchan, remote_domain_name);
     if (protocol_version < 0) {
         exit(1);
@@ -422,7 +428,7 @@ static void init(int xid, bool opt_direct)
         err(1, "sigaction");
     if (sigaction(SIGTERM, &sigterm_action, NULL))
         err(1, "sigaction");
-    if (!opt_direct) {
+    if (have_timeout && !opt_direct) {
         if (write(pipes[1], "", 1) != 1)
             err(1, "write(pipe)");
         close(pipes[1]);
