@@ -1,3 +1,4 @@
+# License: GPLv2, same as Fedora's SELinux policy
 policy_module(qubes-core-qrexec, 0.0.1)
 
 require {
@@ -55,3 +56,19 @@ write_sock_files_pattern(qubes_qrexec_agent_t, qubes_var_run_t, qubes_var_run_t)
 allow domain qubes_qrexec_agent_t:unix_stream_socket { rw_inherited_sock_file_perms ioctl };
 allow qubes_qrexec_agent_t domain:unix_stream_socket connectto;
 allow qubes_qrexec_agent_t file_type:sock_file { rw_sock_file_perms ioctl };
+
+# All of this is taken from userdomain.if, so that
+# qrexec can connect to any TCP socket.
+corenet_tcp_sendrecv_generic_if(qubes_qrexec_agent_t)
+corenet_tcp_sendrecv_generic_node(qubes_qrexec_agent_t)
+corenet_tcp_sendrecv_all_ports(qubes_qrexec_agent_t)
+corenet_tcp_connect_all_ports(qubes_qrexec_agent_t)
+corenet_sendrecv_all_client_packets(qubes_qrexec_agent_t)
+
+optional_policy(`
+        init_tcp_recvfrom_all_daemons(qubes_qrexec_agent_t)
+')
+
+optional_policy(`
+        ipsec_match_default_spd(qubes_qrexec_agent_t)
+')
