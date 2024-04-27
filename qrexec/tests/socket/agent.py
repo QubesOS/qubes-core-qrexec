@@ -682,6 +682,34 @@ echo "general service"
         )
         self.check_dom0(dom0)
 
+    def test_connect_socket_no_metadata_user(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg2"
+        )
+        user = getpass.getuser()
+        with open(
+            os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg2"), "w"
+        ) as f:
+            f.write(f"""\
+skip-service-descriptor = true
+force-user = '{user}'
+""")
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService+arg2", "domX")
+        messages = target.recv_all_messages()
+        # No stderr
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+
     def test_connect_socket_no_metadata(self):
         socket_path = os.path.join(
             self.tempdir, "rpc", "qubes.SocketService+arg2"

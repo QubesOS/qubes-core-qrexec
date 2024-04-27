@@ -348,6 +348,11 @@ int load_service_config_v2(struct qrexec_parsed_command *cmd) {
     char *tmp_user = NULL;
     int res = load_service_config_raw(cmd, &tmp_user);
     if (res >= 0 && tmp_user != NULL) {
+        if (!cmd->send_service_descriptor) {
+            LOG(ERROR, "service %s: Cannot set explicit username if "
+                "skip-service-descriptor=true", cmd->service_descriptor);
+            return -1;
+        }
         free(cmd->username);
         cmd->username = tmp_user;
     }
