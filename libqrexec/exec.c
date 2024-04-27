@@ -364,6 +364,7 @@ int load_service_config(struct qrexec_parsed_command *cmd,
     int rc = load_service_config_raw(cmd, user);
     if (rc >= 0) {
         *wait_for_session = cmd->wait_for_session;
+        free(user);
     }
     return rc;
 }
