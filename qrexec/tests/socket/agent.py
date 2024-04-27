@@ -580,6 +580,10 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
     def test_exec_service_with_invalid_config_6(self):
         self.exec_service_with_invalid_config(None)
 
+    def test_exec_service_with_invalid_config_7(self):
+        # skip-service-descriptor not allowed with executable service
+        self.exec_service_with_invalid_config("skip-service-descriptor = true\n")
+
     def test_exec_service_with_arg(self):
         self.make_executable_service(
             "local-rpc",

@@ -737,6 +737,11 @@ int find_qrexec_service(
 
     if (euidaccess(path_buffer.data, X_OK) == 0) {
         /* Executable-based service. */
+        if (!cmd->send_service_descriptor) {
+            LOG(ERROR, "Refusing to execute executable service %s with skip-service-descriptor=true",
+                path_buffer.data);
+            return -2;
+        }
         return 0;
     }
 
