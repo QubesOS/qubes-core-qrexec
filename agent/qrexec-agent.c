@@ -648,7 +648,9 @@ static void handle_server_exec_request_do(int type,
         return;
     }
 
-    if (cmd != NULL && !cmd->nogui) {
+    /* Fork server does not load configuration, so if sending a service
+     * descriptor is not enabled, do not use it. */
+    if (cmd != NULL && !cmd->nogui && cmd->send_service_descriptor) {
         /* try fork server */
         int child_socket = try_fork_server(type,
                 params->connect_domain, params->connect_port,
