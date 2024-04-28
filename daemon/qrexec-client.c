@@ -72,11 +72,16 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     PERROR("exec bash");
     exit(1);
 }
+enum {
+    opt_socket_dir = 'd'+128,
+    opt_use_stdin_socket = 'u'+128,
+};
 
 static struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
-    { "socket-dir", required_argument, 0, 'd'+128 },
+    { "socket-dir", required_argument, 0, opt_socket_dir },
     { "no-exit-code", no_argument, 0, 'E' },
+    { "use-stdin-socket", no_argument, 0, opt_use_stdin_socket },
     { NULL, 0, 0, 0 },
 };
 
@@ -96,7 +101,8 @@ _Noreturn static void usage(const char *const name)
             "  -c - connect to existing process (response to trigger service call)\n"
             "  -w timeout - override default connection timeout of 5s (set 0 for no timeout)\n"
             "  -k - kill the domain right before exiting\n"
-            "  --socket-dir=PATH -  directory for qrexec socket, default: %s\n",
+            "  --socket-dir=PATH -  directory for qrexec socket, default: %s\n"
+            "  --use-stdin-socket - use fd 0 (which must be socket) for both stdin and stdout\n",
             name ? name : "qrexec-client", QREXEC_DAEMON_SOCKET_DIR);
     exit(1);
 }
@@ -217,8 +223,25 @@ int main(int argc, char **argv)
             case 'W':
                 wait_connection_end = 1;
                 break;
-            case 'd' + 128:
+            case opt_socket_dir:
                 socket_dir = strdup(optarg);
+                break;
+            case opt_use_stdin_socket:
+                {
+                    int type;
+                    if (local_stdin_fd != 1)
+                        errx(2, "--use-stdin-socket passed twice");
+                    socklen_t len = sizeof(type);
+                    if (getsockopt(0, SOL_SOCKET, SO_TYPE, &type, &len)) {
+                        if (errno == ENOTSOCK)
+                            errx(2, "--use-stdin-socket passed, but stdin not a socket");
+                        err(2, "getsockopt(0, SOL_SOCKET, SO_TYPE)");
+                    }
+                    assert(len == sizeof(type) && "wrong socket option length?");
+                    if (type != SOCK_STREAM)
+                        errx(2, "stdin was a socket of type %d, not SOCK_STREAM (%d)", type, SOCK_STREAM);
+                    local_stdin_fd = 0;
+                }
                 break;
             case 'k':
                 kill = true;
@@ -238,6 +261,11 @@ int main(int argc, char **argv)
 
     if (just_exec + (request_id != NULL) + (local_cmdline != NULL) > 1) {
         fprintf(stderr, "ERROR: only one of -e, -l, -c can be specified\n");
+        usage(argv[0]);
+    }
+
+    if ((local_cmdline != NULL) && (local_stdin_fd != 1)) {
+        fprintf(stderr, "ERROR: at most one of -l and --use-stdin-socket can be specified\n");
         usage(argv[0]);
     }
 
