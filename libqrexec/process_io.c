@@ -19,6 +19,7 @@
  *
  */
 
+#include <assert.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -110,8 +111,10 @@ int process_io(const struct process_io_request *req) {
     set_nonblock(stdin_fd);
     if (stdout_fd != stdin_fd)
         set_nonblock(stdout_fd);
-    if (stderr_fd >= 0)
+    if (stderr_fd >= 0) {
+        assert(is_service); // if this is a client, stderr_fd is *always* -1
         set_nonblock(stderr_fd);
+    }
 
     /* Convenience macros that eliminate a ton of error-prone boilerplate */
 #define close_stdin() do {                      \
