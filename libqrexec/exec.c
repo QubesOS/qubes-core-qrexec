@@ -81,6 +81,11 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
 
 void fix_fds(int fdin, int fdout, int fderr)
 {
+    if (fdin < 0 || fdout < 1 || fderr < 2) {
+        LOG(ERROR, "fix_fds: bad FD numbers: fdin %d, fdout %d, fderr %d",
+            fdin, fdout, fderr);
+        _exit(125);
+    }
     int i;
     for (i = 3; i < 256; i++)
         if (i != fdin && i != fdout && i != fderr)
