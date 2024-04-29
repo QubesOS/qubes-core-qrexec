@@ -112,14 +112,13 @@ static int do_fork_exec(const char *user,
         int *stdout_fd,
         int *stderr_fd)
 {
-    int inpipe[2], outpipe[2], errpipe[2], statuspipe[2], retval;
+    int inpipe[2], outpipe[2], errpipe[2], retval;
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, inpipe) ||
-            socketpair(AF_UNIX, SOCK_STREAM, 0, outpipe) ||
-            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe)) ||
-            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, statuspipe)) {
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, inpipe) ||
+            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, outpipe) ||
+            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, errpipe))) {
         PERROR("socketpair");
         exit(1);
     }
@@ -127,8 +126,7 @@ static int do_fork_exec(const char *user,
         case -1:
             PERROR("fork");
             exit(-1);
-        case 0: {
-            int status;
+        case 0:
             if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)
                 abort();
             if (stderr_fd) {
@@ -136,29 +134,11 @@ static int do_fork_exec(const char *user,
             } else
                 fix_fds(inpipe[0], outpipe[1], 2);
 
-            close(statuspipe[0]);
-            if (SOCK_CLOEXEC == (0)) {
-                status = fcntl(statuspipe[1], F_GETFD);
-                fcntl(statuspipe[1], F_SETFD, status | FD_CLOEXEC);
-            }
             if (exec_func != NULL)
                 exec_func(cmdline, user);
-            else
-                abort();
-            status = errno;
-            while (write(statuspipe[1], &status, sizeof status) <= 0) {}
-            _exit(-1);
-        }
-        default: {
-            close(statuspipe[1]);
-            if (read(statuspipe[0], &retval, sizeof retval) == sizeof retval) {
-                siginfo_t siginfo;
-                memset(&siginfo, 0, sizeof siginfo);
-                waitid(P_PID, *pid, &siginfo, WEXITED); // discard result
-            } else {
-                retval = 0;
-            }
-        }
+            abort();
+        default:
+            retval = 0;
     }
     close(inpipe[0]);
     close(outpipe[1]);
