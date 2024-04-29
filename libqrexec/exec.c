@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <netdb.h>
@@ -86,20 +87,22 @@ void fix_fds(int fdin, int fdout, int fderr)
             fdin, fdout, fderr);
         _exit(125);
     }
-    int i;
-    for (i = 3; i < 256; i++)
-        if (i != fdin && i != fdout && i != fderr)
-            close(i);
     if (dup2(fdin, 0) < 0 || dup2(fdout, 1) < 0 || dup2(fderr, 2) < 0) {
         PERROR("dup2");
         abort();
     }
-
-    if (close(fdin) || (fdin != fdout && close(fdout)) ||
-        (fdin != fderr && fdout != fderr && fderr != 2 && close(fderr))) {
-        PERROR("close");
+#ifdef SYS_close_range
+    int close_range_res = syscall(SYS_close_range, 3, ~0U, 0);
+    if (close_range_res == 0)
+        return;
+    assert(close_range_res == -1);
+    if (errno != ENOSYS) {
+        PERROR("close_range");
         abort();
     }
+#endif
+    for (int i = 3; i < 256; ++i)
+        close(i);
 }
 
 static int do_fork_exec(const char *user,
