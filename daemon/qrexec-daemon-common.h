@@ -42,3 +42,5 @@ __attribute__((warn_unused_result))
 bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
                        const char *cmd, size_t service_length, const char *request_id,
                        bool just_exec, bool wait_connection_end);
+/* FD for stdout of remote process */
+extern int local_stdin_fd;

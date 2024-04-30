@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <netdb.h>
@@ -88,20 +89,27 @@ void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
 
 void fix_fds(int fdin, int fdout, int fderr)
 {
-    int i;
-    for (i = 3; i < 256; i++)
-        if (i != fdin && i != fdout && i != fderr)
-            close(i);
+    if (fdin < 0 || fdout < 1 || fderr < 2) {
+        LOG(ERROR, "fix_fds: bad FD numbers: fdin %d, fdout %d, fderr %d",
+            fdin, fdout, fderr);
+        _exit(125);
+    }
     if (dup2(fdin, 0) < 0 || dup2(fdout, 1) < 0 || dup2(fderr, 2) < 0) {
         PERROR("dup2");
         abort();
     }
-
-    if (close(fdin) || (fdin != fdout && close(fdout)) ||
-        (fdin != fderr && fdout != fderr && fderr != 2 && close(fderr))) {
-        PERROR("close");
+#ifdef SYS_close_range
+    int close_range_res = syscall(SYS_close_range, 3, ~0U, 0);
+    if (close_range_res == 0)
+        return;
+    assert(close_range_res == -1);
+    if (errno != ENOSYS) {
+        PERROR("close_range");
         abort();
     }
+#endif
+    for (int i = 3; i < 256; ++i)
+        close(i);
 }
 
 static int do_fork_exec(const char *user,
@@ -111,14 +119,13 @@ static int do_fork_exec(const char *user,
         int *stdout_fd,
         int *stderr_fd)
 {
-    int inpipe[2], outpipe[2], errpipe[2], statuspipe[2], retval;
+    int inpipe[2], outpipe[2], errpipe[2], retval;
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, inpipe) ||
-            socketpair(AF_UNIX, SOCK_STREAM, 0, outpipe) ||
-            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM, 0, errpipe)) ||
-            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, statuspipe)) {
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, inpipe) ||
+            socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, outpipe) ||
+            (stderr_fd && socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, errpipe))) {
         PERROR("socketpair");
         /* FD leaks do not matter, we exit soon anyway */
         return -2;
@@ -128,8 +135,7 @@ static int do_fork_exec(const char *user,
             PERROR("fork");
             /* ditto */
             return -2;
-        case 0: {
-            int status;
+        case 0:
             if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)
                 abort();
             if (stderr_fd) {
@@ -137,29 +143,11 @@ static int do_fork_exec(const char *user,
             } else
                 fix_fds(inpipe[0], outpipe[1], 2);
 
-            close(statuspipe[0]);
-            if (SOCK_CLOEXEC == (0)) {
-                status = fcntl(statuspipe[1], F_GETFD);
-                fcntl(statuspipe[1], F_SETFD, status | FD_CLOEXEC);
-            }
             if (exec_func != NULL)
                 exec_func(cmdline, user);
-            else
-                abort();
-            status = -1;
-            while (write(statuspipe[1], &status, sizeof status) <= 0) {}
-            _exit(-1);
-        }
-        default: {
-            close(statuspipe[1]);
-            if (read(statuspipe[0], &retval, sizeof retval) == sizeof retval) {
-                siginfo_t siginfo;
-                memset(&siginfo, 0, sizeof siginfo);
-                waitid(P_PID, *pid, &siginfo, WEXITED); // discard result
-            } else {
-                retval = 0;
-            }
-        }
+            abort();
+        default:
+            retval = 0;
     }
     close(inpipe[0]);
     close(outpipe[1]);
