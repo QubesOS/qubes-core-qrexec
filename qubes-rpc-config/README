@@ -1,13 +1,54 @@
-This is directory for qrexec service additional configuration. Configuration
-file needs to be named exactly as service. Configuration format is 'key=value'
-(without spaces around '='). Lines starting with '#' are ignored.
+This is a directory for additional Qrexec service configuration.
+
+Configuration syntax:
+
+*   Configuration file: name must be exactly the same as service.
+
+*   Configuration format: key value pair that must be separated by an equal
+    sign (=) between the key and the value, while any number of spaces or tabs
+    from the key to the equal sign or from the equal sign to the value are
+    also supported, e.g. "key=value", "key   =  value", "key	= value".
+
+*   Comments: Lines starting with hashtag/octothorpe/pound sign "#" are
+    ignored.
+
+*   Boolean values: true, false, 0, 1. For backwards compatibility, only the
+    option "wait-for-session" accepts the boolean integers 0 and 1, of which
+    should not be relied on for future update changes.
+
+*   String values: must be enclosed by single quotes ('), escape sequences
+    are unsupported, e.g. 'str'.
 
 Supported settings:
 
-* wait-for-session - wait for full GUI session initialization before starting
-  the service. This is done using /etc/qubes-rpc/qubes.WaitForSession script.
-  There is no timeout - if the session is never initialized
-  (for example because there is no GUI running at all), service will never be
-  started.
-  Allowed values are 0 or 1.
+*   force-user:
+    *   Description: Enforce that service should be run by the specified
+        username. Useful to set the user at the target qube, which will be
+        passed directly to PAM without being interpreted by Qrexec, instead of
+        having to modify the policy in dom0.
+    *   Value type: string
+    *   Default value: same user as in the policy, else it is 'user'.
+    *   Example: 'user'
 
+*   wait-for-session:
+    *   Description: Wait for full GUI session initialization before starting
+        the service. Implemented by the RPC service qubes.WaitForSession.
+        There is no timeout, if the session is never initialized (for example
+        because there is no GUI running at all), service will never be
+        started. It is possible for the service to be started even if
+        qubes.WaitForSession fails, so the service must not depend on setting
+        "wait-for-session=true" for security.
+    *   Value type: boolean
+    *   Accepted values: true, false, 0, 1.
+    *   Default value: false
+    *   Example: wait-for-session=true
+
+*   skip-service-descriptor:
+    *   Description: Skip sending service descriptor and go for the actual
+        data directly. Useful to skip sending metadata to socket-based
+        services, thus the option is valid only for socket services, not
+        executables. See https://www.qubes-os.org/doc/qrexec-socket-services/
+    *   Value type: boolean
+    *   Accepted values: true, false.
+    *   Default value: false
+    *   Example: skip-service-descriptor=true
