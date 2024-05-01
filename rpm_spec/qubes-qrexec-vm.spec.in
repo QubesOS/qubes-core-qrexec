@@ -42,6 +42,9 @@ BuildRequires:	systemd-devel
 
 Requires:   python%{python3_pkgversion}
 Requires:   qubes-core-qrexec = %{version}-%{release}
+# The library is backwards compatible (new library works with old programs)
+# but not forwards compatible (old library does not work with new programs)
+Requires:   qubes-core-qrexec-libs >= %{version}-%{release}
 
 Provides:   qubes-core-agent-qrexec = 4.1.0-1
 Obsoletes:  qubes-core-agent-qrexec < 4.1.0-1
