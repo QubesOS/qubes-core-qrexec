@@ -1,3 +1,9 @@
+qubes-core-qrexec (4.1.25-1) unstable; urgency=medium
+
+  * archlinux: fix 'replaces' variable
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 01 May 2024 23:18:38 +0200
+
 qubes-core-qrexec (4.1.24-1) unstable; urgency=medium
 
   [ Frédéric Pierret (fepitre) ]
