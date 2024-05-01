@@ -111,7 +111,6 @@ static const char default_user_keyword[] = "DEFAULT:";
 #define default_user_keyword_len_without_colon (sizeof(default_user_keyword)-2)
 
 static int opt_quiet = 0;
-static int opt_direct = 0;
 
 static const char *policy_program = QREXEC_POLICY_PROGRAM;
 
@@ -262,7 +261,7 @@ static int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 static void signal_handler(int sig);
 
 /* do the preparatory tasks, needed before entering the main event loop */
-static void init(int xid)
+static void init(int xid, bool opt_direct)
 {
     char qrexec_error_log_name[256];
     int logfd;
@@ -283,19 +282,21 @@ static void init(int xid)
             startup_timeout = MAX_STARTUP_TIME_DEFAULT;
     }
 
-    int pipes[2];
+    int pipes[2] = { -1, -1 };
+    bool have_timeout = getenv("QREXEC_STARTUP_NOWAIT") == NULL;
     if (!opt_direct) {
-        if (pipe2(pipes, O_CLOEXEC))
+        if (have_timeout && pipe2(pipes, O_CLOEXEC))
             err(1, "pipe2()");
         switch (pid=fork()) {
             case -1:
                 PERROR("fork");
                 exit(1);
             case 0:
-                close(pipes[0]);
+                if (have_timeout)
+                    close(pipes[0]);
                 break;
             default:
-                if (getenv("QREXEC_STARTUP_NOWAIT"))
+                if (!have_timeout)
                     exit(0);
                 close(pipes[1]);
                 if (!opt_quiet)
@@ -353,8 +354,10 @@ static void init(int xid)
             exit(1);
         }
 
-        dup2(logfd, 1);
-        dup2(logfd, 2);
+        if (dup2(logfd, 1) != 1 || dup2(logfd, 2) != 2)
+            err(1, "dup2()");
+        if (logfd > 2)
+            close(logfd);
 
         if (setsid() < 0) {
             PERROR("setsid()");
@@ -363,18 +366,22 @@ static void init(int xid)
     }
 
     int wait_fd;
-    vchan = libvchan_client_init_async(xid, VCHAN_BASE_PORT, &wait_fd);
+    if (have_timeout) {
+        vchan = libvchan_client_init_async(xid, VCHAN_BASE_PORT, &wait_fd);
+        if (vchan != NULL && qubes_wait_for_vchan_connection_with_timeout(
+                    vchan, wait_fd, false, startup_timeout) < 0) {
+            if (!opt_direct && write(pipes[1], "\1", 1)) {}
+            LOG(ERROR, "qrexec connection timeout");
+            exit(3);
+        }
+    } else {
+        /* No timeout in this case */
+        vchan = libvchan_client_init(xid, VCHAN_BASE_PORT);
+    }
     if (!vchan) {
         LOG(ERROR, "Cannot create data vchan connection");
         exit(3);
     }
-    if (qubes_wait_for_vchan_connection_with_timeout(
-                vchan, wait_fd, false, startup_timeout) < 0) {
-        if (write(pipes[1], "\1", 1)) {}
-        LOG(ERROR, "qrexec connection timeout");
-        exit(3);
-    }
-
     protocol_version = handle_agent_hello(vchan, remote_domain_name);
     if (protocol_version < 0) {
         exit(1);
@@ -417,7 +424,7 @@ static void init(int xid)
         err(1, "sigaction");
     if (sigaction(SIGTERM, &sigterm_action, NULL))
         err(1, "sigaction");
-    if (!opt_direct) {
+    if (have_timeout && !opt_direct) {
         if (write(pipes[1], "", 1) != 1)
             err(1, "write(pipe)");
         close(pipes[1]);
@@ -1528,6 +1535,7 @@ int main(int argc, char **argv)
 {
     int i, opt;
     sigset_t selectmask;
+    bool opt_direct = false;
 
     {
         int null_fd = open("/dev/null", O_RDONLY|O_NOCTTY);
@@ -1571,7 +1579,7 @@ int main(int argc, char **argv)
     remote_domain_name = argv[optind+1];
     if (argc - optind >= 3)
         default_user = argv[optind+2];
-    init(remote_domain_id);
+    init(remote_domain_id, opt_direct);
 
     sigemptyset(&selectmask);
     sigaddset(&selectmask, SIGCHLD);
