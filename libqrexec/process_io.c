@@ -19,6 +19,7 @@
  *
  */
 
+#include <assert.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -41,45 +42,24 @@ static _Noreturn void handle_vchan_error(const char *op)
 /*
  * Closing the file descriptors:
  *
- * - Use shutdown(), except if this is a FD inherited from parent (detected by
- *   FD number)
- * - Restore blocking status, unless this is a duplicated stdio socket for
- *   stdout/stderr (in which case we can't restore it just for one FD, but we
- *   don't care, because we created it)
+ * - If this is a single socket used for both stdin and stdout, call shutdown()
+ *   to indicate that no more data will be sent or received.
+ * - Otherwise, restore the blocking status of the FD.
  */
-
-static void close_stdin(int fd, bool restore_block) {
+static void close_stdio(int fd, int other_fd, int direction) {
     if (fd == -1)
         return;
-
-    if (restore_block)
-        set_block(fd);
-
-    if (fd == 1) {
-        close(fd);
-    } else if (shutdown(fd, SHUT_WR) == -1) {
-        if (errno == ENOTSOCK)
-            close(fd);
-        else
-            PERROR("shutdown close_stdin");
-    }
-}
-
-static void close_stdout(int fd, bool restore_block) {
-    if (fd == -1)
+    if (fd == other_fd) {
+        /* Do not close the FD, as it is still in use. */
+        /* ENOTCONN can happen with TCP and is harmless */
+        if (shutdown(fd, direction) == -1 && errno != ENOTSOCK && errno != ENOTCONN)
+            PERROR("shutdown");
         return;
-
-    if (restore_block)
-        set_block(fd);
-
-    if (fd == 0) {
-        close(fd);
-    } else if (shutdown(fd, SHUT_RD) == -1) {
-        if (errno == ENOTSOCK)
-            close(fd);
-        else if (errno != ENOTCONN) /* can happen with TCP, harmless */
-            PERROR("shutdown close_stdout");
     }
+
+    if (fd < 3)
+        set_block(fd);
+    close(fd);
 }
 
 static void close_stderr(int fd) {
@@ -117,8 +97,6 @@ int process_io(const struct process_io_request *req) {
     pid_t local_status = -1;
     pid_t remote_status = -1;
     int stdout_msg_type = is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN;
-    bool use_stdio_socket = false;
-
     int ret;
     struct pollfd fds[FD_NUM];
     sigset_t pollmask;
@@ -147,10 +125,21 @@ int process_io(const struct process_io_request *req) {
     set_nonblock(stdin_fd);
     if (stdout_fd != stdin_fd)
         set_nonblock(stdout_fd);
-    else if ((stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3)) < 0)
-        abort(); // not worth handling running out of file descriptors
-    if (stderr_fd >= 0)
+    if (stderr_fd >= 0) {
+        assert(is_service); // if this is a client, stderr_fd is *always* -1
         set_nonblock(stderr_fd);
+    }
+
+    /* Convenience macros that eliminate a ton of error-prone boilerplate */
+#define close_stdin() do {                      \
+    close_stdio(stdin_fd, stdout_fd, SHUT_WR);  \
+    stdin_fd = -1;                              \
+} while (0)
+#define close_stdout() do {                     \
+    close_stdio(stdout_fd, stdin_fd, SHUT_RD);  \
+    stdout_fd = -1;                             \
+} while (0)
+#pragma GCC poison close_stdio
 
     while(1) {
         /* React to SIGCHLD */
@@ -161,10 +150,7 @@ int process_io(const struct process_io_request *req) {
                     local_status = 128 + WTERMSIG(status);
                 else
                     local_status = WEXITSTATUS(status);
-                if (stdin_fd >= 0) {
-                    close_stdin(stdin_fd, !use_stdio_socket);
-                    stdin_fd = -1;
-                }
+                close_stdin();
             }
             *sigchld = 0;
         }
@@ -207,24 +193,9 @@ int process_io(const struct process_io_request *req) {
         }
 
         /* child signaled desire to use single socket for both stdin and stdout */
-        if (sigusr1 && *sigusr1) {
-            if (stdout_fd != -1) {
-                do
-                    errno = 0;
-                while (dup3(stdin_fd, stdout_fd, O_CLOEXEC) &&
-                       (errno == EINTR || errno == EBUSY));
-                // other errors are fatal
-                if (errno) {
-                    PERROR("dup3");
-                    abort();
-                }
-            } else {
-                stdout_fd = fcntl(stdin_fd, F_DUPFD_CLOEXEC, 3);
-                // all errors are fatal
-                if (stdout_fd < 3)
-                    abort();
-            }
-            use_stdio_socket = true;
+        if (sigusr1 && *sigusr1 && stdin_fd != stdout_fd) {
+            close_stdout();
+            stdout_fd = stdin_fd;
             *sigusr1 = 0;
         }
 
@@ -277,10 +248,8 @@ int process_io(const struct process_io_request *req) {
             if (libvchan_wait(vchan) < 0)
                 handle_vchan_error("wait");
 
-        if (stdin_fd >= 0 && fds[FD_STDIN].revents & (POLLHUP | POLLERR)) {
-            close_stdin(stdin_fd, !use_stdio_socket);
-            stdin_fd = -1;
-        }
+        if (fds[FD_STDIN].revents & (POLLHUP | POLLERR))
+            close_stdin();
 
         /* handle_remote_data will check if any data is available */
         switch (handle_remote_data_v2(
@@ -295,16 +264,14 @@ int process_io(const struct process_io_request *req) {
                 handle_vchan_error("read");
                 break;
             case REMOTE_EOF:
-                close_stdin(stdin_fd, !use_stdio_socket);
-                stdin_fd = -1;
+                close_stdin();
                 break;
             case REMOTE_EXITED:
                 /* Remote process exited, we don't need any more data from
                  * local FDs. However, don't exit yet, because there might
                  * still be some data in stdin_buf waiting to be flushed.
                  */
-                close_stdout(stdout_fd, !use_stdio_socket);
-                stdout_fd = -1;
+                close_stdout();
                 close_stderr(stderr_fd);
                 stderr_fd = -1;
                 break;
@@ -317,8 +284,7 @@ int process_io(const struct process_io_request *req) {
                     handle_vchan_error("send(handle_input stdout)");
                     break;
                 case REMOTE_EOF:
-                    close_stdout(stdout_fd, !use_stdio_socket);
-                    stdout_fd = -1;
+                    close_stdout();
                     break;
             }
         }
@@ -338,8 +304,8 @@ int process_io(const struct process_io_request *req) {
     }
     /* make sure that all the pipes/sockets are closed, so the child process
      * (if any) will know that the connection is terminated */
-    close_stdin(stdin_fd, true);
-    close_stdout(stdout_fd, true);
+    close_stdin();
+    close_stdout();
     close_stderr(stderr_fd);
 
     /* wait for local process, in case we exited early */

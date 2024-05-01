@@ -255,7 +255,8 @@ bool send_service_connect(int s, const char *conn_ident,
 
 #define QREXEC_DATA_MIN_VERSION QREXEC_PROTOCOL_V2
 
-static int local_stdin_fd = 1, local_stdout_fd = 0;
+static int local_stdout_fd = 0;
+int local_stdin_fd = 1;
 static pid_t local_pid = 0;
 
 static volatile sig_atomic_t sigchld = 0;

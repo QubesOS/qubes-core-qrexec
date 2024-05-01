@@ -1220,11 +1220,24 @@ class TestClientVm(unittest.TestCase):
     target_domain = 43
     target_port = 1024
 
+    def assertStdoutMessages(self, target, expected_stdout: bytes, ty=qrexec.MSG_DATA_STDOUT):
+        bytes_recvd, expected = 0, len(expected_stdout)
+        while bytes_recvd < expected:
+            msg_type, msg_body = target.recv_message()
+            self.assertEqual(msg_type, ty)
+            l = len(msg_body)
+            self.assertEqual(msg_body, expected_stdout[bytes_recvd:l])
+            bytes_recvd += l
+        self.assertEqual(bytes_recvd, expected)
+
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tempdir)
 
-    def start_client(self, args):
+    def start_client(self, args, stdio=subprocess.PIPE):
+        if stdio is not subprocess.PIPE:
+            self.assertIsInstance(stdio, socket.socket)
+            args.insert(0, "--use-stdin-socket")
         env = os.environ.copy()
         env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
         env["VCHAN_DOMAIN"] = str(self.domain)
@@ -1240,8 +1253,8 @@ class TestClientVm(unittest.TestCase):
         self.client = subprocess.Popen(
             cmd,
             env=env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdin=stdio,
+            stdout=stdio,
             stderr=subprocess.PIPE,
             pass_fds=(stderr_dup,),
         )
@@ -1266,7 +1279,7 @@ class TestClientVm(unittest.TestCase):
         self.addCleanup(target_client.close)
         return target_client
 
-    def run_service(self, *, local_program=None, options=None):
+    def run_service(self, *, local_program=None, options=None, stdio=subprocess.PIPE):
         server = self.connect_server()
 
         args = options or []
@@ -1275,7 +1288,7 @@ class TestClientVm(unittest.TestCase):
         if local_program:
             args += local_program
 
-        self.start_client(args)
+        self.start_client(args, stdio=stdio)
         server.accept()
 
         message_type, data = server.recv_message()
@@ -1298,6 +1311,30 @@ class TestClientVm(unittest.TestCase):
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         self.assertEqual(self.client.stdout.read(), b"stdout data\n")
+        target_client.send_message(
+            qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)
+        )
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 42)
+
+    def test_run_client_eof(self):
+        remote, local = socket.socketpair()
+        target_client = self.run_service(stdio=remote)
+        remote.close()
+        initial_data = b"stdout data\n"
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, initial_data)
+        # FIXME: data can be received in multiple messages
+        self.assertEqual(local.recv(len(initial_data)), initial_data)
+        initial_data = b"stdin data\n"
+        local.sendall(initial_data)
+        self.assertStdoutMessages(target_client, initial_data, qrexec.MSG_DATA_STDIN)
+        target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
+        # Check that EOF got propagated
+        self.assertEqual(local.recv(1), b"")
+        # Close local
+        local.close()
+        # Check that EOF got propagated on this side too
+        self.assertEqual(target_client.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
         target_client.send_message(
             qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)
         )
@@ -1348,10 +1385,7 @@ class TestClientVm(unittest.TestCase):
         target_client = self.run_service(local_program=["/bin/cat"])
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
-        self.assertEqual(
-            target_client.recv_message(),
-            (qrexec.MSG_DATA_STDIN, b"stdout data\n"),
-        )
+        self.assertStdoutMessages(target_client, b"stdout data\n", qrexec.MSG_DATA_STDIN)
         self.assertEqual(
             target_client.recv_message(), (qrexec.MSG_DATA_STDIN, b"")
         )
@@ -1378,16 +1412,12 @@ echo "received: $x" >&0
 """,
             ]
         )
-        self.assertEqual(
-            target.recv_message(), (qrexec.MSG_DATA_STDIN, b"hello world\n")
-        )
+        self.assertStdoutMessages(target, b"hello world\n", qrexec.MSG_DATA_STDIN)
 
         target.send_message(qrexec.MSG_DATA_STDOUT, b"stdin\n")
         target.send_message(qrexec.MSG_DATA_STDOUT, b"")
 
-        self.assertEqual(
-            target.recv_message(), (qrexec.MSG_DATA_STDIN, b"received: stdin\n")
-        )
+        self.assertStdoutMessages(target, b"received: stdin\n", qrexec.MSG_DATA_STDIN)
         self.assertEqual(target.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
 
         target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42))
@@ -1459,10 +1489,7 @@ echo "received: $x" >&0
         target_client = self.run_service()
         self.client.stdin.write(b"stdin data\n")
         self.client.stdin.flush()
-        self.assertEqual(
-            target_client.recv_message(),
-            (qrexec.MSG_DATA_STDIN, b"stdin data\n"),
-        )
+        self.assertStdoutMessages(target_client, b"stdin data\n", qrexec.MSG_DATA_STDIN)
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         self.assertEqual(self.client.stdout.read(), b"stdout data\n")
@@ -1474,10 +1501,7 @@ echo "received: $x" >&0
     def test_run_client_with_local_proc_disconnect(self):
         target_client = self.run_service(local_program=["/bin/cat"])
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
-        self.assertEqual(
-            target_client.recv_message(),
-            (qrexec.MSG_DATA_STDIN, b"stdout data\n"),
-        )
+        self.assertStdoutMessages(target_client, b"stdout data\n", qrexec.MSG_DATA_STDIN)
         target_client.close()
         self.client.wait()
         self.assertEqual(self.client.returncode, 255)

@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
+#include <assert.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <sys/un.h>
@@ -94,6 +95,7 @@ static void convert_target_name_keyword(char *target)
 enum {
     opt_no_filter_stdout = 't'+128,
     opt_no_filter_stderr = 'T'+128,
+    opt_use_stdin_socket = 'u'+128,
 };
 
 static struct option longopts[] = {
@@ -104,6 +106,7 @@ static struct option longopts[] = {
     { "no-filter-escape-chars-stderr", no_argument, 0, opt_no_filter_stderr},
     { "agent-socket", required_argument, 0, 'a'},
     { "prefix-data", required_argument, 0, 'p' },
+    { "use-stdin-socket", no_argument, 0, opt_use_stdin_socket },
     { "help", no_argument, 0, 'h' },
     { NULL, 0, 0, 0},
 };
@@ -141,6 +144,7 @@ int main(int argc, char **argv)
     int inpipe[2], outpipe[2];
     int buffer_size = 0;
     int opt;
+    int stdout_fd = 1;
     const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH, *prefix_data = NULL;
 
     setup_logging("qrexec-client-vm");
@@ -198,6 +202,23 @@ int main(int argc, char **argv)
                     exit(1);
                 }
                 break;
+            case opt_use_stdin_socket:
+                {
+                    int type;
+                    if (stdout_fd == 0)
+                        errx(2, "--use-stdin-socket passed twice");
+                    socklen_t len = sizeof(type);
+                    if (getsockopt(0, SOL_SOCKET, SO_TYPE, &type, &len)) {
+                        if (errno == ENOTSOCK)
+                            errx(2, "--use-stdin-socket passed, but stdin not a socket");
+                        err(2, "getsockopt(0, SOL_SOCKET, SO_TYPE)");
+                    }
+                    assert(len == sizeof(type));
+                    if (type != SOCK_STREAM)
+                        errx(2, "stdin was a socket of type %d, not SOCK_STREAM (%d)", type, SOCK_STREAM);
+                    stdout_fd = 0;
+                }
+                break;
             case '?':
                 usage(argv[0], 2);
         }
@@ -208,6 +229,10 @@ int main(int argc, char **argv)
     }
     if (argc - optind > 2) {
         start_local_process = 1;
+    }
+    if (start_local_process && stdout_fd != 1) {
+        fprintf(stderr, "cannot spawn a local process with --use-stdin-socket\n");
+        usage(argv[0], 2);
     }
 
     if (!start_local_process) {
@@ -303,7 +328,7 @@ int main(int argc, char **argv)
     } else {
         ret = handle_data_client(MSG_SERVICE_CONNECT,
                 exec_params.connect_domain, exec_params.connect_port,
-                1, 0, -1, buffer_size, 0, prefix_data);
+                stdout_fd, 0, -1, buffer_size, 0, prefix_data);
     }
 
     close(trigger_fd);

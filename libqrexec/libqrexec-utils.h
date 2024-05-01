@@ -267,6 +267,9 @@ struct process_io_request {
     libvchan_t *vchan;
     struct buffer *stdin_buf;
 
+    /* Note that stdin_fd, stdout_fd, and stderr_fd are named assuming a
+     * *local* process.  For a *remote* process, stdin_fd is the standard
+     * *output*, stdout_fd is the standard *input*, and stderr_fd must be -1. */
     // stderr_fd can be -1
     int stdin_fd, stdout_fd, stderr_fd;
     // 0 if no child process
@@ -275,12 +278,14 @@ struct process_io_request {
     /*
       is_service true (this is a service):
         - send local data as MSG_DATA_STDOUT
+        - send local stderr as MSG_DATA_STDERR, unless in dom0
         - send exit code
         - wait just for local end
         - return local exit code
 
       is_service false (this is a client):
         - send local data as MSG_DATA_STDIN
+        - stderr_fd is always -1
         - don't send exit code
         - wait for local and remote end
         - return remote exit code
