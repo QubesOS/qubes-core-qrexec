@@ -110,12 +110,6 @@ int process_io(const struct process_io_request *req) {
     };
     if (remote_buffer.data == NULL)
         handle_vchan_error("remote buffer alloc");
-    struct buffer stdin_buffer = {
-        .data = malloc(max_chunk_size),
-        .buflen = max_chunk_size,
-    };
-    if (stdin_buffer.data == NULL)
-        handle_vchan_error("stdin buffer alloc");
 
     sigemptyset(&pollmask);
     sigaddset(&pollmask, SIGCHLD);
@@ -279,7 +273,7 @@ int process_io(const struct process_io_request *req) {
         if (prefix.len > 0 || (stdout_fd >= 0 && fds[FD_STDOUT].revents)) {
             switch (handle_input_v2(
                         vchan, stdout_fd, stdout_msg_type,
-                        &prefix, &stdin_buffer)) {
+                        &prefix, &remote_buffer)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send(handle_input stdout)");
                     break;
@@ -291,7 +285,7 @@ int process_io(const struct process_io_request *req) {
         if (stderr_fd >= 0 && fds[FD_STDERR].revents) {
             switch (handle_input_v2(
                         vchan, stderr_fd, MSG_DATA_STDERR,
-                        &empty, &stdin_buffer)) {
+                        &empty, &remote_buffer)) {
                 case REMOTE_ERROR:
                     handle_vchan_error("send(handle_input stderr)");
                     break;
@@ -321,7 +315,6 @@ int process_io(const struct process_io_request *req) {
     }
 
     free(remote_buffer.data);
-    free(stdin_buffer.data);
 
     if (!is_service && remote_status)
         return remote_status;

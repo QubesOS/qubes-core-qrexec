@@ -40,6 +40,17 @@
  * Options:
  *   replace_chars_stdout, replace_chars_stderr - remove non-printable
  *     characters from stdout/stderr
+ *
+ * stdin_buf is the buffer holding data to be written to stdin, and may
+ * be modified or reallocated.  Its content must be valid data, and on
+ * return it will be a valid buffer pointing to valid (generally different)
+ * data.
+ *
+ * buffer is scratch space _only_.  Its size must be the maximum data
+ * chunk size.  Its contents (the data pointed to) does _not_ need to be
+ * initialized, and will _not_ be anything meaningful on return.  The
+ * buffer pointer and length will not be changed and will remain valid,
+ * though.  In Rust terms: this is an &mut [MaybeUninit<u8>].
  */
 int handle_remote_data_v2(
     libvchan_t *data_vchan, int stdin_fd, int *status,
@@ -56,6 +67,12 @@ int handle_remote_data_v2(
  *   REMOTE_EOF - EOF received, do not access this FD again
  *   REMOTE_OK - some data processed, call it again when buffer space and
  *     more data availabla
+ *
+ * buffer is scratch space _only_.  Its size must be the maximum data
+ * chunk size.  Its contents (the data pointed to) does _not_ need to be
+ * initialized, and will _not_ be anything meaningful on return.  The
+ * buffer pointer and length will not be freed or reallocated, though.
+ * In Rust terms: this is an &mut [MaybeUninit<u8>].
  */
 int handle_input_v2(
     libvchan_t *vchan, int fd, int msg_type,
