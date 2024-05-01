@@ -26,6 +26,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <err.h>
 
 #include "libqrexec-utils.h"
 
@@ -79,5 +81,12 @@ void qrexec_log(int level, int errnoval, const char *file, int line,
 }
 
 void setup_logging(const char *program_name) {
+    /* Make sure FD 0, 1 and 2 are open.  Various code that manipulates
+     * FDs breaks if they are not. */
+    for (int i = 0; i < 3; ++i) {
+        if (fcntl(i, F_GETFD) == -1 && errno == EBADF)
+            errx(125, "File descriptor %d is closed, cannot continue", i);
+    }
+
     qrexec_program_name = program_name;
 }

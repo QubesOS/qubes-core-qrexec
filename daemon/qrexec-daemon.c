@@ -1541,12 +1541,10 @@ int main(int argc, char **argv)
         int null_fd = open("/dev/null", O_RDONLY|O_NOCTTY);
         if (null_fd < 0)
             err(1, "open(%s)", "/dev/null");
-        if (null_fd > 0) {
-            if (dup2(null_fd, 0) != 0)
-                err(1, "dup2(%d, 0)", null_fd);
-            if (null_fd > 2 && close(null_fd) != 0)
-                err(1, "close(%d)", null_fd);
-        }
+        if (dup2(null_fd, 0) != 0)
+            err(1, "dup2(%d, 0)", null_fd);
+        if (close(null_fd) != 0)
+            err(1, "close(%d)", null_fd);
     }
 
     setup_logging("qrexec-daemon");
