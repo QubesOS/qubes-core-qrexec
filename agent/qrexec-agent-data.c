@@ -281,7 +281,7 @@ static int handle_new_process_common(
     req.prefix_data.data = NULL;
     req.prefix_data.len = 0;
 
-    exit_code = process_io(&req);
+    exit_code = qrexec_process_io(&req, cmd);
 
     if (type == MSG_EXEC_CMDLINE) {
         if (pid > 0)
@@ -382,7 +382,7 @@ int handle_data_client(
         req.prefix_data.len = 0;
     }
 
-    exit_code = process_io(&req);
+    exit_code = qrexec_process_io(&req, NULL);
     libvchan_close(data_vchan);
     return exit_code;
 }

@@ -409,7 +409,8 @@ static void handle_failed_exec(libvchan_t *data_vchan, bool is_service, int exit
     }
 }
 
-static int select_loop(struct handshake_params *params)
+static int select_loop(const struct handshake_params *params,
+                       const struct qrexec_parsed_command *cmd)
 {
     struct process_io_request req = { 0 };
     int exit_code;
@@ -429,7 +430,7 @@ static int select_loop(struct handshake_params *params)
     req.prefix_data.data = NULL;
     req.prefix_data.len = 0;
 
-    exit_code = process_io(&req);
+    exit_code = qrexec_process_io(&req, cmd);
     return (params->exit_with_code ? exit_code : 0);
 }
 
@@ -493,10 +494,11 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
         .replace_chars_stdout = false, // stdout is _from_ dom0
         .replace_chars_stderr = false, // stderr is _from_ dom0
     };
-    return handshake_and_go(&params);
+    return handshake_and_go(&params, command);
 }
 
-int handshake_and_go(struct handshake_params *params)
+int handshake_and_go(struct handshake_params *params,
+                     const struct qrexec_parsed_command *cmd)
 {
     int rc = QREXEC_EXIT_PROBLEM;
     if (params->data_vchan == NULL || !libvchan_is_open(params->data_vchan)) {
@@ -507,11 +509,12 @@ int handshake_and_go(struct handshake_params *params)
                                                        params->remote_send_first);
     if (data_protocol_version >= 0) {
         if (params->prepare_ret != 0) {
-            rc = params->prepare_ret == -1 ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM;
+            rc = params->prepare_ret == -1 ? QREXEC_EXIT_SERVICE_NOT_FOUND : rc;
             handle_failed_exec(params->data_vchan, params->remote_send_first, rc);
         } else {
+            assert((cmd != NULL) == params->remote_send_first);
             params->data_protocol_version = data_protocol_version;
-            rc = select_loop(params);
+            rc = select_loop(params, cmd);
         }
     }
 cleanup:

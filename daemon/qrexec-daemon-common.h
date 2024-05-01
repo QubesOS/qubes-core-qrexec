@@ -33,7 +33,8 @@ struct handshake_params {
     bool replace_chars_stderr;
 };
 __attribute__((warn_unused_result))
-int handshake_and_go(struct handshake_params *params);
+int handshake_and_go(struct handshake_params *params,
+                     const struct qrexec_parsed_command *cmd);
 __attribute__((warn_unused_result))
 int handle_agent_handshake(libvchan_t *vchan, bool remote_send_first);
 __attribute__((warn_unused_result))

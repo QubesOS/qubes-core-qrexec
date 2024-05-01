@@ -584,6 +584,14 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
         # skip-service-descriptor not allowed with executable service
         self.exec_service_with_invalid_config("skip-service-descriptor = true\n")
 
+    def test_exec_service_with_invalid_config_8(self):
+        # exit-on-service-eof not allowed with executable service
+        self.exec_service_with_invalid_config("exit-on-service-eof = true\n")
+
+    def test_exec_service_with_invalid_config_9(self):
+        # exit-on-client-eof not allowed with executable service
+        self.exec_service_with_invalid_config("exit-on-client-eof = true\n")
+
     def test_exec_service_with_arg(self):
         self.make_executable_service(
             "local-rpc",
@@ -686,7 +694,7 @@ echo "general service"
         )
         self.check_dom0(dom0)
 
-    def test_connect_socket_no_metadata_user(self):
+    def _test_connect_socket_bad_config(self, forbidden_key):
         socket_path = os.path.join(
             self.tempdir, "rpc", "qubes.SocketService+arg2"
         )
@@ -695,7 +703,7 @@ echo "general service"
             os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg2"), "w"
         ) as f:
             f.write(f"""\
-skip-service-descriptor = true
+{forbidden_key} = true
 force-user = '{user}'
 """)
         server = qrexec.socket_server(socket_path)
@@ -713,6 +721,82 @@ force-user = '{user}'
             ],
         )
         self.check_dom0(dom0)
+    def test_connect_socket_no_metadata_user(self):
+        self._test_connect_socket_bad_config("skip-service-descriptor")
+    def test_connect_socket_exit_on_stdin_eof_user(self):
+        self._test_connect_socket_bad_config("exit-on-client-eof")
+    def test_connect_socket_exit_on_stdout_eof_user(self):
+        self._test_connect_socket_bad_config("exit-on-service-eof")
+
+    def test_connect_socket_exit_on_stdin_eof(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg2"
+        )
+        with open(
+            os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg2"), "w"
+        ) as f:
+            f.write("""\
+skip-service-descriptor = true
+exit-on-client-eof = true
+""")
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService+arg2", "domX")
+
+        server.accept()
+
+        message = b"stdin data"
+        target.send_message(qrexec.MSG_DATA_STDIN, message)
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        # Check for EOF on stdin
+        self.assertEqual(server.recvall(len(message) + 1), message)
+        messages = target.recv_all_messages()
+        # No stderr
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+        server.close()
+
+    def test_connect_socket_exit_on_stdout_eof(self):
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+arg2"
+        )
+        with open(
+            os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg2"), "w"
+        ) as f:
+            f.write("""\
+skip-service-descriptor = true
+exit-on-service-eof = true
+""")
+        server = qrexec.socket_server(socket_path)
+        self.addCleanup(server.close)
+
+        target, dom0 = self.execute_qubesrpc("qubes.SocketService+arg2", "domX")
+
+        server.accept()
+
+        message = b"stdin data"
+        target.send_message(qrexec.MSG_DATA_STDIN, message)
+        self.assertEqual(server.recvall(len(message)), message)
+        # Trigger EOF on stdout
+        server.shutdown(socket.SHUT_WR)
+        # Server should exit
+        messages = target.recv_all_messages()
+        # No stderr
+        self.assertListEqual(
+            util.sort_messages(messages),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
+            ],
+        )
+        self.check_dom0(dom0)
+        server.close()
 
     def test_connect_socket_no_metadata(self):
         socket_path = os.path.join(

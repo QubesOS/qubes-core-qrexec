@@ -32,6 +32,7 @@
 
 #include "libqrexec-utils.h"
 #include "remote.h"
+#include "private.h"
 
 static _Noreturn void handle_vchan_error(const char *op)
 {
@@ -79,15 +80,23 @@ enum {
 };
 
 int process_io(const struct process_io_request *req) {
+    return qrexec_process_io(req, NULL);
+}
+
+int qrexec_process_io(const struct process_io_request *req,
+                      const struct qrexec_parsed_command *cmd) {
     libvchan_t *vchan = req->vchan;
     int stdin_fd = req->stdin_fd;
     int stdout_fd = req->stdout_fd;
     int stderr_fd = req->stderr_fd;
     struct buffer *stdin_buf = req->stdin_buf;
 
-    bool is_service = req->is_service;
+    bool const is_service = req->is_service;
+    assert(is_service == (cmd != NULL));
     bool replace_chars_stdout = req->replace_chars_stdout;
     bool replace_chars_stderr = req->replace_chars_stderr;
+    bool const exit_on_stdin_eof = cmd != NULL && cmd->exit_on_stdin_eof;
+    bool const exit_on_stdout_eof = cmd != NULL && cmd->exit_on_stdout_eof;
     const int data_protocol_version = req->data_protocol_version;
     const size_t max_chunk_size = max_data_chunk_size(data_protocol_version);
     pid_t local_pid = req->local_pid;
@@ -119,19 +128,41 @@ int process_io(const struct process_io_request *req) {
     set_nonblock(stdin_fd);
     if (stdout_fd != stdin_fd)
         set_nonblock(stdout_fd);
+    if (is_service && local_pid == 0) {
+        assert(stdin_fd == stdout_fd);
+        assert(stderr_fd == -1);
+    }
     if (stderr_fd >= 0) {
         assert(is_service); // if this is a client, stderr_fd is *always* -1
         set_nonblock(stderr_fd);
     }
+    if (exit_on_stdin_eof || exit_on_stdout_eof) {
+        assert(is_service); // only valid for socket services
+        assert(local_pid == 0); // ditto
+    }
 
     /* Convenience macros that eliminate a ton of error-prone boilerplate */
-#define close_stdin() do {                      \
-    close_stdio(stdin_fd, stdout_fd, SHUT_WR);  \
-    stdin_fd = -1;                              \
+#define close_stdin() do {                          \
+    if (exit_on_stdin_eof) {                        \
+        /* Set stdin_fd and stdout_fd to -1.        \
+         * No need to close them as the process     \
+         * will soon exit. */                       \
+        stdin_fd = stdout_fd = -1;                  \
+    } else {                                        \
+        close_stdio(stdin_fd, stdout_fd, SHUT_WR);  \
+        stdin_fd = -1;                              \
+    }                                               \
 } while (0)
-#define close_stdout() do {                     \
-    close_stdio(stdout_fd, stdin_fd, SHUT_RD);  \
-    stdout_fd = -1;                             \
+#define close_stdout() do {                         \
+    if (exit_on_stdout_eof) {                       \
+        /* Set stdin_fd and stdout_fd to -1.        \
+         * No need to close them as the process     \
+         * will soon exit. */                       \
+        stdin_fd = stdout_fd = -1;                  \
+    } else {                                        \
+        close_stdio(stdout_fd, stdin_fd, SHUT_RD);  \
+        stdout_fd = -1;                             \
+    }                                               \
 } while (0)
 #pragma GCC poison close_stdio
 

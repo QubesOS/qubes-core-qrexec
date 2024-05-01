@@ -117,6 +117,8 @@ class QrexecServer(QrexecClient):
         self.server_conn.close()
         self.server_conn = None
 
+    def shutdown(self, arg):
+        self.conn.shutdown(arg)
 
 def vchan_client(socket_dir, domain, remote_domain, port):
     vchan_socket_path = os.path.join(

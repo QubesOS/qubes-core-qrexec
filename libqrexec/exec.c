@@ -328,7 +328,16 @@ static int load_service_config_raw(struct qrexec_parsed_command *cmd,
     if (ret == -1)
         return 0;
     return qubes_toml_config_parse(config_full_path, &cmd->wait_for_session, user,
-                                   &cmd->send_service_descriptor);
+                                   &cmd->send_service_descriptor,
+                                   &cmd->exit_on_stdout_eof,
+                                   &cmd->exit_on_stdin_eof);
+}
+
+bool qrexec_cmd_use_fork_server(const struct qrexec_parsed_command *cmd) {
+    if (cmd == NULL)
+        return false;
+    return !cmd->nogui && cmd->send_service_descriptor && !cmd->exit_on_stdin_eof &&
+           !cmd->exit_on_stdout_eof;
 }
 
 int load_service_config_v2(struct qrexec_parsed_command *cmd) {
@@ -339,6 +348,16 @@ int load_service_config_v2(struct qrexec_parsed_command *cmd) {
         if (!cmd->send_service_descriptor) {
             LOG(ERROR, "service %s: Cannot set explicit username if "
                 "skip-service-descriptor=true", cmd->service_descriptor);
+            return -1;
+        }
+        if (cmd->exit_on_stdin_eof) {
+            LOG(ERROR, "service %s: Cannot set explicit username if "
+                "exit-on-client-eof=true", cmd->service_descriptor);
+            return -1;
+        }
+        if (cmd->exit_on_stdout_eof) {
+            LOG(ERROR, "service %s: Cannot set explicit username if "
+                "exit-on-service-eof=true", cmd->service_descriptor);
             return -1;
         }
         free(cmd->username);
@@ -728,6 +747,18 @@ int find_qrexec_service(
         /* Executable-based service. */
         if (!cmd->send_service_descriptor) {
             LOG(ERROR, "Refusing to execute executable service %s with skip-service-descriptor=true",
+                path_buffer.data);
+            return -2;
+        }
+        if (cmd->exit_on_stdout_eof) {
+            LOG(ERROR, "Refusing to execute executable service %s with "
+                       "exit-on-service-eof=true",
+                path_buffer.data);
+            return -2;
+        }
+        if (cmd->exit_on_stdin_eof) {
+            LOG(ERROR, "Refusing to execute executable service %s with "
+                       "exit-on-client-eof=true",
                 path_buffer.data);
             return -2;
         }

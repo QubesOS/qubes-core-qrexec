@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 
     setup_logging("qrexec-client-vm");
 
-    // TODO: this should be in process_io
+    // TODO: this should be in qrexec_process_io
     signal(SIGPIPE, SIG_IGN);
 
     while (1) {

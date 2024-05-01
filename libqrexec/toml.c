@@ -171,7 +171,8 @@ static void toml_value_free(union toml_data *value, enum toml_type ty) {
     }
 }
 
-int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session, char **user, bool *send_service_descriptor)
+int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session, char **user, bool *send_service_descriptor,
+                            bool *exit_on_service_eof, bool *exit_on_client_eof)
 {
     int result = -1; /* assume problem */
     FILE *config_file = fopen(config_full_path, "re");
@@ -187,6 +188,8 @@ int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session
     bool seen_wait_for_session = false;
     bool seen_user = false;
     bool seen_skip_service_descriptor = false;
+    bool seen_exit_on_client_eof = false;
+    bool seen_exit_on_service_eof = false;
     *wait_for_session = 0;
     *send_service_descriptor = true;
 #define CHECK_DUP_KEY(v) do {                                               \
@@ -290,6 +293,14 @@ int qubes_toml_config_parse(const char *config_full_path, bool *wait_for_session
                 CHECK_TYPE(TOML_TYPE_BOOL, "wait-for-session");
                 *wait_for_session = value.boolean;
             }
+        } else if (strcmp(current_line, "exit-on-client-eof") == 0) {
+            CHECK_DUP_KEY(seen_exit_on_client_eof);
+            CHECK_TYPE(TOML_TYPE_BOOL, "exit-on-client-eof");
+            *exit_on_client_eof = value.boolean;
+        } else if (strcmp(current_line, "exit-on-service-eof") == 0) {
+            CHECK_DUP_KEY(seen_exit_on_service_eof);
+            CHECK_TYPE(TOML_TYPE_BOOL, "exit-on-service-eof");
+            *exit_on_service_eof = value.boolean;
         } else if (strcmp(current_line, "skip-service-descriptor") == 0) {
             CHECK_DUP_KEY(seen_skip_service_descriptor);
             CHECK_TYPE(TOML_TYPE_BOOL, "skip-service-descriptor");

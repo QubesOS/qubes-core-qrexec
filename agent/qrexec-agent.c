@@ -648,9 +648,8 @@ static void handle_server_exec_request_do(int type,
         return;
     }
 
-    /* Fork server does not load configuration, so if sending a service
-     * descriptor is not enabled, do not use it. */
-    if (cmd != NULL && !cmd->nogui && cmd->send_service_descriptor) {
+    /* Ask libqrexec-utils if the fork server is safe to use */
+    if (qrexec_cmd_use_fork_server(cmd)) {
         /* try fork server */
         int child_socket = try_fork_server(type,
                 params->connect_domain, params->connect_port,

@@ -89,6 +89,14 @@ struct qrexec_parsed_command {
     /* Remaining fields are private to libqrexec-utils.  Do not access them
      * directly - they may change in any update. */
 
+    /* For socket-based services: Should the event loop exit on EOF from
+     * the client? */
+    bool exit_on_stdin_eof;
+
+    /* For socket-based services: Should the event loop exit on EOF from
+     * the service? */
+    bool exit_on_stdout_eof;
+
     /* Pointer to the argument, or NULL if there is no argument.
      * Same buffer as "service_descriptor". */
     char *arg;
@@ -307,9 +315,23 @@ struct process_io_request {
  * process_io_request.
  *
  * Returns intended exit code (local or remote), but calls exit() on errors.
+ *
+ * Deprecated, use qrexec_process_io() instead.
  */
-__attribute__((visibility("default")))
+__attribute__((visibility("default"), warn_unused_result))
 int process_io(const struct process_io_request *req);
+
+/*
+ * Pass IO between vchan and local FDs. See the comments for
+ * process_io_request.
+ *
+ * Returns intended exit code (local or remote), but calls exit() on errors.
+ *
+ * cmd may be NULL to use the default behavior.
+ */
+__attribute__((visibility("default"), warn_unused_result))
+int qrexec_process_io(const struct process_io_request *req,
+                      const struct qrexec_parsed_command *cmd);
 
 // Logging
 
@@ -388,4 +410,15 @@ bool qubes_sendmsg_all(struct msghdr *msg, int sock);
 __attribute__((visibility("default")))
 int qubes_wait_for_vchan_connection_with_timeout(
         libvchan_t *conn, int wait_fd, bool is_server, time_t timeout);
+
+/**
+ * Determine if the fork server should be used, even though the fork server
+ * does not load service configuration.
+ *
+ * \param cmd The command to check.
+ * \return true if the command should be executed using the fork server,
+ *         false otherwise.
+ */
+__attribute__((visibility("default")))
+bool qrexec_cmd_use_fork_server(const struct qrexec_parsed_command *cmd);
 #endif /* LIBQREXEC_UTILS_H */

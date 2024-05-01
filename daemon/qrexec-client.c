@@ -303,6 +303,8 @@ int main(int argc, char **argv)
                     prepare_ret = QREXEC_EXIT_PROBLEM;
                 else {
                     prepare_ret = prepare_local_fds(command, &stdin_buffer);
+                    /* Don't pass this to handshake_and_go() as this is not
+                     * a service call to dom0. */
                     destroy_qrexec_parsed_command(command);
                 }
             } else {
@@ -333,7 +335,7 @@ int main(int argc, char **argv)
                 .replace_chars_stdout = replace_chars_stdout,
                 .replace_chars_stderr = replace_chars_stderr,
             };
-            rc = handshake_and_go(&params);
+            rc = handshake_and_go(&params, NULL);
 cleanup:
             if (kill && domname) {
                 size_t l;
