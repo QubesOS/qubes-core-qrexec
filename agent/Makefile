@@ -5,17 +5,17 @@ DESTDIR ?= /
 VCHAN_PKG = $(if $(BACKEND_VMM),vchan-$(BACKEND_VMM),vchan)
 HAVE_PAM_APPL = $(or $(and $(wildcard /usr/include/security/pam_appl.h),1),)
 .SUFFIXES:
-override os := $(shell lsb_release -is)
-override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
-   $(shell pkg-config --cflags $(VCHAN_PKG)) -fstack-protector \
-   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC -std=gnu11 -D_POSIX_C_SOURCE=200809L \
-	-D_GNU_SOURCE $(CFLAGS) $(if $(HAVE_PAM_APPL),-DHAVE_PAM,-UHAVE_PAM)
-override LDFLAGS += -pie -Wl,-z,relro,-z,now -L../libqrexec
-override LDLIBS=-lqrexec-utils $(shell pkg-config --libs $(VCHAN_PKG)) $(if $(HAVE_PAM_APPL),-lpam,)
+os := $(shell lsb_release -is)
+CFLAGS += -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
+    $(shell pkg-config --cflags $(VCHAN_PKG)) -fstack-protector \
+    -fstack-protector-strong -fPIC -std=gnu11 -D_POSIX_C_SOURCE=200809L \
+	-D_GNU_SOURCE $(if $(HAVE_PAM_APPL),-DHAVE_PAM,-UHAVE_PAM)
+LDFLAGS += -pie -Wl,-z,relro,-z,now -L../libqrexec
+LDLIBS += -lqrexec-utils $(shell pkg-config --libs $(VCHAN_PKG)) $(if $(HAVE_PAM_APPL),-lpam,)
 
 .PHONY: all clean install
 
-override remove_generated := \
+remove_generated := \
 	rm -f -- *.o *~ qrexec-agent qrexec-client-vm *.o.dep *.gcda *.gcno
 
 all: qrexec-agent qrexec-client-vm qrexec-fork-server qrexec-client-vm.1.gz
@@ -61,6 +61,6 @@ endif
 	$(CC) $(LDFLAGS) -pie -g -o $@ $^ $(LDLIBS)
 
 %.o: %.c
-	$(CC) $< -c -o $@ $(QUBES_CFLAGS) $(CFLAGS) -MD -MP -MF $@.dep
+	$(CC) $< -c -o $@ $(CFLAGS) -MD -MP -MF $@.dep
 
 -include *.o.dep
