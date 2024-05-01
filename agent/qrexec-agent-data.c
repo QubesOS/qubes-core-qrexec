@@ -283,8 +283,12 @@ static int handle_new_process_common(
 
     exit_code = process_io(&req);
 
-    if (type == MSG_EXEC_CMDLINE)
-        LOG(INFO, "pid %d exited with %d", pid, exit_code);
+    if (type == MSG_EXEC_CMDLINE) {
+        if (pid > 0)
+            LOG(INFO, "pid %d exited with %d", pid, exit_code);
+        else
+            LOG(INFO, "Socket service closed");
+    }
 
     libvchan_close(data_vchan);
     return exit_code;
