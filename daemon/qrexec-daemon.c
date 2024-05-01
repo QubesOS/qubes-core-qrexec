@@ -341,7 +341,7 @@ static void init(int xid, bool opt_direct)
 
     if (!opt_direct) {
         if ((unsigned)snprintf(qrexec_error_log_name, sizeof(qrexec_error_log_name),
-                               "qrexec.%s.log", remote_domain_name) >=
+                               "/var/log/qubes/qrexec.%s.log", remote_domain_name) >=
                 sizeof(qrexec_error_log_name))
             errx(1, "remote domain name too long");
         umask(0007);        // make the log readable by the "qubes" group
