@@ -1,17 +1,17 @@
 CC ?=gcc
 VCHAN_PKG = $(if $(BACKEND_VMM),vchan-$(BACKEND_VMM),vchan)
-override QUBES_CFLAGS := -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
+CFLAGS += -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
    $(shell pkg-config --cflags $(VCHAN_PKG)) -fstack-protector \
-   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIC -std=gnu11 -D_POSIX_C_SOURCE=200809L \
-   -D_GNU_SOURCE $(CFLAGS) \
+   -fstack-protector-strong -fPIC -std=gnu11 -D_POSIX_C_SOURCE=200809L \
+   -D_GNU_SOURCE \
    -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations \
    -fno-delete-null-pointer-checks -fvisibility=hidden \
    -Wvla -Wformat=2
 
-override LDFLAGS += -pie -Wl,-z,relro,-z,now -shared
+LDFLAGS += -pie -Wl,-z,relro,-z,now -shared
 
-override SO_VER=3
-override VCHANLIBS := $(shell pkg-config --libs vchan)
+SO_VER=3
+VCHANLIBS := $(shell pkg-config --libs vchan)
 LIBDIR ?= /usr/lib
 INCLUDEDIR ?= /usr/include
 
@@ -42,6 +42,6 @@ install:
 	install -m 0644 qrexec.h $(DESTDIR)$(INCLUDEDIR)
 
 %.o: %.c
-	$(CC) $< -c -o $@ $(QUBES_CFLAGS) $(CFLAGS) -MD -MP -MF $@.dep
+	$(CC) $< -c -o $@ $(CFLAGS) -MD -MP -MF $@.dep
 
 -include *.o.dep
