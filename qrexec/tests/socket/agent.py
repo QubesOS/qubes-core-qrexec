@@ -532,7 +532,6 @@ wait-for-session = 1 # line comment
 
     def _test_exec_service_fail(self, exit_code=qrexec.QREXEC_EXIT_PROBLEM):
         target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
-        target.send_message(qrexec.MSG_DATA_STDIN, b"")
         messages = target.recv_all_messages()
         self.assertListEqual(
             util.sort_messages(messages),
