@@ -561,6 +561,21 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
             os.symlink("/dev/null/doesnotexist", config_path)
         self._test_exec_service_fail()
 
+    def test_exec_service_with_invalid_config_path(self):
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+""",
+        )
+        config_path = os.path.join(self.tempdir, "rpc-config")
+        os.rmdir(config_path)
+        os.symlink("/dev/null/doesnotexist", config_path)
+        self._test_exec_service_fail()
+
     def test_exec_service_with_invalid_config_1(self):
         self.exec_service_with_invalid_config("wait-for-session = 00\n")
 
