@@ -1341,6 +1341,36 @@ class TestClientVm(unittest.TestCase):
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
 
+    def test_run_client_bidirectional_shutdown(self):
+        try:
+            remote, local = socket.socketpair()
+            target_client = self.run_service(stdio=remote)
+            initial_data = b"stdout data\n"
+            target_client.send_message(qrexec.MSG_DATA_STDOUT, initial_data)
+            # FIXME: data can be received in multiple messages
+            self.assertEqual(local.recv(len(initial_data)), initial_data)
+            initial_data = b"stdin data\n"
+            local.sendall(initial_data)
+            local.shutdown(socket.SHUT_WR)
+            self.assertStdoutMessages(target_client, initial_data, qrexec.MSG_DATA_STDIN)
+            # Check that EOF received
+            self.assertEqual(target_client.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
+            target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
+            # Check that EOF got propagated on this side too, even though
+            # we still have a reference to the socket.  This indicates that
+            # qrexec-client-vm shut down the socket for writing.
+            self.assertEqual(local.recv(1), b"")
+            with self.assertRaises(BrokenPipeError):
+                remote.send(b"a")
+            target_client.send_message(
+                qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)
+            )
+            self.client.wait()
+            self.assertEqual(self.client.returncode, 42)
+        finally:
+            remote.close()
+            local.close()
+
     def test_run_client_replace_chars(self):
         target_client = self.run_service(options=["-t"])
         target_client.send_message(
@@ -1418,6 +1448,41 @@ echo "received: $x" >&0
         target.send_message(qrexec.MSG_DATA_STDOUT, b"")
 
         self.assertStdoutMessages(target, b"received: stdin\n", qrexec.MSG_DATA_STDIN)
+        self.assertEqual(target.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
+
+        target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42))
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 42)
+
+    def test_stdio_socket_closed_stdin(self):
+        fifo = os.path.join(self.tempdir, "new_file")
+        os.mkfifo(fifo, mode=0o600)
+        target = self.run_service(
+            local_program=[
+                "/bin/sh",
+                "-euc",
+                """\
+echo hello world
+# Wait for stdin to be closed for writing
+read -r x
+cat
+# Request that stdin be used to send stdout data
+kill -USR1 "$QREXEC_AGENT_PID"
+echo "received: $x" >&0
+# Avoid a race condition by ensuring the program does not exit too soon
+read < "$1"
+""",
+                "sh",
+                fifo,
+            ]
+        )
+        self.assertStdoutMessages(target, b"hello world\n", qrexec.MSG_DATA_STDIN)
+
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"stdin\n")
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"")
+
+        self.assertStdoutMessages(target, b"received: stdin\n", qrexec.MSG_DATA_STDIN)
+        with open(fifo, "wb"): pass
         self.assertEqual(target.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
 
         target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42))
