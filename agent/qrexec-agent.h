@@ -45,7 +45,7 @@ pid_t handle_new_process(int type,
         struct qrexec_parsed_command *cmd);
 int handle_data_client(int type,
         int connect_domain, int connect_port,
-        int stdin_fd, int stdout_fd, int stderr_fd,
+        int stdin_fd, int stdout_fd,
         int buffer_size, pid_t pid, const char *extra_data);
 
 

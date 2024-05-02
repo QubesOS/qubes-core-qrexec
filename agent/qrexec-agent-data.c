@@ -322,7 +322,7 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
 /* Returns exit code of remote process */
 int handle_data_client(
     int type, int connect_domain, int connect_port,
-    int stdin_fd, int stdout_fd, int stderr_fd, int buffer_size, pid_t pid,
+    int stdin_fd, int stdout_fd, int buffer_size, pid_t pid,
     const char *extra_data)
 {
     int exit_code;
@@ -362,7 +362,7 @@ int handle_data_client(
 
     req.stdin_fd = stdin_fd;
     req.stdout_fd = stdout_fd;
-    req.stderr_fd = stderr_fd;
+    req.stderr_fd = -1;
     req.local_pid = pid;
 
     req.is_service = false;
