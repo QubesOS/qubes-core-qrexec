@@ -882,34 +882,73 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
     def test_exec_service_with_invalid_config_6(self):
         self.exec_service_with_invalid_config(None)
 
-    def _test_run_dom0_service_exec(self, nogui):
+    def assertExpectedStdout(
+        self, target, expected_stdout: bytes, exit_code: int = 0
+    ):
+        bytes_recvd, expected = 0, len(expected_stdout)
+        while bytes_recvd < expected:
+            msg_type, msg_body = target.recv_message()
+            self.assertEqual(msg_type, qrexec.MSG_DATA_STDOUT)
+            l = len(msg_body)
+            self.assertGreater(l, 0)
+            new_bytes_received = bytes_recvd + l
+            self.assertEqual(
+                msg_body, expected_stdout[bytes_recvd:new_bytes_received]
+            )
+            bytes_recvd = new_bytes_received
+        self.assertEqual(bytes_recvd, expected)
+        self.assertListEqual(
+            util.sort_messages(target.recv_all_messages()),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", exit_code)),
+            ],
+        )
+
+    def _test_run_dom0_service_exec(self, nogui, requested_target="src_domain"):
         util.make_executable_service(
             self.tempdir,
             "rpc",
             "qubes.Service",
             """\
-#!/bin/sh
+#!/bin/sh -eu
 read input
-echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input, service path: $QREXEC_SERVICE_PATH"
+case $QREXEC_REQUESTED_TARGET_TYPE in
+(name) echo "requested target name: $QREXEC_REQUESTED_TARGET";;
+(keyword) echo "requested target keyword: $QREXEC_REQUESTED_TARGET_KEYWORD";;
+esac
 """,
         )
+        requested_target_type = "name"
+        if requested_target.startswith("@"):
+            requested_target = requested_target[1:]
+            requested_target_type = "keyword"
+        prefix = "nogui:" if nogui else ""
 
-        cmd = ("nogui:" if nogui else "") + "QUBESRPC qubes.Service+arg src_domain name src_domain"
+        cmd = f"{prefix}QUBESRPC qubes.Service+arg src_domain {requested_target_type} {requested_target}"
         source = self.connect_service_request(cmd)
 
         source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
         source.send_message(qrexec.MSG_DATA_STDIN, b"")
-        self.assertEqual(
-            source.recv_all_messages(),
-            [
-                (
-                    qrexec.MSG_DATA_STDOUT,
-                    b"arg: arg, remote domain: src_domain, "
-                    b"input: stdin data\n",
-                ),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
+        service_path = (
+            ":".join(
+                [
+                    os.path.join(self.tempdir, "local-rpc"),
+                    os.path.join(self.tempdir, "rpc"),
+                ]
+            )
+        ).encode("ascii", "strict")
+        self.assertExpectedStdout(
+            source,
+            b"arg: arg, remote domain: src_domain, "
+            b"input: stdin data, service path: %s\n"
+            b"requested target %s: %s\n"
+            % (
+                service_path,
+                requested_target_type.encode("ascii", "strict"),
+                requested_target.encode("ascii", "strict"),
+            ),
         )
         self.client.wait()
         self.assertEqual(self.client.returncode, 0)
@@ -917,11 +956,27 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
     def test_run_dom0_service_exec(self):
         self._test_run_dom0_service_exec(False)
 
+    def test_run_dom0_service_exec_keyword(self):
+        self._test_run_dom0_service_exec(False, requested_target="@adminvm")
+
     def test_run_dom0_service_exec_nogui(self):
         self._test_run_dom0_service_exec(True)
 
-    def _test_run_dom0_service_failed(self, exit_status=qrexec.QREXEC_EXIT_PROBLEM):
-        cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
+    def _test_run_dom0_service_failed(
+        self, exit_status=qrexec.QREXEC_EXIT_PROBLEM, cmd=""
+    ):
+        if cmd:
+            # presumably the command is invalid, so the service won't get called"
+            util.make_executable_service(
+                self.tempdir,
+                "rpc",
+                "qubes.Service",
+                """#!/bin/sh
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input, service path: $QREXEC_SERVICE_PATH"
+""",
+            )
+        else:
+            cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         self.assertEqual(
@@ -933,6 +988,16 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         )
         self.client.wait()
         self.assertEqual(self.client.returncode, exit_status)
+
+    def test_run_dom0_service_3_args(self):
+        self._test_run_dom0_service_failed(
+            exit_status=1, cmd="QUBESRPC qubes.Service+arg src_domain name"
+        )
+
+    def test_run_dom0_service_5_args(self):
+        self._test_run_dom0_service_failed(
+            exit_status=1, cmd="QUBESRPC qubes.Service+arg src_domain name a b"
+        )
 
     def test_run_dom0_service_not_found(self):
         # qubes.Service does not exist
