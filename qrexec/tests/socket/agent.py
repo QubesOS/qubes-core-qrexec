@@ -1339,6 +1339,7 @@ class TestClientVm(unittest.TestCase):
             msg_type, msg_body = target.recv_message()
             self.assertEqual(msg_type, ty)
             l = len(msg_body)
+            self.assertGreater(l, 0)
             self.assertEqual(msg_body, expected_stdout[bytes_recvd:l])
             bytes_recvd += l
         self.assertEqual(bytes_recvd, expected)
