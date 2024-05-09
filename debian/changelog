@@ -1,3 +1,131 @@
+qubes-core-qrexec (4.2.19-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Switch to sequoia for codecov signature check
+
+  [ Demi Marie Obenour ]
+  * tests: tolerate alternate orders of messages
+  * tests: prevent unexpected message combining
+  * tests: don't use sleep(1) to enforce message ordering
+  * tests: treat ECONNRESET as EOF
+  * tests: Allow altering arguments to test script
+  * tests: Allow running tests under ASAN+UBSAN
+  * Move TOML parsing function to private header
+  * Clean up configuration loading
+  * Test service configuration better
+  * Cleanly terminate connections if command or config is invalid
+  * Support not passing metadata to socket-based services
+  * Add test for broken symbolic links as services
+  * find_file(): Check for broken symlinks and I/O errors
+  * Add test for unsetting QREXEC_* variables
+  * Explicitly unset QREXEC_ variables
+  * Add test for missing service arguments
+  * Search for qubes.Service+ if call for qubes.Service is made
+  * Add test for invalid service name for old protocol version
+  * Forbid empty service names in legacy MSG_TRIGGER_SERVICE
+  * Avoid using /tmp for qrexec return pipes
+  * Test that service configs are found in all places they should be
+  * Test that config in a long path is loaded
+  * Load service configuration files with long names
+  * Test for errors reading a service config file
+  * Fail service call if config file cannot be read
+  * qrexec-client: fail if service configuration loading fails
+  * qrexec-client: Better validation of arguments
+  * Check return value of snprintf() and unlink()
+  * Pass the correct sockaddr len to connect()
+  * qrexec-client: Use XID to connect to qrexec daemon when possible
+  * qrexec-client: remove unreachable code
+  * qrexec-client: do not prepare event loop for VM -> VM calls
+  * qrexec-client: Use bool instead of int for booleans
+  * qrexec-client: remove unneeded local variable
+  * qrexec-client: Factor some duplicated code
+  * qubes_sendmsg_all: Avoid infinite loop on empty iovec
+  * Use relative symlinks
+  * Make all paths relative to socket directory
+  * Rip out unused fork_and_flush_buffer()
+  * Document extensions to the qrexec policy daemon protocol
+  * Avoid qrexec-client for VM -> VM calls
+  * Test VM => dom0 calls with skip-service-descriptor=true
+  * Avoid qrexec-client for VM -> dom0 calls
+  * Check for dom0 messages in more agent tests
+  * Fix flaky qrexec agent tests
+
+  [ Marek Marczykowski-Górecki ]
+  * Add missing include
+
+  [ Demi Marie Obenour ]
+  * Support socket services with MSG_JUST_EXEC
+  * Add exit codes to qrexec.h
+  * Avoid using alarm(2) for timeouts
+  * Use sigemptyset() to initialize signal sets
+  * Use a pipe instead of signals to notify readiness
+  * Use SOCK_CLOEXEC instead of setting O_CLOEXEC manually
+  * Avoid using signal() to establish a signal handler
+  * Use libvchan_client_init_async() instead of parent process timeout
+  * Don't close file descriptor 0
+  * Treat zero timeout as infinite
+  * Test that services can be symbolic links to executables
+  * Rip out stale comment
+  * Use VM GitLab runner
+  * Use flexible array member for 'struct trigger_service_params3'
+  * find_file(): Check for symlinks to /dev/tcp/
+  * Implement connections to TCP-based services
+  * Make more functions in agent tests idempotent
+  * Do not close stdin, stdout, or stderr
+  * Use _exit() in child process after fork()
+  * Report correct statuses for service execution failure
+  * Do not skip "nogui:" prefix in agent
+  * Ensure consistent treatment of "QUBESRPC" followed by non-space
+  * Check for empty source domain names
+  * qrexec-daemon: partially validate messages from client
+  * qrexec-daemon: Take advantage of flexible array members
+  * qrexec-agent: Take advantage of flexible array members
+  * qrexec-daemon: Do not check service identifier for DEFAULT: keyword
+  * qrexec-daemon: check for valid messages from clients
+  * Avoid allocating a big buffer for each loop iteration
+  * Add visibility attributes and use -fvisibility=hidden
+  * Avoid pointlessly setting argv[0]
+  * Use calloc() instead of malloc() + memset()
+  * Eradicate VLAs from the codebase
+  * Adjust test to reflect reality
+  * Avoid warnings from pytest
+  * Share qrexec-daemon VM -> VM call code with qrexec-client
+  * Avoid leaking vchans
+  * If skip-service-descriptor=true, do not use fork server
+  * Forbide skip-service-descriptor=true with explicit username
+  * Refuse executable service with skip-service-descriptor=true
+  * Fix memory leak in load_service_config()
+  * fix_fds(): check that input FDs are okay
+  * Use close_range() instead of close loop
+  * do_fork_exec(): Drop status pipe
+  * Prefer close() to shutdown()
+  * Document the file descriptrs for struct process_io_request
+  * Ensure that EOF is propagated to stdout
+  * Avoid writing to an uninitialized file descriptor
+  * Do not use a timeout if QREXEC_STARTUP_NOWAIT is set
+  * Check for dup2() errors and avoid FD leak
+  * Ensure proper RPM dependency ordering
+  * Explain why there is no use after free vulnerability
+
+  [ Marek Marczykowski-Górecki ]
+  * Restore correct log path
+  * Fix build error on redefined _FORTIFY_SOURCE
+
+  [ Demi Marie Obenour ]
+  * Check at startup that standard streams are open
+  * Better logging for socket services
+  * Add support for exiting on client or service EOF
+  * tests: do not write to maybe-closed socket
+  * Avoid passing stderr_fd to handle_data_client
+  * Fail early if the service config cannot be found
+  * Test if a service config directory itself is invalid
+  * Fix SIGUSR1 after stdin_fd closed
+
+  [ Ben Grande ]
+  * Document rpc-config until skip-service-descriptor
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Thu, 09 May 2024 03:13:08 +0200
+
 qubes-core-qrexec (4.2.18-1) unstable; urgency=medium
 
   * agent: fix calloc parameters order
