@@ -43,24 +43,31 @@ static _Noreturn void handle_vchan_error(const char *op)
 /*
  * Closing the file descriptors:
  *
- * - If this is a single socket used for both stdin and stdout, call shutdown()
- *   to indicate that no more data will be sent or received.
- * - Otherwise, restore the blocking status of the FD.
+ * - If this file descriptor was inherited _and_ is not used for both stdin
+ *   and stdout, restore the blocking status of the FD and then close it.
+ * - Otherwise, call shutdown() to indicate that no more data will be sent or
+ *   received in the given direction.
  */
-static void close_stdio(int fd, int other_fd, int direction) {
+static bool close_stdio(int fd, int direction, bool single_socket) {
     if (fd == -1)
-        return;
-    if (fd == other_fd) {
-        /* Do not close the FD, as it is still in use. */
-        /* ENOTCONN can happen with TCP and is harmless */
-        if (shutdown(fd, direction) == -1 && errno != ENOTSOCK && errno != ENOTCONN)
-            PERROR("shutdown");
-        return;
-    }
-
-    if (fd < 3)
+        return false;
+    if (single_socket || fd > 2) {
+        if (shutdown(fd, direction) == -1) {
+            if (errno == ENOTSOCK && !single_socket) {
+                close(fd);
+                return true;
+            } else if (errno != ENOTCONN) {
+                // ENOTCONN can happen with TCP and is harmless
+                PERROR("shutdown");
+            }
+        }
+        return false;
+    } else {
+        /* Close the file descriptor */
         set_block(fd);
-    close(fd);
+        close(fd);
+        return true;
+    }
 }
 
 static void close_stderr(int fd) {
@@ -105,6 +112,10 @@ int qrexec_process_io(const struct process_io_request *req,
 
     pid_t local_status = -1;
     pid_t remote_status = -1;
+    /* Saved version of stdin_fd.  If we get SIGHUP,
+     * this replaces stdout_fd.  Set to -1 only if stdin_fd
+     * is closed, not merely shut down. */
+    int saved_stdin_fd = stdin_fd;
     int stdout_msg_type = is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN;
     int ret;
     struct pollfd fds[FD_NUM];
@@ -125,8 +136,17 @@ int qrexec_process_io(const struct process_io_request *req,
     sigprocmask(SIG_BLOCK, &pollmask, NULL);
     sigemptyset(&pollmask);
 
+    /* Invariants:
+     *
+     * - if stdin_fd == stdout_fd, then use_stdio_socket is true.
+     * - if use_stdio_socket is true, then either:
+     *   - stdin_fd == stdout_fd right now.
+     *   - stdin_fd == stdout_fd at some point in the past,
+     *     and one of them is currently -1.
+     */
+    bool use_stdio_socket = stdin_fd == stdout_fd;
     set_nonblock(stdin_fd);
-    if (stdout_fd != stdin_fd)
+    if (!use_stdio_socket)
         set_nonblock(stdout_fd);
     if (is_service && local_pid == 0) {
         assert(stdin_fd == stdout_fd);
@@ -142,27 +162,30 @@ int qrexec_process_io(const struct process_io_request *req,
     }
 
     /* Convenience macros that eliminate a ton of error-prone boilerplate */
-#define close_stdin() do {                          \
-    if (exit_on_stdin_eof) {                        \
-        /* Set stdin_fd and stdout_fd to -1.        \
-         * No need to close them as the process     \
-         * will soon exit. */                       \
-        stdin_fd = stdout_fd = -1;                  \
-    } else {                                        \
-        close_stdio(stdin_fd, stdout_fd, SHUT_WR);  \
-        stdin_fd = -1;                              \
-    }                                               \
+#define close_stdin() do {                                      \
+    if (exit_on_stdin_eof) {                                    \
+        /* Set stdin_fd and stdout_fd to -1.                    \
+         * No need to close them as the process                 \
+         * will soon exit. */                                   \
+        stdin_fd = stdout_fd = -1;                              \
+    } else {                                                    \
+        /* if stdin_fd was actually closed, set saved_stdin_fd  \
+         * to -1 to avoid use-after-close */                    \
+        if (close_stdio(stdin_fd, SHUT_WR, use_stdio_socket))   \
+            saved_stdin_fd = -1;                                \
+        stdin_fd = -1;                                          \
+    }                                                           \
 } while (0)
-#define close_stdout() do {                         \
-    if (exit_on_stdout_eof) {                       \
-        /* Set stdin_fd and stdout_fd to -1.        \
-         * No need to close them as the process     \
-         * will soon exit. */                       \
-        stdin_fd = stdout_fd = -1;                  \
-    } else {                                        \
-        close_stdio(stdout_fd, stdin_fd, SHUT_RD);  \
-        stdout_fd = -1;                             \
-    }                                               \
+#define close_stdout() do {                                     \
+    if (exit_on_stdout_eof) {                                   \
+        /* Set stdin_fd and stdout_fd to -1.                    \
+         * No need to close them as the process                 \
+         * will soon exit. */                                   \
+        stdin_fd = stdout_fd = -1;                              \
+    } else {                                                    \
+        close_stdio(stdout_fd, SHUT_RD, use_stdio_socket);      \
+        stdout_fd = -1;                                         \
+    }                                                           \
 } while (0)
 #pragma GCC poison close_stdio
 
@@ -218,9 +241,10 @@ int qrexec_process_io(const struct process_io_request *req,
         }
 
         /* child signaled desire to use single socket for both stdin and stdout */
-        if (sigusr1 && *sigusr1 && stdin_fd != stdout_fd) {
+        if (sigusr1 && *sigusr1 && !use_stdio_socket) {
             close_stdout();
-            stdout_fd = stdin_fd;
+            stdout_fd = saved_stdin_fd;
+            use_stdio_socket = true;
             *sigusr1 = 0;
         }
 
