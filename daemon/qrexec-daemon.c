@@ -1167,6 +1167,19 @@ _Noreturn static void handle_execute_service_child(
 
     if (policy_response != RESPONSE_ALLOW)
         daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
+    else {
+        const char *p = strchr(user, ':');
+        // It is possible to use a user ending in ":nogui" to emulate
+        // --no-gui on the dom0 qvm-run command line.  This is a bug,
+        // but it can be used to work around a limitation in the Windows
+        // agent, so allow it until R5.0.  However, don't mention the
+        // misfeature in the error message, so that others are not
+        // encouraged to use it.
+        if (p != NULL && strcmp(p + 1, "nogui") != 0) {
+            LOG(ERROR, "Username %s contains a colon, refusing", user);
+            daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
+        }
+    }
 
     /* Replace the target domain with the version normalized by the policy engine */
     target_domain = requested_target;
@@ -1626,6 +1639,9 @@ int main(int argc, char **argv)
     remote_domain_name = argv[optind+1];
     if (argc - optind >= 3)
         default_user = argv[optind+2];
+    /* qubes_parse_rpc_command() considers ':' to terminate the username */
+    if (strchr(default_user, ':') != NULL)
+        errx(1, "Invalid default username '%s' (colon not allowed)", default_user);
     init(remote_domain_id, opt_direct);
 
     sigemptyset(&selectmask);

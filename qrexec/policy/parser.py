@@ -747,13 +747,23 @@ class AllowResolution(AbstractResolution):
 
     async def execute(self) -> str:
         """Return the allowed action"""
-        request, target = self.request, self.target
+        user, request, target = (
+            self.user or "DEFAULT",
+            self.request,
+            self.target,
+        )
+        requested_target = request.target
         assert target is not None
         assert isinstance(self.autostart, bool)
 
         # XXX remove when #951 gets fixed
         if request.source == target:
             raise AccessDenied("loopback qrexec connection not supported")
+
+        # XXX disallow this in parsing in R5.0
+        colon_index = user.find(":")
+        if colon_index != -1 and user[colon_index:] != ":nogui":
+            raise AccessDenied("colon in username not supported")
 
         if target in (
             "@adminvm",
@@ -765,7 +775,7 @@ user={self.user or 'DEFAULT'}
 result=allow
 target=@adminvm
 autostart={self.autostart}
-requested_target={request.target}"""
+requested_target={requested_target}"""
         if target.startswith("@dispvm:"):
             target_info = request.system_info["domains"][target[8:]]
             return f"""\
@@ -774,7 +784,7 @@ result=allow
 target={self.target}
 target_uuid=@dispvm:uuid:{target_info['uuid']}
 autostart={self.autostart}
-requested_target={request.target}"""
+requested_target={requested_target}"""
         target_info = request.system_info["domains"][target]
         return f"""\
 user={self.user or 'DEFAULT'}
@@ -782,7 +792,7 @@ result=allow
 target={self.target}
 target_uuid=uuid:{target_info['uuid']}
 autostart={self.autostart}
-requested_target={request.target}"""
+requested_target={requested_target}"""
 
 
 class AskResolution(AbstractResolution):
