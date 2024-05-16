@@ -1142,16 +1142,34 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     _exit(QREXEC_EXIT_PROBLEM);
 }
 
-/* check that the input is non-empty with only printable ASCII characters */
+/* check that the input is non-empty with only safe characters */
 static bool check_single_word(const char *token)
 {
     const char *cursor = token;
-    do {
-        if (*cursor < 0x21 || *cursor > 0x7E)
+    switch (*cursor++) {
+    case 'A' ... 'Z':
+    case 'a' ... 'z':
+        break;
+    default:
+        return false;
+    }
+    for (;;) {
+        switch (*cursor++) {
+        case 'A' ... 'Z':
+        case 'a' ... 'z':
+        case '0' ... '9':
+        case '_':
+        case ':':
+        case '-':
+        case '.':
+        case '@': // not used today but might be in future
+            break;
+        case '\0':
+            return true;
+        default:
             return false;
-        cursor++;
-    } while (*cursor != 0);
-    return true;
+        }
+    }
 }
 
 _Noreturn static void handle_execute_service_child(
