@@ -293,6 +293,7 @@ def get_result(args: Optional[List[str]]) -> Union[str, int]:
                                         "admin.vm.CreateDisposable")
                            .decode("ascii", "strict"))
         utils.qubesd_call(target, "admin.vm.Start")
+    # pylint: disable=possibly-used-before-assignment
     return subprocess.call((
         QREXEC_CLIENT,
         "-EWkd" if dispvm else "-Ed",
