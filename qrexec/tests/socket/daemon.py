@@ -768,6 +768,7 @@ class TestClient(unittest.TestCase):
 
         source.accept()
         source.handshake()
+        self.assertEqual(source.recv_message(), (qrexec.MSG_DATA_STDERR, b""))
         return source
 
     def test_run_dom0_command_and_connect_vm(self):

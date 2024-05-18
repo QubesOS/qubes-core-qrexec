@@ -124,6 +124,11 @@ int qrexec_process_io(const struct process_io_request *req,
     struct timespec normal_timeout = { 10, 0 };
     struct prefix_data empty = { 0, 0 }, prefix = req->prefix_data;
 
+    if (is_service && stderr_fd == -1) {
+        struct msg_header hdr = { .type = MSG_DATA_STDERR, .len = 0 };
+        libvchan_send(vchan, &hdr, (int)sizeof(hdr));
+    }
+
     struct buffer remote_buffer = {
         .data = malloc(max_chunk_size),
         .buflen = max_chunk_size,

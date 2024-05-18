@@ -696,16 +696,7 @@ echo "general service"
 
         good_server.sendall(b"stdout data")
         good_server.close()
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"stdout data")
         self.check_dom0(dom0)
 
     def _test_connect_socket_bad_config(self, forbidden_key):
@@ -725,7 +716,6 @@ force-user = '{user}'
 
         target, dom0 = self.execute_qubesrpc("qubes.SocketService+arg2", "domX")
         messages = target.recv_all_messages()
-        # No stderr
         self.assertListEqual(
             util.sort_messages(messages),
             [
@@ -765,14 +755,11 @@ exit-on-client-eof = true
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         # Check for EOF on stdin
         self.assertEqual(server.recvall(len(message) + 1), message)
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
+        self.assertEqual(target.recv_all_messages(),
             [
+                (qrexec.MSG_DATA_STDERR, b""),
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+            ])
         self.check_dom0(dom0)
         server.close()
 
@@ -800,15 +787,7 @@ exit-on-service-eof = true
         # Trigger EOF on stdout
         server.shutdown(socket.SHUT_WR)
         # Server should exit
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"")
         self.check_dom0(dom0)
         server.close()
 
@@ -836,16 +815,7 @@ skip-service-descriptor = true
 
         server.sendall(b"stdout data")
         server.close()
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"stdout data")
         self.check_dom0(dom0)
 
     def test_connect_socket_tcp(self):
@@ -880,20 +850,13 @@ skip-service-descriptor = true
             self.assertEqual(server.recvall(len(message)), message)
             server.sendall(b"stdout data")
         server.close()
-        messages = target.recv_all_messages()
         self.check_dom0(dom0)
-        return util.sort_messages(messages)
+        return target
 
     def _test_tcp(self, family: int, service: str, host: str, port: int) -> None:
-        # No stderr
-        self.assertListEqual(
+        self.assertExpectedStdout(
             self._test_tcp_raw(family, service, host, port),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+            b"stdout data")
 
     def test_connect_socket_tcp_port_from_arg(self):
         socket_path = os.path.join(
@@ -930,13 +893,9 @@ skip-service-descriptor = true
         host = "::1"
         os.symlink(f"/dev/tcp", socket_path)
         service = f"qubes.SocketService+{host.replace(':', '+')}+{port}"
-        self.assertListEqual(
+        self.assertExpectedStdout(
             self._test_tcp_raw(socket.AF_INET6, service, host, port, skip=False),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
+            b"stdout data",
         )
 
     def _test_connect_socket_tcp_unexpected_host(self, host):
@@ -946,16 +905,9 @@ skip-service-descriptor = true
         port = 65535
         path = f"/dev/tcp/{host}"
         os.symlink(path, socket_path)
-        messages = self._test_tcp_raw(socket.AF_INET, f"qubes.SocketService+{host}+{port}",
+        target = self._test_tcp_raw(socket.AF_INET, f"qubes.SocketService+{host}+{port}",
                                       host, port, accept=False)
-        self.assertListEqual(
-            messages,
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"", exit_code=125)
 
     def test_connect_socket_tcp_missing_host(self):
         """
@@ -1063,16 +1015,7 @@ skip-service-descriptor = true
 
         server.sendall(b"stdout data")
         server.close()
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"stdout data")
         self.check_dom0(dom0)
 
     def test_service_close_stdout_stderr_early(self):
