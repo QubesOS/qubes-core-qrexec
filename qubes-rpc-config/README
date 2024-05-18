@@ -19,16 +19,55 @@ Configuration syntax:
 *   String values: must be enclosed by single quotes ('), escape sequences
     are unsupported, e.g. 'str'.
 
+*   Service types: which kind of services does the configuration option
+    supports, executables and/or sockets. For socket-based services, see
+    https://www.qubes-os.org/doc/qrexec-socket-services/
+
 Supported settings:
+
+*   exit-on-client-eof:
+    *   Description: Exit when the client shuts down its input stream, client
+        sends EOF to stdin.
+    *   Conflicting options: if set to 'true', cannot set the 'force-user'
+        option.
+    *   Service type: socket
+    *   Value type: boolean
+    *   Accepted values: true, false
+    *   Default value: false
+    *   Example: exit-on-client-eof=true
+
+*   exit-on-service-eof:
+    *   Description: Exit when the service shuts down its output stream,
+        service sends EOF to stdout.
+    *   Conflicting options: if set to 'true', cannot set the 'force-user'
+        option.
+    *   Service type: socket
+    *   Value type: boolean
+    *   Accepted values: true, false
+    *   Default value: false
+    *   Example: exit-on-service-eof=true
 
 *   force-user:
     *   Description: Enforce that service should be run by the specified
         username. Useful to set the user at the target qube, which will be
         passed directly to PAM without being interpreted by Qrexec, instead of
         having to modify the policy in dom0.
+    *   Service type: executable, socket
     *   Value type: string
     *   Default value: same user as in the policy, else it is 'user'.
-    *   Example: 'user'
+    *   Example: force-user='user'
+
+*   skip-service-descriptor:
+    *   Description: Skip sending service descriptor and go for the actual
+        data directly. Useful to skip sending metadata to socket-based
+        services.
+    *   Conflicting options: if set to 'true', cannot set the 'force-user'
+        option.
+    *   Service type: socket
+    *   Value type: boolean
+    *   Accepted values: true, false.
+    *   Default value: false
+    *   Example: skip-service-descriptor=true
 
 *   wait-for-session:
     *   Description: Wait for full GUI session initialization before starting
@@ -37,18 +76,9 @@ Supported settings:
         because there is no GUI running at all), service will never be
         started. It is possible for the service to be started even if
         qubes.WaitForSession fails, so the service must not depend on setting
-        "wait-for-session=true" for security.
+        this option to 'true' for security.
+    *   Service type: executable, socket
     *   Value type: boolean
     *   Accepted values: true, false, 0, 1.
     *   Default value: false
     *   Example: wait-for-session=true
-
-*   skip-service-descriptor:
-    *   Description: Skip sending service descriptor and go for the actual
-        data directly. Useful to skip sending metadata to socket-based
-        services, thus the option is valid only for socket services, not
-        executables. See https://www.qubes-os.org/doc/qrexec-socket-services/
-    *   Value type: boolean
-    *   Accepted values: true, false.
-    *   Default value: false
-    *   Example: skip-service-descriptor=true
