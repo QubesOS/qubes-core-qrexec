@@ -22,6 +22,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
@@ -1122,8 +1123,14 @@ _Noreturn static void handle_execute_service_child(
         const struct service_params *request_id) {
     int i;
 
-    for (i = 3; i < MAX_FDS; i++)
-        close(i);
+#ifdef SYS_close_range
+    int close_range_res = syscall(SYS_close_range, 3, ~0U, 0);
+#else
+    int close_range_res = -1;
+#endif
+    if (close_range_res != 0)
+        for (i = 3; i < MAX_FDS; i++)
+            close(i);
 
     char *user, *target, *requested_target;
     int autostart;
