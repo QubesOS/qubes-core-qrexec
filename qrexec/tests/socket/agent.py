@@ -758,6 +758,7 @@ exit-on-client-eof = true
         self.assertEqual(target.recv_all_messages(),
             [
                 (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
             ])
         self.check_dom0(dom0)

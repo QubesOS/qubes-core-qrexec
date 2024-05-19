@@ -169,6 +169,14 @@ int qrexec_process_io(const struct process_io_request *req,
     /* Convenience macros that eliminate a ton of error-prone boilerplate */
 #define close_stdin() do {                                      \
     if (exit_on_stdin_eof) {                                    \
+        /* If stdout is still open, send EOF */                 \
+        if (stdout_fd != -1) {                                  \
+            const struct msg_header hdr = {                     \
+                .type = stdout_msg_type,                        \
+                .len = 0,                                       \
+            };                                                  \
+            libvchan_send(vchan, &hdr, sizeof(hdr));            \
+        };                                                      \
         /* Set stdin_fd and stdout_fd to -1.                    \
          * No need to close them as the process                 \
          * will soon exit. */                                   \
