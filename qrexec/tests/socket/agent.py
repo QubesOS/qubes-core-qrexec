@@ -72,6 +72,7 @@ class TestAgentBase(unittest.TestCase):
             self.assertTrue(msg_body)
             self.assertEqual(msg_type, qrexec.MSG_DATA_STDOUT)
             stdout_entries.append(msg_body)
+        self.assertEqual(b"".join(stdout_entries), expected_stdout)
 
     def make_executable_service(self, *args):
         util.make_executable_service(self.tempdir, *args)
