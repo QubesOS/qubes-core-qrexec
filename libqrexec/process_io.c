@@ -339,8 +339,6 @@ int qrexec_process_io(const struct process_io_request *req,
                     libvchan_send(vchan, &hdr, (int)sizeof(hdr));
                 }
                 close_stdout();
-                close_stderr(stderr_fd);
-                stderr_fd = -1;
                 break;
         }
         if (prefix.len > 0 || (stdout_fd >= 0 && fds[FD_STDOUT].revents)) {
