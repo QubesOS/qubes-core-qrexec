@@ -1413,6 +1413,37 @@ class TestClientVm(unittest.TestCase):
             remote.close()
             local.close()
 
+    def test_run_client_bidirectional_shutdown_early_exit(self):
+        try:
+            remote, local = socket.socketpair()
+            target_client = self.run_service(stdio=remote)
+            initial_data = b"stdout data\n"
+            target_client.send_message(qrexec.MSG_DATA_STDOUT, initial_data)
+            # FIXME: data can be received in multiple messages
+            self.assertEqual(local.recv(len(initial_data)), initial_data)
+            initial_data = b"stdin data\n"
+            local.sendall(initial_data)
+            self.assertStdoutMessages(target_client, initial_data, qrexec.MSG_DATA_STDIN)
+            target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
+            # Check that EOF got propagated on this side too, even though
+            # we still have a reference to the socket.  This indicates that
+            # qrexec-client-vm shut down the socket for writing.
+            self.assertEqual(local.recv(1), b"")
+            with self.assertRaises(BrokenPipeError):
+                remote.send(b"a")
+            target_client.send_message(
+                qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)
+            )
+            local.shutdown(socket.SHUT_WR)
+            # Check that EOF received
+            self.assertEqual(target_client.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
+            self.client.wait()
+            self.assertEqual(self.client.returncode, 42)
+        finally:
+            remote.close()
+            local.close()
+
+
     def test_run_client_replace_chars(self):
         target_client = self.run_service(options=["-t"])
         target_client.send_message(
@@ -1448,7 +1479,8 @@ class TestClientVm(unittest.TestCase):
         )
         # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
         # and also no MSG_DATA_STDIN after receiving MSG_DATA_EXIT_CODE
-        self.assertListEqual(target_client.recv_all_messages(), [])
+        self.assertListEqual(target_client.recv_all_messages(),
+                             [(qrexec.MSG_DATA_STDIN, b"")])
         self.assertEqual(self.client.stdout.read(), b"")
         self.client.wait()
         self.assertEqual(self.client.returncode, qrexec.QREXEC_EXIT_PROBLEM)
@@ -1538,7 +1570,8 @@ read < "$1"
             qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", qrexec.QREXEC_EXIT_PROBLEM)
         )
         # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
-        self.assertListEqual(target_client.recv_all_messages(), [])
+        self.assertListEqual(target_client.recv_all_messages(),
+                             [(qrexec.MSG_DATA_STDIN, b"")])
         target_client.close()
         self.assertEqual(self.client.stdout.read(), b"")
         self.client.wait()

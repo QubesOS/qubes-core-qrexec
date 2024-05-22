@@ -333,6 +333,11 @@ int qrexec_process_io(const struct process_io_request *req,
                  * local FDs. However, don't exit yet, because there might
                  * still be some data in stdin_buf waiting to be flushed.
                  */
+                if (stdout_fd != -1) {
+                    /* Send EOF */
+                    struct msg_header hdr = { .type = stdout_msg_type, .len = 0, };
+                    libvchan_send(vchan, &hdr, (int)sizeof(hdr));
+                }
                 close_stdout();
                 close_stderr(stderr_fd);
                 stderr_fd = -1;
