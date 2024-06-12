@@ -748,21 +748,21 @@ int find_qrexec_service(
     if (euidaccess(path_buffer.data, X_OK) == 0) {
         /* Executable-based service. */
         if (!cmd->send_service_descriptor) {
-            LOG(ERROR, "Refusing to execute executable service %s with skip-service-descriptor=true",
+            LOG(WARNING, "Warning: ignoring skip-service-descriptor=true "
+                         "for execute executable service %s",
                 path_buffer.data);
-            return -2;
         }
         if (cmd->exit_on_stdout_eof) {
-            LOG(ERROR, "Refusing to execute executable service %s with "
-                       "exit-on-service-eof=true",
+            LOG(WARNING, "Warning: ignoring exit-on-service-eof=true "
+                         "for executable service %s",
                 path_buffer.data);
-            return -2;
+            cmd->exit_on_stdout_eof = false;
         }
         if (cmd->exit_on_stdin_eof) {
-            LOG(ERROR, "Refusing to execute executable service %s with "
-                       "exit-on-client-eof=true",
+            LOG(WARNING, "Warning: ignoring exit-on-client-eof=true "
+                         "for executable service %s",
                 path_buffer.data);
-            return -2;
+            cmd->exit_on_stdin_eof = false;
         }
         return 0;
     }

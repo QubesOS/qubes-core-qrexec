@@ -433,6 +433,10 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
         ) as f:
             f.write("""\
 wait-for-session = 0
+# should be ignored for executable service
+exit-on-service-eof = true
+exit-on-client-eof = true
+skip-service-descriptor = true
 """)
         target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
@@ -593,18 +597,6 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
 
     def test_exec_service_with_invalid_config_6(self):
         self.exec_service_with_invalid_config(None)
-
-    def test_exec_service_with_invalid_config_7(self):
-        # skip-service-descriptor not allowed with executable service
-        self.exec_service_with_invalid_config("skip-service-descriptor = true\n")
-
-    def test_exec_service_with_invalid_config_8(self):
-        # exit-on-service-eof not allowed with executable service
-        self.exec_service_with_invalid_config("exit-on-service-eof = true\n")
-
-    def test_exec_service_with_invalid_config_9(self):
-        # exit-on-client-eof not allowed with executable service
-        self.exec_service_with_invalid_config("exit-on-client-eof = true\n")
 
     def test_exec_service_with_arg(self):
         self.make_executable_service(
