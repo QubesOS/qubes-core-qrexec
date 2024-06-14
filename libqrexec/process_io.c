@@ -124,6 +124,11 @@ int qrexec_process_io(const struct process_io_request *req,
     struct timespec normal_timeout = { 10, 0 };
     struct prefix_data empty = { 0, 0 }, prefix = req->prefix_data;
 
+    if (is_service && stderr_fd == -1) {
+        struct msg_header hdr = { .type = MSG_DATA_STDERR, .len = 0 };
+        libvchan_send(vchan, &hdr, (int)sizeof(hdr));
+    }
+
     struct buffer remote_buffer = {
         .data = malloc(max_chunk_size),
         .buflen = max_chunk_size,
@@ -164,6 +169,14 @@ int qrexec_process_io(const struct process_io_request *req,
     /* Convenience macros that eliminate a ton of error-prone boilerplate */
 #define close_stdin() do {                                      \
     if (exit_on_stdin_eof) {                                    \
+        /* If stdout is still open, send EOF */                 \
+        if (stdout_fd != -1) {                                  \
+            const struct msg_header hdr = {                     \
+                .type = stdout_msg_type,                        \
+                .len = 0,                                       \
+            };                                                  \
+            libvchan_send(vchan, &hdr, sizeof(hdr));            \
+        };                                                      \
         /* Set stdin_fd and stdout_fd to -1.                    \
          * No need to close them as the process                 \
          * will soon exit. */                                   \
@@ -320,9 +333,12 @@ int qrexec_process_io(const struct process_io_request *req,
                  * local FDs. However, don't exit yet, because there might
                  * still be some data in stdin_buf waiting to be flushed.
                  */
+                if (stdout_fd != -1) {
+                    /* Send EOF */
+                    struct msg_header hdr = { .type = stdout_msg_type, .len = 0, };
+                    libvchan_send(vchan, &hdr, (int)sizeof(hdr));
+                }
                 close_stdout();
-                close_stderr(stderr_fd);
-                stderr_fd = -1;
                 break;
         }
         if (prefix.len > 0 || (stdout_fd >= 0 && fds[FD_STDOUT].revents)) {

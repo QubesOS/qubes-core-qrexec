@@ -386,9 +386,15 @@ int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdi
 // See also qrexec-agent/qrexec-agent-data.c
 static void handle_failed_exec(libvchan_t *data_vchan, bool is_service, int exit_code)
 {
-    struct msg_header hdr = {
-        .type = MSG_DATA_STDOUT,
-        .len = 0,
+    const struct msg_header hdr[2] = {
+        {
+            .type = MSG_DATA_STDERR,
+            .len = 0,
+        },
+        {
+            .type = MSG_DATA_STDOUT,
+            .len = 0,
+        },
     };
 
     LOG(ERROR, "failed to spawn process, exiting");
@@ -404,7 +410,7 @@ static void handle_failed_exec(libvchan_t *data_vchan, bool is_service, int exit
      * when we support sockets as a local process.
      */
     if (is_service) {
-        libvchan_send(data_vchan, &hdr, sizeof(hdr));
+        libvchan_send(data_vchan, hdr, sizeof(hdr));
         send_exit_code(data_vchan, exit_code);
     }
 }

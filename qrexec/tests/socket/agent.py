@@ -688,16 +688,7 @@ echo "general service"
 
         good_server.sendall(b"stdout data")
         good_server.close()
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"stdout data")
         self.check_dom0(dom0)
 
     def _test_connect_socket_bad_config(self, forbidden_key):
@@ -717,7 +708,6 @@ force-user = '{user}'
 
         target, dom0 = self.execute_qubesrpc("qubes.SocketService+arg2", "domX")
         messages = target.recv_all_messages()
-        # No stderr
         self.assertListEqual(
             util.sort_messages(messages),
             [
@@ -757,14 +747,12 @@ exit-on-client-eof = true
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         # Check for EOF on stdin
         self.assertEqual(server.recvall(len(message) + 1), message)
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
+        self.assertEqual(target.recv_all_messages(),
             [
+                (qrexec.MSG_DATA_STDERR, b""),
+                (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+            ])
         self.check_dom0(dom0)
         server.close()
 
@@ -792,15 +780,7 @@ exit-on-service-eof = true
         # Trigger EOF on stdout
         server.shutdown(socket.SHUT_WR)
         # Server should exit
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"")
         self.check_dom0(dom0)
         server.close()
 
@@ -828,16 +808,7 @@ skip-service-descriptor = true
 
         server.sendall(b"stdout data")
         server.close()
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"stdout data")
         self.check_dom0(dom0)
 
     def test_connect_socket_tcp(self):
@@ -872,20 +843,13 @@ skip-service-descriptor = true
             self.assertEqual(server.recvall(len(message)), message)
             server.sendall(b"stdout data")
         server.close()
-        messages = target.recv_all_messages()
         self.check_dom0(dom0)
-        return util.sort_messages(messages)
+        return target
 
     def _test_tcp(self, family: int, service: str, host: str, port: int) -> None:
-        # No stderr
-        self.assertListEqual(
+        self.assertExpectedStdout(
             self._test_tcp_raw(family, service, host, port),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+            b"stdout data")
 
     def test_connect_socket_tcp_port_from_arg(self):
         socket_path = os.path.join(
@@ -922,13 +886,9 @@ skip-service-descriptor = true
         host = "::1"
         os.symlink(f"/dev/tcp", socket_path)
         service = f"qubes.SocketService+{host.replace(':', '+')}+{port}"
-        self.assertListEqual(
+        self.assertExpectedStdout(
             self._test_tcp_raw(socket.AF_INET6, service, host, port, skip=False),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
+            b"stdout data",
         )
 
     def _test_connect_socket_tcp_unexpected_host(self, host):
@@ -938,16 +898,9 @@ skip-service-descriptor = true
         port = 65535
         path = f"/dev/tcp/{host}"
         os.symlink(path, socket_path)
-        messages = self._test_tcp_raw(socket.AF_INET, f"qubes.SocketService+{host}+{port}",
+        target = self._test_tcp_raw(socket.AF_INET, f"qubes.SocketService+{host}+{port}",
                                       host, port, accept=False)
-        self.assertListEqual(
-            messages,
-            [
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"", exit_code=125)
 
     def test_connect_socket_tcp_missing_host(self):
         """
@@ -1055,16 +1008,7 @@ skip-service-descriptor = true
 
         server.sendall(b"stdout data")
         server.close()
-        messages = target.recv_all_messages()
-        # No stderr
-        self.assertListEqual(
-            util.sort_messages(messages),
-            [
-                (qrexec.MSG_DATA_STDOUT, b"stdout data"),
-                (qrexec.MSG_DATA_STDOUT, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\0\0\0\0"),
-            ],
-        )
+        self.assertExpectedStdout(target, b"stdout data")
         self.check_dom0(dom0)
 
     def test_service_close_stdout_stderr_early(self):
@@ -1461,6 +1405,37 @@ class TestClientVm(unittest.TestCase):
             remote.close()
             local.close()
 
+    def test_run_client_bidirectional_shutdown_early_exit(self):
+        try:
+            remote, local = socket.socketpair()
+            target_client = self.run_service(stdio=remote)
+            initial_data = b"stdout data\n"
+            target_client.send_message(qrexec.MSG_DATA_STDOUT, initial_data)
+            # FIXME: data can be received in multiple messages
+            self.assertEqual(local.recv(len(initial_data)), initial_data)
+            initial_data = b"stdin data\n"
+            local.sendall(initial_data)
+            self.assertStdoutMessages(target_client, initial_data, qrexec.MSG_DATA_STDIN)
+            target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
+            # Check that EOF got propagated on this side too, even though
+            # we still have a reference to the socket.  This indicates that
+            # qrexec-client-vm shut down the socket for writing.
+            self.assertEqual(local.recv(1), b"")
+            with self.assertRaises(BrokenPipeError):
+                remote.send(b"a")
+            target_client.send_message(
+                qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42)
+            )
+            local.shutdown(socket.SHUT_WR)
+            # Check that EOF received
+            self.assertEqual(target_client.recv_message(), (qrexec.MSG_DATA_STDIN, b""))
+            self.client.wait()
+            self.assertEqual(self.client.returncode, 42)
+        finally:
+            remote.close()
+            local.close()
+
+
     def test_run_client_replace_chars(self):
         target_client = self.run_service(options=["-t"])
         target_client.send_message(
@@ -1496,7 +1471,8 @@ class TestClientVm(unittest.TestCase):
         )
         # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
         # and also no MSG_DATA_STDIN after receiving MSG_DATA_EXIT_CODE
-        self.assertListEqual(target_client.recv_all_messages(), [])
+        self.assertListEqual(target_client.recv_all_messages(),
+                             [(qrexec.MSG_DATA_STDIN, b"")])
         self.assertEqual(self.client.stdout.read(), b"")
         self.client.wait()
         self.assertEqual(self.client.returncode, qrexec.QREXEC_EXIT_PROBLEM)
@@ -1586,7 +1562,8 @@ read < "$1"
             qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", qrexec.QREXEC_EXIT_PROBLEM)
         )
         # there should be no MSG_DATA_EXIT_CODE from qrexec-client-vm
-        self.assertListEqual(target_client.recv_all_messages(), [])
+        self.assertListEqual(target_client.recv_all_messages(),
+                             [(qrexec.MSG_DATA_STDIN, b"")])
         target_client.close()
         self.assertEqual(self.client.stdout.read(), b"")
         self.client.wait()
