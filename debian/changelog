@@ -1,3 +1,28 @@
+qubes-core-qrexec (4.2.20-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Mute pylint false positive
+
+  [ Demi Marie Obenour ]
+  * qrexec-daemon: Use close_range where possible
+
+  [ Ben Grande ]
+  * Document rpc config until exit-on-server-eof
+
+  [ Demi Marie Obenour ]
+  * Command and API documentation
+
+  [ Marek Marczykowski-Górecki ]
+  * Downgrade errors about incompatible service config to warnings
+
+  [ Demi Marie Obenour ]
+  * Always send EOF on stderr
+  * Send EOF on stdout when exiting due to EOF on stdin
+  * Send EOF whenever closing stdout
+  * Avoid closing stderr when MSG_DATA_EXIT_CODE is received
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 15 Jun 2024 00:07:47 +0200
+
 qubes-core-qrexec (4.2.19-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
