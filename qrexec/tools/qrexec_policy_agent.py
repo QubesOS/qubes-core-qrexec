@@ -28,7 +28,7 @@ import os
 import argparse
 import asyncio
 
-import pkg_resources
+import importlib.resources
 
 # pylint: disable=import-error,wrong-import-position
 import gi
@@ -322,9 +322,9 @@ class FocusStealingHelper(GtkOneTimerHelper):
 
 class RPCConfirmationWindow:
     # pylint: disable=too-few-public-methods,too-many-instance-attributes
-    _source_file = pkg_resources.resource_filename(
-        "qrexec", os.path.join("glade", "RPCConfirmationWindow.glade")
-    )
+    _source_file_ref = importlib.resources.files("qrexec").joinpath(
+        os.path.join("glade", "RPCConfirmationWindow.glade"))
+
     _source_id = {
         "window": "RPCConfirmationWindow",
         "ok": "okButton",
@@ -429,7 +429,8 @@ class RPCConfirmationWindow:
         sanitize_service_name(source, assert_sanitized=True)
 
         self._gtk_builder = Gtk.Builder()
-        self._gtk_builder.add_from_file(self._source_file)
+        with importlib.resources.as_file(self._source_file_ref) as path:
+            self._gtk_builder.add_from_file(str(path))
         self._rpc_window = self._gtk_builder.get_object(
             self._source_id["window"]
         )
