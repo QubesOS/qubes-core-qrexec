@@ -135,7 +135,8 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
             return false;
         }
     }
-    if (autostart) {
+    int s = disposable ? -2 : connect_unix_socket(target);
+    if (s == -2 && autostart) {
         buf = qubesd_call(target, "admin.vm.Start", "", &resp_len);
         if (buf == NULL) // error already printed by qubesd_call
             return false;
@@ -150,9 +151,9 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
             return false;
         }
         free(buf);
+        s = connect_unix_socket(target);
     }
-    int s = connect_unix_socket(target);
-    if (s == -1)
+    if (s < 0)
         goto kill;
     int data_domain;
     int data_port;
@@ -199,6 +200,11 @@ int connect_unix_socket_by_id(unsigned int domid)
     return connect_unix_socket(id_str);
 }
 
+/* Returns:
+ * - FD on success,
+ * - -2 target qrexec daemon is not running,
+ * - -1 on other errors
+ */
 int connect_unix_socket(const char *domname)
 {
     int s, len, res;
@@ -217,12 +223,15 @@ int connect_unix_socket(const char *domname)
     if (res >= (int)sizeof(remote.sun_path)) {
         LOG(ERROR, "%s/qrexec.%s is too long for AF_UNIX socket path",
              socket_dir, domname);
+        close(s);
         return -1;
     }
     len = (size_t)res + 1 + offsetof(struct sockaddr_un, sun_path);
     if (connect(s, (struct sockaddr *) &remote, len) == -1) {
+        int saved_errno = errno;
         LOG(ERROR, "connect %s", remote.sun_path);
-        return -1;
+        close(s);
+        return (saved_errno == ENOENT || saved_errno == ECONNREFUSED) ? -2 : -1;
     }
     if (handle_daemon_handshake(s) < 0)
         return -1;

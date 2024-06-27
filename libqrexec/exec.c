@@ -624,7 +624,6 @@ static int qubes_tcp_connect(const char *host, const char *port)
         close(sockfd);
     } else {
         rc = sockfd;
-        LOG(DEBUG, "Connection succeeded");
     }
 freeaddrs:
     freeaddrinfo(addrs);

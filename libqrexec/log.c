@@ -88,5 +88,10 @@ void setup_logging(const char *program_name) {
             errx(125, "File descriptor %d is closed, cannot continue", i);
     }
 
+    /* qrexec_logv() uses several separate fprintf calls, print them at once */
+    errno = 0;
+    if (setvbuf(stderr, NULL, _IOLBF, 0))
+        warn("Failed to enable line buffering on stderr");
+
     qrexec_program_name = program_name;
 }
