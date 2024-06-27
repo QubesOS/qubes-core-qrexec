@@ -98,6 +98,47 @@ class TestPolicyCache:
         assert not cache.outdated
 
     @pytest.mark.asyncio
+    async def test_14_policy_move(self, tmp_path, mock_parser):
+        policy_path = tmp_path / "policy"
+        policy_path.mkdir()
+        cache = utils.PolicyCache(policy_path)
+        cache.initialize_watcher()
+
+        mock_parser.assert_called_once_with(policy_path=policy_path)
+
+        assert not cache.outdated
+
+        file = tmp_path / "test"
+        file.write_text("test")
+
+        await asyncio.sleep(1)
+
+        assert not cache.outdated
+
+        # move in
+        file_moved = file.rename(policy_path / "test")
+
+        await asyncio.sleep(1)
+
+        assert cache.outdated
+
+        cache.get_policy()
+
+        assert not cache.outdated
+
+        # now move out
+        file_moved.rename(file)
+
+        await asyncio.sleep(1)
+
+        assert cache.outdated
+
+        cache.get_policy()
+
+        call = unittest.mock.call(policy_path=policy_path)
+        assert mock_parser.mock_calls == [call, call, call]
+
+    @pytest.mark.asyncio
     async def test_20_policy_updates(self, tmp_path, mock_parser):
         cache = utils.PolicyCache(tmp_path)
         cache.initialize_watcher()
