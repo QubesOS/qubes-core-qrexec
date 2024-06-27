@@ -159,11 +159,11 @@ Miscellaneous and test facilities
    :members:
    :member-order: bysource
 
-.. autoclass:: TestLoader
+.. autoclass:: StringLoader
    :members:
    :member-order: bysource
 
-.. autoclass:: MockPolicy
+.. autoclass:: StringPolicy
    :members:
    :member-order: bysource
 

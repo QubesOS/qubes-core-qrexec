@@ -93,7 +93,7 @@ specified any target or not).
 Module contents
 ---------------
 
-.. automodule:: qubespolicy
+.. automodule:: qubes.policy
    :members:
    :show-inheritance:
 
