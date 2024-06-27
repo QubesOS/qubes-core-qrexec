@@ -48,7 +48,13 @@ class PolicyCache:
         self.watch_manager = pyinotify.WatchManager()
 
         # pylint: disable=no-member
-        mask = pyinotify.IN_CREATE | pyinotify.IN_DELETE | pyinotify.IN_MODIFY
+        mask = (
+            pyinotify.IN_CREATE |
+            pyinotify.IN_DELETE |
+            pyinotify.IN_MODIFY |
+            pyinotify.IN_MOVED_FROM |
+            pyinotify.IN_MOVED_TO
+        )
 
         loop = asyncio.get_event_loop()
 
@@ -104,4 +110,10 @@ class PolicyWatcher(pyinotify.ProcessEvent):
         self.cache.outdated = True
 
     def process_IN_MODIFY(self, _):
+        self.cache.outdated = True
+
+    def process_IN_MOVED_TO(self, _):
+        self.cache.outdated = True
+
+    def process_IN_MOVED_FROM(self, _):
         self.cache.outdated = True
