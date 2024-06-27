@@ -114,6 +114,7 @@ class AgentAskResolution(parser.AskResolution):
             ask_response,
         )
         self.handle_invalid_response()
+        # pylint: disable=unreachable
         assert False, "handle_invalid_response should throw"
 
 
