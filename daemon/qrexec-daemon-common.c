@@ -5,12 +5,31 @@
 #include <sys/wait.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <err.h>
+#include <limits.h>
 
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 #include "qrexec-daemon-common.h"
 
 const char *socket_dir = QREXEC_DAEMON_SOCKET_DIR;
+
+int parse_int(const char *str, const char *msg) {
+    long value;
+    char *end = (char *)str;
+
+    if (str[0] < '0' || str[0] > '9')
+        errx(1, "%s '%s' does not start with an ASCII digit", msg, str);
+    errno = 0;
+    value = strtol(str, &end, 0);
+    if (*end != '\0')
+        errx(1, "trailing junk '%s' after %s", end, msg);
+    if (errno == 0 && (value < 0 || value > INT_MAX))
+        errno = ERANGE;
+    if (errno)
+        err(1, "invalid %s '%s': strtol", msg, str);
+    return (int)value;
+}
 
 /* ask the daemon to allocate vchan port */
 bool negotiate_connection_params(int s, int other_domid, unsigned type,
