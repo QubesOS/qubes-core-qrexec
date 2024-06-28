@@ -127,6 +127,7 @@ void *qubes_read_all_to_malloc(int fd, size_t initial_buffer_size, size_t max_by
     }
     *len = 0;
     for (;;) {
+        assert(buf_size > offset);
         size_t to_read = buf_size - offset;
         ssize_t res = read(fd, buf + offset, to_read);
         if (res < 0) {
@@ -249,7 +250,12 @@ bool qubes_sendmsg_all(struct msghdr *const msg, int const sock)
     return true;
 }
 
-char *qubesd_call(const char *dest, char *method, char *arg, size_t *len)
+char *qubesd_call(const char *dest, char *method, char *arg, size_t *out_len)
+{
+    return qubesd_call2(dest, method, arg, "", 0, out_len);
+}
+
+char *qubesd_call2(const char *dest, char *method, char *arg, const char *payload, size_t len, size_t *out_len)
 {
     char *buf = NULL;
     char *word;
@@ -273,6 +279,7 @@ char *qubesd_call(const char *dest, char *method, char *arg, size_t *len)
         { .iov_base = arg, .iov_len = arg ? strlen(arg) : 0 },
         { .iov_base = word, .iov_len = wordlen },
         { .iov_base = (void *)dest, .iov_len = strlen(dest) + 1 },
+        { .iov_base = (void *)payload, .iov_len = len },
     };
 
     struct sockaddr_un qubesd_sock = {
@@ -285,14 +292,14 @@ char *qubesd_call(const char *dest, char *method, char *arg, size_t *len)
         int i = errno;
         PERROR("socket");
         errno = i;
-        goto out;
+        goto fail;
     }
 
     if (connect(sock,
                 (struct sockaddr *)&qubesd_sock,
                 offsetof(struct sockaddr_un, sun_path) + sizeof(QUBESD_SOCK))) {
         LOG(ERROR, "connect(): %m");
-        goto out;
+        goto fail;
     }
 
     struct msghdr msg = {
@@ -306,27 +313,30 @@ char *qubesd_call(const char *dest, char *method, char *arg, size_t *len)
     };
 
     if (!qubes_sendmsg_all(&msg, sock))
-        goto out;
+        goto fail;
 
     if (shutdown(sock, SHUT_WR)) {
         PERROR("shutdown()");
-        goto out;
+        goto fail;
     }
 
 #define BUF_SIZE 35
 #define BUF_MAX 65535
-    buf = qubes_read_all_to_malloc(sock, BUF_SIZE, BUF_MAX, len);
-    if (buf && (*len < 2 || strlen(buf) >= *len)) {
+    buf = qubes_read_all_to_malloc(sock, BUF_SIZE, BUF_MAX, out_len);
+    if (buf && (*out_len < 2 || strlen(buf) >= *out_len)) {
         LOG(ERROR,
             "Truncated response to %s: got %zu bytes",
             method,
-            *len);
-        *len = 0;
-        free(buf);
-        buf = NULL;
+            *out_len);
+        goto fail;
     }
 out:
     if (sock != -1)
         close(sock);
     return buf;
+fail:
+    *out_len = 0;
+    free(buf);
+    buf = 0;
+    goto out;
 }
