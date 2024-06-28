@@ -37,7 +37,7 @@
 extern char **environ;
 const bool qrexec_is_fork_server = true;
 
-void do_exec(const char *cmd, const char *user __attribute__((unused)))
+void do_exec(const char *prog, const char *cmd, const char *user __attribute__((unused)))
 {
     char *shell;
 
@@ -45,7 +45,8 @@ void do_exec(const char *cmd, const char *user __attribute__((unused)))
     signal(SIGPIPE, SIG_DFL);
 
     /* call QUBESRPC if requested */
-    exec_qubes_rpc_if_requested(cmd, environ);
+    if (prog != NULL)
+        exec_qubes_rpc(prog, cmd, environ);
 
     /* otherwise, pass it to shell */
     shell = getenv("SHELL");

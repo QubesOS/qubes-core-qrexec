@@ -131,7 +131,6 @@ rm -f %{name}-%{version}
 %{_bindir}/qrexec-policy
 
 %dir /usr/lib/qubes
-/usr/lib/qubes/qubes-rpc-multiplexer
 /usr/lib/qubes/qrexec-policy-agent-autostart
 
 %dir %{_sysconfdir}/qubes
