@@ -47,7 +47,7 @@ from typing import (
     Sequence,
 )
 
-from .. import POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX
+from .. import POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX, RUNTIME_POLICY_PATH
 from ..utils import FullSystemInfo
 from .. import exc
 from ..exc import (
@@ -1790,22 +1790,54 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
     """This class is used when policy is stored as regular files in a directory.
 
     Args:
-        policy_path (pathlib.Path): Load this directory. Paths given to
-            ``!include`` etc. directives are interpreted relative to this path.
+        policy_path: Load these directories. Paths given to
+            ``!include`` etc. directives in a file are interpreted relative to
+            the path from which the file was loaded.
     """
 
-    def __init__(self, *, policy_path=POLICYPATH, **kwds):
-        super().__init__(**kwds)
-        self.policy_path = pathlib.Path(policy_path)
-
+    policy_path: Optional[pathlib.Path]
+    def __init__(
+        self,
+        *,
+        policy_path: Union[None, pathlib.PurePath, Iterable[pathlib.PurePath]]
+    ) -> None:
+        super().__init__()
+        if policy_path is None:
+            iterable_policy_paths = [RUNTIME_POLICY_PATH, POLICYPATH]
+        elif isinstance(policy_path, pathlib.Path):
+            iterable_policy_paths = [policy_path]
+        elif isinstance(policy_path, list):
+            iterable_policy_paths = policy_path
+        else:
+            raise TypeError("unexpected type of policy path in AbstractFileSystemLoader.__init__!")
         try:
-            self.load_policy_dir(self.policy_path)
+            self.load_policy_dirs(iterable_policy_paths)
         except OSError as err:
             raise AccessDenied(
                 "failed to load {} file: {!s}".format(err.filename, err)
             ) from err
+        self.policy_path = None
 
-    def resolve_path(self, included_path):
+    def load_policy_dirs(self, paths: Iterable[pathlib.PurePath]) -> None:
+        already_seen = set()
+        final_list = []
+        for path in paths:
+            for file_path in filter_filepaths(pathlib.Path(path).iterdir()):
+                basename = file_path.name
+                if basename not in already_seen:
+                    already_seen.add(basename)
+                    final_list.append(file_path)
+        final_list.sort(key=lambda x: x.name)
+        for file_path in final_list:
+            with file_path.open() as file:
+                self.policy_path = file_path.parent
+                try:
+                    self.load_policy_file(file, file_path)
+                finally:
+                    self.policy_path = None
+
+    def resolve_path(self, included_path: pathlib.PurePosixPath) -> pathlib.Path:
+        assert self.policy_path is not None, "Tried to resolve a path when not loading policy"
         return (self.policy_path / included_path).resolve()
 
 
@@ -1840,12 +1872,21 @@ class ValidateParser(FilePolicy):
     """
 
     def __init__(
-        self, *args, overrides: Dict[pathlib.Path, Optional[str]], **kwds
-    ):
+        self,
+        *,
+        overrides: Dict[pathlib.Path, Optional[str]],
+        policy_path: Union[None, pathlib.PurePath, Iterable[pathlib.PurePath]] = None,
+    ) -> None:
         self.overrides = overrides
-        super().__init__(*args, **kwds)
+        super().__init__(policy_path=policy_path)
 
-    def load_policy_dir(self, dirpath):
+    def load_policy_dirs(self, paths: Iterable[pathlib.PurePath]) -> None:
+        assert len(paths) == 1
+        path, = paths
+        self.policy_path = path
+        self.load_policy_dir(path)
+
+    def load_policy_dir(self, dirpath: pathlib.Path) -> None:
         for path in filter_filepaths(dirpath.iterdir()):
             if path not in self.overrides:
                 with path.open() as file:

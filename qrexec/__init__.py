@@ -38,10 +38,12 @@ QUBESD_SOCK = "/var/run/qubesd.sock"
 RPC_PATH = "/etc/qubes-rpc"
 POLICY_AGENT_SOCKET_PATH = "/var/run/qubes/policy-agent.sock"
 POLICYPATH = pathlib.Path("/etc/qubes/policy.d")
+RUNTIME_POLICY_PATH = pathlib.Path("/run/qubes/policy.d")
 POLICYSOCKET = pathlib.Path("/var/run/qubes/policy.sock")
 POLICY_EVAL_SOCKET = pathlib.Path("/etc/qubes-rpc/policy.EvalSimple")
 POLICY_GUI_SOCKET = pathlib.Path("/etc/qubes-rpc/policy.EvalGUI")
 INCLUDEPATH = POLICYPATH / "include"
+RUNTIME_INCLUDE_PATH = RUNTIME_POLICY_PATH / "include"
 POLICYSUFFIX = ".policy"
 POLICYPATH_OLD = pathlib.Path("/etc/qubes-rpc/policy")
 
