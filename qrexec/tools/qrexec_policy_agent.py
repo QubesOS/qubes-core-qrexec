@@ -184,11 +184,22 @@ class VMListModeler:
                 completion.set_inline_selection(True)
                 completion.set_inline_completion(True)
                 completion.set_popup_completion(True)
-                completion.set_popup_single_match(False)
+                completion.set_popup_single_match(True)
                 completion.set_model(list_store)
                 completion.set_text_column(1)
 
                 entry_box.set_completion(completion)
+
+                def qube_matching_function(completion: Gtk.EntryCompletion,
+                                           key: str,
+                                           iterator: Gtk.TreeIter,
+                                           user_data: object) -> bool:
+                    # pylint: disable=unused-argument
+                    modelstr = completion.get_model()[iterator][1]
+                    return key.lower() in modelstr.lower()
+
+                completion.set_match_func(qube_matching_function, None)
+
                 if activation_trigger:
                     entry_box.connect(
                         "activate",
