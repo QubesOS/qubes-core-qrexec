@@ -1,3 +1,27 @@
+qubes-core-qrexec (4.2.21-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * daemon: attempt starting target vm only if not running yet
+  * Make stderr line-buffered for logging
+  * Remove redundant log line
+  * doc: fix class names in API docs
+
+  [ Demi Marie Obenour ]
+  * tests: Actually check that stdout was expected value
+
+  [ Marta Marczykowska-Górecka ]
+  * Remove deprecated pkg_resources, replace with importlib
+
+  [ Marek Marczykowski-Górecki ]
+  * Make pylint happy
+  * policy-daemon: invalidate cache on file move too
+  * tests: policy cache reacting to moving files
+
+  [ Ali Mirjamali ]
+  * Support substring matching in qube name text fields
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 05 Jul 2024 17:29:51 +0200
+
 qubes-core-qrexec (4.2.20-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
