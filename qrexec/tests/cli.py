@@ -96,7 +96,7 @@ def policy():
         yield policy
 
     assert mock_policy.mock_calls == [
-        mock.call(policy_path=PosixPath("/etc/qubes/policy.d"))
+        mock.call(policy_path=[PosixPath("/run/qubes/policy.d"), PosixPath("/etc/qubes/policy.d")]),
     ]
 
 

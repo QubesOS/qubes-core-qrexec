@@ -66,6 +66,8 @@ install-dom0: all-dom0
 	install -t $(DESTDIR)/etc/qubes/policy.d/include -m 664 policy.d/include/*
 	install -d $(DESTDIR)/lib/systemd/system -m 755
 	install -t $(DESTDIR)/lib/systemd/system -m 644 systemd/qubes-qrexec-policy-daemon.service
+	install -m 755 -d $(DESTDIR)/usr/lib/tmpfiles.d/
+	install -m 0644 -t $(DESTDIR)/usr/lib/tmpfiles.d/ systemd/qrexec.conf
 .PHONY: install-dom0
 
 
