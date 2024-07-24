@@ -437,7 +437,7 @@ class RPCConfirmationWindow:
     ):
         # pylint: disable=too-many-arguments
         sanitize_domain_name(source, assert_sanitized=True)
-        sanitize_service_name(source, assert_sanitized=True)
+        sanitize_service_name(service, assert_sanitized=True)
 
         self._gtk_builder = Gtk.Builder()
         with importlib.resources.as_file(self._source_file_ref) as path:
