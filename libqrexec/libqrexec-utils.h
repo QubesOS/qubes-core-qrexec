@@ -372,17 +372,33 @@ __attribute__((visibility("default")))
 void setup_logging(const char *program_name);
 
 /**
+ * Make an Admin API call to qubesd with no payload.  The returned buffer must be released by
+ * the caller using free().
+ *
+ * @param[in] dest The destination VM name.
+ * @param[in] method The method name.
+ * @param[in] arg The service argument
+ * @param[in] payload The payload of the API call.
+ * @return The value on success.  On failure returns NULL and sets errno.
+ */
+char *qubesd_call(const char *dest, char *method, char *arg, size_t *out_len);
+
+/**
  * Make an Admin API call to qubesd.  The returned buffer must be released by
  * the caller using free().
  *
- * @param dest The destination VM name.
- * @param method The method name.
- * @param arg The service argument
- * @param len The length of the data returned
+ * @param[in] dest The destination VM name.
+ * @param[in] method The method name.
+ * @param[in] arg The service argument
+ * @param[in] payload The payload of the API call.
+ * @param[in] len The length of the payload.
+ * @param[out] len The length of the data returned.
  * @return The value on success.  On failure returns NULL and sets errno.
  */
 __attribute__((visibility("default")))
 char *qubesd_call(const char *dest, char *method, char *arg, size_t *len);
+__attribute__((visibility("default")))
+char *qubesd_call2(const char *dest, char *method, char *arg, const char *payload, size_t len, size_t *out_len);
 
 /**
  * Read all data from the file descriptor until EOF, then close it.
