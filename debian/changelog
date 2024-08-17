@@ -1,3 +1,10 @@
+qubes-core-qrexec (4.2.22-1) unstable; urgency=medium
+
+  [ Piotr Bartman-Szwarc ]
+  * actually sanitize service name
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 18 Aug 2024 01:47:31 +0200
+
 qubes-core-qrexec (4.2.21-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
