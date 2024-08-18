@@ -1202,6 +1202,7 @@ static void handle_execute_service(
 {
     int policy_pending_slot;
     pid_t pid;
+    struct sigaction sa = { .sa_handler = SIG_DFL };
 
     policy_pending_slot = find_policy_pending_slot();
     if (policy_pending_slot < 0) {
@@ -1217,6 +1218,8 @@ static void handle_execute_service(
         case 0:
             if (atexit(null_exit))
                 _exit(QREXEC_EXIT_PROBLEM);
+            if (sigaction(SIGTERM, &sa, NULL))
+                LOG(WARNING, "Failed to restore SIGTERM handler: %d", errno);
             handle_execute_service_child(remote_domain_id, remote_domain_name,
                                          target_domain, service_name, request_id);
             abort();
