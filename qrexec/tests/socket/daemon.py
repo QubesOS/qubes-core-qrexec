@@ -30,6 +30,7 @@ import itertools
 import socket
 
 import psutil
+import pytest
 
 from . import qrexec
 from . import util
@@ -49,9 +50,27 @@ class TestDaemon(unittest.TestCase):
     POLICY_PROGRAM = """\
 #!/bin/sh
 
+# -- remote_domain_name target_name service_name
 echo "$@" > {tempdir}/qrexec-policy-params
+
 sleep $(cat {tempdir}/qrexec-policy-sleep || echo 0)
-exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
+exit_code=$(cat {tempdir}/qrexec-policy-exitcode || echo 1)
+
+# Prepare the response based on the exit code
+if [ "$exit_code" -eq 0 ]; then
+    # Allow response
+    printf 'result=allow\n'
+    printf 'autostart=True\n'
+    printf 'user=toto\n'
+    printf 'target=%s\n' "$3"
+    printf 'requested_target=%s\n' "$3"
+else
+    # Deny response
+    echo "result=deny"
+fi
+# End of response
+
+exit $exit_code
 """
 
     def setUp(self):
@@ -267,6 +286,58 @@ exit $(cat {tempdir}/qrexec-policy-exitcode || echo 1)
                 agent, target_domain_name, service_name, ident
             )
             recv_refused(agent)
+
+    def test_new_style_request(self):
+        """
+        Test that qrexec-daemon accepts request.
+        """
+        agent = self.start_daemon_with_agent()
+        agent.handshake()
+
+        target_domain_name = "target_domain"
+        ident = "ab"
+
+        # check policy program output
+        policy_program_path = os.path.join(self.tempdir, "qrexec-policy-exec")
+
+        # set deny
+        self.set_policy_params(1, 1)
+
+        result = subprocess.run(
+            [policy_program_path, "--", "somedomain", "anotherdomain", "someservice"],
+            capture_output=True,
+            text=True
+        )
+        assert result.stdout == "result=deny\n"
+
+        # set allow
+        self.set_policy_params(1, 0)
+
+        result = subprocess.run(
+            [policy_program_path, "--", "somedomain", "anotherdomain", "someservice"],
+            capture_output=True,
+            text=True
+        )
+        assert result.stdout == """result=allow
+autostart=True
+user=toto
+target=anotherdomain
+requested_target=anotherdomain
+"""
+
+        # check allowed request
+        agent.send_message(
+            qrexec.MSG_TRIGGER_SERVICE3,
+            struct.pack("<64s32s", self.domain_name.encode(), ident.encode())
+            + b"a\0",
+        )
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_EXEC_CMDLINE)
+        self.assertTrue(
+            os.path.exists(
+                os.path.join(self.tempdir, "qrexec-policy-params")
+            )
+        )
 
     def test_qsb_089(self):
         """
