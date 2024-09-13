@@ -20,26 +20,23 @@ Optional arguments:
 - assume_yes_for_ask=yes
 - just_evaluate=yes
 
+End of request is always an empty line.
 
 Response
 --------
 
-`result=allow/deny`
+result=allow/deny
 
+All responses that do not start with result=allow or result=deny are incorrect and will be rejected.
 Any possible extensions may be placed on next lines.
-All responses that do not start with `result=allow` or `result=deny` are
-incorrect and will be rejected.
-
-End of request is always an empty line.
 Response is always terminated by EOF.
+
+- result=allow requires autostart= and either target= or target_uuid= extensions.
+- result=deny forbids autostart=, target= and target_uuid= extensions.
 
 Extensions include:
 
-- `target=`: Name of the target, optionally preceded by `@dispvm:`
-  `@dispvm:` prefix means that this is a disposable VM template and a new disposable VM will be created automatically.
-  In allow responses, ignored if `target_uuid=` is present, required otherwise.
-  Forbidden in deny responses.
-- `autostart=`: `True` to automatically start the VM, `False` to not start it.
-  Anything else is invalid.
-  Required in allow responses, forbidden in deny responses.
-- `requested_target=`: Normalized version of the target domain.
+- target=: The name of the target domain. If prefixed with @dispvm:, it indicates a disposable VM template, and a new disposable VM will be created automatically.
+- target_uuid=: The UUID of the target domain.
+- autostart=: True to automatically start the VM, False to not start it. Anything else is invalid.
+- requested_target=: Normalized version of the target domain.
