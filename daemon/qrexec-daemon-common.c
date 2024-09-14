@@ -211,7 +211,7 @@ int connect_unix_socket(const char *domname)
     struct sockaddr_un remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        LOG(ERROR, "socket() failed: %m");
+        LOGE(ERROR, "socket() failed: %m");
         return -1;
     }
 
@@ -229,7 +229,7 @@ int connect_unix_socket(const char *domname)
     len = (size_t)res + 1 + offsetof(struct sockaddr_un, sun_path);
     if (connect(s, (struct sockaddr *) &remote, len) == -1) {
         int saved_errno = errno;
-        LOG(ERROR, "connect %s", remote.sun_path);
+        LOGE(ERROR, "connect %s", remote.sun_path);
         close(s);
         return (saved_errno == ENOENT || saved_errno == ECONNREFUSED) ? -2 : -1;
     }
