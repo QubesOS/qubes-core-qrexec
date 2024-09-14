@@ -1052,7 +1052,7 @@ static enum policy_response connect_daemon_socket(
     pid = fork();
     switch (pid) {
         case -1:
-            LOG(ERROR, "Could not fork!");
+            LOGE(ERROR, "Could not fork!");
             daemon__exit(QREXEC_EXIT_PROBLEM);
         case 0:
             if (close(fds[0]))
@@ -1093,7 +1093,7 @@ static enum policy_response connect_daemon_socket(
                 }
             } while (!WIFEXITED(status));
             if (WEXITSTATUS(status) != 0) {
-                LOG(ERROR, "qrexec-policy-exec failed");
+                LOG(ERROR, "qrexec-policy-exec failed: %d", WEXITSTATUS(status));
                 daemon__exit(QREXEC_EXIT_PROBLEM);
             }
             // This leaks 'result', but as the code execs later anyway this isn't a problem.
