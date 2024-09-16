@@ -1177,6 +1177,10 @@ class TC_20_Policy(unittest.TestCase):
             * * test-vm1 @anyvm ask
             * * test-vm2 @tag:tag1 deny
             * * test-vm2 @tag:tag2 allow
+            * * test-vm3 @tag:tag1 deny
+            * * test-vm3 @tag:tag1 allow target=test-vm1
+            * * test-vm3 @tag:tag2 deny
+            * * test-vm3 @tag:tag2 ask default_target=test-vm2 target=test-vm2
             * * test-no-dvm @type:AppVM deny
             * * @type:AppVM @default allow target=test-vm3
             * * @tag:tag1 @type:AppVM allow
@@ -1206,6 +1210,12 @@ class TC_20_Policy(unittest.TestCase):
         )
         self.assertCountEqual(
             policy.collect_targets_for_ask(_req("test-vm3", "@default")), []
+        )
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(_req("test-vm3", "test-vm1")), [],
+        )
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(_req("test-vm3", "test-vm2")), [],
         )
         self.assertCountEqual(
             policy.collect_targets_for_ask(_req("test-standalone", "@default")),

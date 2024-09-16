@@ -1013,6 +1013,17 @@ class Allow(ActionType):
         elif target == "@adminvm":
             target = "dom0"
 
+        available_targets = list(
+            self.rule.policy.collect_targets_for_ask(request)
+        )
+        if target not in available_targets:
+            raise AccessDenied(
+                "policy define 'allow' action at {}:{} but target {} was "
+                "denied in a previous rule".format(
+                    self.rule.filepath, self.rule.lineno, target
+                )
+            )
+
         if not self.autostart and not self.allow_no_autostart(
             target, request.system_info
         ):
@@ -1076,12 +1087,20 @@ class Ask(ActionType):
         assert self.rule.is_match(request)
 
         targets_for_ask: Iterable[str]
+        available_targets = list(
+            self.rule.policy.collect_targets_for_ask(request)
+        )
         if self.target is not None:
+            if self.target not in available_targets:
+                raise AccessDenied(
+                    "policy define 'ask' action at {}:{} but target {} was "
+                    "denied in a previous rule".format(
+                        self.rule.filepath, self.rule.lineno, self.target
+                    )
+                )
             targets_for_ask = [self.target]
         else:
-            targets_for_ask = list(
-                self.rule.policy.collect_targets_for_ask(request)
-            )
+            targets_for_ask = available_targets
 
         if not self.autostart:
             targets_for_ask = [
