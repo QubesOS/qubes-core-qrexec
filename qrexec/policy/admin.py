@@ -24,6 +24,7 @@ from grp import getgrnam
 import contextlib
 import fcntl
 import os
+import re
 import hashlib
 
 from .parser import ValidateParser, FilePolicy, get_invalid_characters
@@ -87,7 +88,11 @@ class PolicyAdmin:
         Throws PolicyAdminException in case of user error.
         """
 
-        assert all(char in RPCNAME_ALLOWED_CHARSET for char in arg)
+        if not all(char in RPCNAME_ALLOWED_CHARSET for char in arg):
+            raise PolicyAdminException(
+                "Invalid argument: \"{}\"\n"
+                "Valid characters are letters, numbers, dot, plus, hyphen and "
+                "underline".format(arg))
 
         func = self._find_method(service_name)
         if not func:
@@ -266,7 +271,12 @@ class PolicyAdmin:
 
     # helpers
 
-    def _get_path(self, arg: str, dir_path, suffix: str) -> Path:
+    def _get_path(self, arg: str, dir_path: str , suffix: str) -> Path:
+        if not re.compile(r'^[\w-]+$').match(arg):
+            raise PolicyAdminException(
+                f"Invalid policy file name: {arg}\n"
+                "Names must contain only alphanumeric characters, "
+                "underscore and hyphen.")
         path = dir_path / (arg + suffix)
         path = path.resolve()
         if path.parent != dir_path:

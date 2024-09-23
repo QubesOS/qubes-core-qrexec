@@ -76,11 +76,17 @@ def test_api_get(policy_dir, api):
     with pytest.raises(PolicyAdminException, match="Not found"):
         api.handle_request("policy.Get", "nonexistent", b"")
 
-    with pytest.raises(PolicyAdminException, match="Expecting a path inside"):
+    with pytest.raises(PolicyAdminException, match="Invalid policy file"):
+        api.handle_request("policy.Get", ".hidden_evil_policy", b"")
+
+    with pytest.raises(PolicyAdminException, match="Invalid policy file"):
         api.handle_request("policy.include.Get", "..", b"")
 
-    with pytest.raises(PolicyAdminException, match="Expecting a path inside"):
+    with pytest.raises(PolicyAdminException, match="Invalid policy file"):
         api.handle_request("policy.include.Get", "", b"")
+
+    with pytest.raises(PolicyAdminException, match="Invalid argument"):
+        api.handle_request("policy.include.Get", "space in argument", b"")
 
 
 def test_api_replace(policy_dir, api):
