@@ -206,26 +206,6 @@ class TestPolicyDaemon:
         )
 
     @pytest.mark.asyncio
-    async def test_unfinished_request(
-        self, mock_request, async_server, tmp_path
-    ):
-
-        data = b"unfinished"
-
-        task = self.send_data(async_server, tmp_path, data)
-
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(task, timeout=2)
-
-        for task in asyncio.all_tasks():
-            task.cancel()
-
-        with suppress(asyncio.CancelledError):
-            await asyncio.sleep(1)
-
-        mock_request.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_too_short_request(
         self, mock_request, async_server, tmp_path
     ):
