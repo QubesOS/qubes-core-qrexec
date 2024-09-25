@@ -89,10 +89,10 @@ class TestPolicyDaemon:
         eval_server = await asyncio.start_unix_server(
             functools.partial(
                 qrexec_policy_daemon.handle_qrexec_connection,
-                log,
-                mock_policy,
-                False,
-                b"policy.EvalSimple",
+                log=log,
+                policy_cache=mock_policy,
+                check_gui=False,
+                service_name=b"policy.EvalSimple",
             ),
             path=str(tmp_path / "socket.Simple"),
         )
@@ -100,10 +100,10 @@ class TestPolicyDaemon:
         gui_server = await asyncio.start_unix_server(
             functools.partial(
                 qrexec_policy_daemon.handle_qrexec_connection,
-                log,
-                mock_policy,
-                True,
-                b"policy.EvalGUI",
+                log=log,
+                policy_cache=mock_policy,
+                check_gui=True,
+                service_name=b"policy.EvalGUI",
             ),
             path=str(tmp_path / "socket.GUI"),
         )

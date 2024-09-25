@@ -164,7 +164,7 @@ async def _extract_qrexec_parameters(reader):
     return invoked_service, service_argument, remote_domain
 
 
-# pylint: disable=too-many-return-statements,too-many-arguments
+# pylint: disable=too-many-return-statements,too-many-arguments,too-many-positional-arguments
 async def qrexec_policy_eval(
     log,
     policy_cache,
@@ -254,7 +254,7 @@ async def qrexec_policy_eval(
 
 # pylint: disable=too-many-arguments
 async def handle_qrexec_connection(
-    log, policy_cache, check_gui, service_name, reader, writer
+    reader, writer, *, log, policy_cache, check_gui, service_name
 ):
 
     """
@@ -311,17 +311,21 @@ async def start_serving(args=None):
     eval_server = await asyncio.start_unix_server(
         functools.partial(
             handle_qrexec_connection,
-            log,
-            policy_cache,
-            False,
-            b"policy.EvalSimple",
+            log=log,
+            policy_cache=policy_cache,
+            check_gui=False,
+            service_name=b"policy.EvalSimple",
         ),
         path=args.eval_socket_path,
     )
 
     gui_eval_server = await asyncio.start_unix_server(
         functools.partial(
-            handle_qrexec_connection, log, policy_cache, True, b"policy.EvalGUI"
+            handle_qrexec_connection,
+            log=log,
+            policy_cache=policy_cache,
+            check_gui=True,
+            service_name=b"policy.EvalGUI"
         ),
         path=args.gui_socket_path,
     )
