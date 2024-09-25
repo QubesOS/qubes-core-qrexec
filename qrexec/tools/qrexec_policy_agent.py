@@ -435,7 +435,7 @@ class RPCConfirmationWindow:
     def __init__(
         self, entries_info, source, service, argument, targets_list, target=None
     ):
-        # pylint: disable=too-many-arguments
+        # pylint: disable=too-many-arguments,too-many-positional-arguments
         sanitize_domain_name(source, assert_sanitized=True)
         sanitize_service_name(service, assert_sanitized=True)
 
@@ -521,7 +521,7 @@ class RPCConfirmationWindow:
 async def confirm_rpc(
     entries_info, source, service, argument, targets_list, target=None
 ):
-    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     window = RPCConfirmationWindow(
         entries_info, source, service, argument, targets_list, target
     )
@@ -597,7 +597,7 @@ class PolicyAgent(SocketService):
         return ""
 
     def notify(self, resolution, service, argument, source, target):
-        # pylint: disable=too-many-arguments
+        # pylint: disable=too-many-arguments,too-many-positional-arguments
         if argument == "+":
             rpc = service
         else:

@@ -327,6 +327,7 @@ async def handle_request(
     intended_target: str,
     service_and_arg: str,
     log,
+    *,
     just_evaluate: bool = False,
     assume_yes_for_ask: bool = False,
     allow_resolution_type: Optional[type]=None,

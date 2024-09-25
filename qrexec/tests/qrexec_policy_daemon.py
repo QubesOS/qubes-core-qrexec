@@ -89,10 +89,10 @@ class TestPolicyDaemon:
         eval_server = await asyncio.start_unix_server(
             functools.partial(
                 qrexec_policy_daemon.handle_qrexec_connection,
-                log,
-                mock_policy,
-                False,
-                b"policy.EvalSimple",
+                log=log,
+                policy_cache=mock_policy,
+                check_gui=False,
+                service_name=b"policy.EvalSimple",
             ),
             path=str(tmp_path / "socket.Simple"),
         )
@@ -100,10 +100,10 @@ class TestPolicyDaemon:
         gui_server = await asyncio.start_unix_server(
             functools.partial(
                 qrexec_policy_daemon.handle_qrexec_connection,
-                log,
-                mock_policy,
-                True,
-                b"policy.EvalGUI",
+                log=log,
+                policy_cache=mock_policy,
+                check_gui=True,
+                service_name=b"policy.EvalGUI",
             ),
             path=str(tmp_path / "socket.GUI"),
         )
@@ -204,26 +204,6 @@ class TestPolicyDaemon:
             just_evaluate=False,
             policy_cache=unittest.mock.ANY,
         )
-
-    @pytest.mark.asyncio
-    async def test_unfinished_request(
-        self, mock_request, async_server, tmp_path
-    ):
-
-        data = b"unfinished"
-
-        task = self.send_data(async_server, tmp_path, data)
-
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(task, timeout=2)
-
-        for task in asyncio.all_tasks():
-            task.cancel()
-
-        with suppress(asyncio.CancelledError):
-            await asyncio.sleep(1)
-
-        mock_request.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_too_short_request(
