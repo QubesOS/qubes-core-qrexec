@@ -116,15 +116,15 @@ _Noreturn static void usage(const char *argv0, int status) {
             "usage: %s [options] target_vmname program_ident [local_program [local program arguments]]\n",
             argv0);
     fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -h, --help - print this message\n");
     fprintf(stderr, "  --buffer-size=BUFFER_SIZE - minimum vchan buffer size (default: 64k)\n");
     fprintf(stderr, "  -t, --filter-escape-chars-stdout - filter non-ASCII and control characters on stdout (default if stdout is a terminal)\n");
     fprintf(stderr, "  -T, --filter-escape-chars-stderr - filter non-ASCII and control characters on stderr (default if stderr is a terminal)\n");
     fprintf(stderr, "  --no-filter-escape-chars-stdout - opposite to --filter-escape-chars-stdout\n");
     fprintf(stderr, "  --no-filter-escape-chars-stderr - opposite to --filter-escape-chars-stderr\n");
-    fprintf(stderr, "  --agent-socket=PATH - path to connect to, default: %s\n",
-            QREXEC_AGENT_TRIGGER_PATH);
-    fprintf(stderr, "  -h, --help - print this message\n");
+    fprintf(stderr, "  --agent-socket=PATH - path to connect to, default: %s\n", QREXEC_AGENT_TRIGGER_PATH);
     fprintf(stderr, "  -p PREFIX-DATA, --prefix-data=PREFIX-DATA - send the given data before the provided stdin (can only be used once)\n");
+    fprintf(stderr, "  --use-stdin-socket - use fd 0 (which must be socket) for both stdin and stdout\n");
     exit(status);
 }
 
