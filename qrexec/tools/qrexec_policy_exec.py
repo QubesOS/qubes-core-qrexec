@@ -27,12 +27,13 @@ import asyncio
 import subprocess
 from typing import Optional, List, Union, Dict, Type
 
-from .. import DEFAULT_POLICY, QREXEC_CLIENT, POLICYPATH
+from .. import DEFAULT_POLICY, QREXEC_CLIENT, POLICYPATH, RUNTIME_POLICY_PATH
 from .. import exc
 from .. import utils
 from ..policy import parser
 from ..policy.utils import PolicyCache
 from ..server import call_socket_service
+from ..utils import FullSystemInfo
 
 
 def create_default_policy(service_name):
@@ -222,8 +223,9 @@ argparser.add_argument(
 argparser.add_argument(
     "--path",
     type=pathlib.Path,
-    default=POLICYPATH,
+    default=[RUNTIME_POLICY_PATH, POLICYPATH],
     help="Use alternative policy path",
+    action='append',
 )
 argparser.add_argument(
     "args",
@@ -233,6 +235,8 @@ argparser.add_argument(
 # pylint: disable=too-many-locals
 def get_result(args: Optional[List[str]]) -> Union[str, int]:
     parsed_args = argparser.parse_args(args)
+    if len(parsed_args.path) > 2:
+        parsed_args.path = args.path[2:]
 
     log = logging.getLogger("policy")
     log.setLevel(logging.INFO)
@@ -326,8 +330,8 @@ async def handle_request(
     just_evaluate: bool = False,
     assume_yes_for_ask: bool = False,
     allow_resolution_type: Optional[type]=None,
-    policy_cache=None,
-    system_info=None,
+    policy_cache: Optional[PolicyCache]=None,
+    system_info: Optional[FullSystemInfo]=None,
 ) -> str:
     # Add source domain information, required by qrexec-client for establishing
     # connection
@@ -345,10 +349,8 @@ async def handle_request(
         service, argument = service_and_arg, "+"
 
     try:
-        if policy_cache:
-            policy = policy_cache.get_policy()
-        else:
-            policy = parser.FilePolicy(policy_path=POLICYPATH)
+        assert policy_cache is not None
+        policy = policy_cache.get_policy()
 
         allow_resolution_class: Type[parser.AllowResolution]
         if allow_resolution_type is None:
