@@ -723,6 +723,7 @@ class AskResolution(AbstractResolution):
     def __init__(self,
                  rule: "Rule",
                  request: "Request",
+                 *,
                  # targets for the user to choose from
                  targets_for_ask: Sequence[str],
                  # default target, or None
@@ -913,7 +914,7 @@ class ActionType(metaclass=abc.ABCMeta):
 
 class Deny(ActionType):
     # pylint: disable=missing-docstring
-    def __init__(self, rule: "Rule", notify: Optional[bool]=None):
+    def __init__(self, rule: "Rule", *, notify: Optional[bool]=None):
         super().__init__(rule)
         self.notify = True if notify is None else notify
 
@@ -950,6 +951,7 @@ class Allow(ActionType):
     def __init__(
         self,
         rule: "Rule",
+        *,
         target: Optional[str]=None,
         user: Optional[str] = None,
         notify: bool = False,
@@ -1033,6 +1035,7 @@ class Ask(ActionType):
     def __init__(
         self,
         rule: "Rule",
+        *,
         target: Optional[str]=None,
         default_target: Optional[str]=None,
         user: Optional[str] = None,
@@ -1139,7 +1142,7 @@ class Rule:
     :py:meth:`from_line_service()`.
     """
 
-    # pylint: disable=too-many-instance-attributes
+    # pylint: disable=too-many-instance-attributes,too-many-positional-arguments
 
     action: Union[Allow, Deny, Ask]
     def __init__(
