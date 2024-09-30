@@ -690,7 +690,8 @@ class AllowResolution(AbstractResolution):
 
     async def execute(self) -> str:
         """Return the allowed action"""
-        request, target = self.request, self.target
+        user, request, target = self.user or 'DEFAULT', self.request, self.target
+        requested_target = request.target
         assert target is not None
         assert isinstance(self.autostart,bool)
 
@@ -698,12 +699,17 @@ class AllowResolution(AbstractResolution):
         if request.source == target:
             raise AccessDenied("loopback qrexec connection not supported")
 
+        # XXX disallow this in parsing in R5.0
+        colon_index = user.find(":")
+        if colon_index != -1 and user[colon_index:] != ":nogui":
+            raise AccessDenied("colon in username not supported")
+
         return f"""\
 user={self.user or 'DEFAULT'}
 result=allow
 target={self.target}
 autostart={self.autostart}
-requested_target={self.request.target}"""
+requested_target={requested_target}"""
 
 class AskResolution(AbstractResolution):
     """Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
