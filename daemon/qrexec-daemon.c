@@ -1569,6 +1569,7 @@ static _Noreturn void usage(const char *argv0)
     fprintf(stderr, "  -p, --policy-program=PATH - program to execute to check policy, default: %s\n",
             QREXEC_POLICY_PROGRAM);
     fprintf(stderr, "  -D, --direct - run directly, don't daemonize, log to stderr\n");
+    fprintf(stderr, "  -u, --uuid=UUID - domain UUID, mandatory\n");
     exit(1);
 }
 
@@ -1615,6 +1616,10 @@ int main(int argc, char **argv)
         }
     }
     if (argc - optind < 2 || argc - optind > 3) {
+        usage(argv[0]);
+    }
+    if (!remote_domain_uuid) {
+        fprintf(stderr, "Domain UUID option missing!\n");
         usage(argv[0]);
     }
     remote_domain_id = atoi(argv[optind]);
