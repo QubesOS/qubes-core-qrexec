@@ -1,3 +1,38 @@
+qubes-core-qrexec (4.3.0-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * daemon: restore SIGTERM default handler in child process
+
+  [ Frédéric Pierret (fepitre) ]
+  * tests: fix POLICY_PROGRAM and update documentation
+
+  [ Demi Marie Obenour ]
+  * Support additional policy directories
+  * Use fully-qualified exception names in .pylintrc
+
+  [ Marek Marczykowski-Górecki ]
+  * daemon: log a bit more info on errors
+
+  [ Frédéric Pierret (fepitre) ]
+  * qrexec-client-vm: fix missing option in usage and reorder it
+
+  [ Marek Marczykowski-Górecki ]
+  * pylint: deal with too-many-positional-arguments
+  * Remove unused test
+
+  [ Ali Mirjamali ]
+  * Provide clear error on invalid policy file name
+
+  [ Demi Marie Obenour ]
+  * Implement UUID support in qrexec
+
+  [ Marek Marczykowski-Górecki ]
+  * daemon: document --uuid and require it to start
+  * rpm: adjust version constraint for UUID identification
+  * ci: switch to R4.3
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Thu, 10 Oct 2024 00:57:37 +0200
+
 qubes-core-qrexec (4.2.22-1) unstable; urgency=medium
 
   [ Piotr Bartman-Szwarc ]
