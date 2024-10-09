@@ -48,8 +48,8 @@ Requires:   qubes-core-qrexec = %{version}-%{release}
 # but not forwards compatible (old library does not work with new programs)
 Requires:   qubes-core-qrexec-libs >= %{version}-%{release}
 
-# changed qubesd socket protocol
-Conflicts:  qubes-core-dom0 < 4.1.12
+# required --uuid option
+Conflicts:  qubes-core-dom0 < 4.3.9
 Conflicts:  qubes-core-dom0-linux < 4.0.9999
 
 Source0: qubes-core-qrexec-%{version}.tar.gz
