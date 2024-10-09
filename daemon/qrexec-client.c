@@ -62,13 +62,16 @@ static void set_remote_domain(const char *src_domain_name) {
 }
 
 /* called from do_fork_exec */
-static _Noreturn void do_exec(const char *prog, const char *username __attribute__((unused)))
+static _Noreturn void do_exec(const char *prog,
+                              const char *cmdline,
+                              const char *username __attribute__((unused)))
 {
-    /* avoid calling qubes-rpc-multiplexer through shell */
-    exec_qubes_rpc_if_requested(prog, environ);
+    /* avoid calling RPC service through shell */
+    if (prog)
+        exec_qubes_rpc(prog, cmdline, environ);
 
-    /* if above haven't executed qubes-rpc-multiplexer, pass it to shell */
-    execl("/bin/bash", "bash", "-c", prog, NULL);
+    /* if above haven't executed RPC service, pass it to shell */
+    execl("/bin/bash", "bash", "-c", cmdline, NULL);
     PERROR("exec bash");
     exit(1);
 }
