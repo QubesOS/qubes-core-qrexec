@@ -259,7 +259,7 @@ int main(int argc, char **argv)
         usage(argv[0]);
     }
 
-    if (strcmp(domname, "dom0") == 0 || strcmp(domname, "@adminvm") == 0) {
+    if (target_refers_to_dom0(domname)) {
         if (request_id == NULL) {
             fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
             usage(argv[0]);
@@ -278,10 +278,11 @@ int main(int argc, char **argv)
                            exit_with_code);
     } else {
         if (request_id) {
+            bool const use_uuid = strncmp(domname, "uuid:", 5) == 0;
             rc = qrexec_execute_vm(domname, false, src_domain_id,
                                    remote_cmdline, strlen(remote_cmdline) + 1,
                                    request_id, just_exec,
-                                   wait_connection_end) ? 0 : 137;
+                                   wait_connection_end, use_uuid) ? 0 : 137;
         } else {
             s = connect_unix_socket(domname);
             if (!negotiate_connection_params(s,

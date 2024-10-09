@@ -48,7 +48,7 @@ from typing import (
 )
 
 from .. import POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX, RUNTIME_POLICY_PATH
-from ..utils import FullSystemInfo
+from ..utils import FullSystemInfo, SystemInfo, uuid_to_name
 from .. import exc
 from ..exc import (
     AccessDenied,
@@ -208,6 +208,20 @@ class VMTokenMeta(abc.ABCMeta):
         if "PREFIX" in dict_:
             cls.prefixes[dict_["PREFIX"]] = cls # type: ignore
 
+def match_strings(info: SystemInfo, self: str, other: str) -> bool:
+    if self.startswith("uuid:"):
+        if other.startswith("uuid:"):
+            return self == other
+        try:
+            return self[5:] == info[str(other)]["uuid"]
+        except KeyError:
+            return False
+    if other.startswith("uuid:"):
+        try:
+            return other[5:] == info[str(self)]["uuid"]
+        except KeyError:
+            return False
+    return self == other
 
 class VMToken(str, metaclass=VMTokenMeta):
     """A domain specification
@@ -235,11 +249,11 @@ class VMToken(str, metaclass=VMTokenMeta):
         orig_token = token
 
         # first, adjust some aliases
-        if token == "dom0":
-            # TODO: log a warning in Qubes 4.1
+        if token in {"dom0", "uuid:00000000-0000-0000-0000-000000000000"}:
+            # TODO: log a warning in Qubes 4.3
             token = "@adminvm"
 
-        # if user specified just qube name, use it directly
+        # if user specified just qube name or UUID, use it directly
         if not (token.startswith("@") or token == "*"):
             return super().__new__(cls, token)
 
@@ -300,14 +314,16 @@ class VMToken(str, metaclass=VMTokenMeta):
     # This replaces is_match() and is_match_single().
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional["VMToken"]=None
     ) -> bool:
         """Check if this token matches opposite token"""
-        # pylint: disable=unused-argument
-        return self == other
+        # pylint: disable=unused-argument,too-many-return-statements
+        if self == "@adminvm":
+            return other == "@adminvm"
+        return match_strings(system_info["domains"], self, other)
 
     def is_special_value(self) -> bool:
         """Check if the token specification is special (keyword) value"""
@@ -339,9 +355,9 @@ class _BaseTarget(VMToken):
 
         This is used as part of :py:meth:`Policy.collect_targets_for_ask()`.
         """
-        if self in system_info["domains"]:
-            yield IntendedTarget(self)
-
+        info = system_info["domains"]
+        if self in info:
+            yield IntendedTarget(uuid_to_name(info, self))
 
 class Target(_BaseTarget):
     # pylint: disable=missing-docstring
@@ -365,7 +381,7 @@ class Redirect(_BaseTarget):
 # this method (with overloads in subclasses) was verify_target_value
 class IntendedTarget(VMToken):
     # pylint: disable=missing-docstring
-    def verify(self, *, system_info: FullSystemInfo) -> VMToken:
+    def verify(self, *, system_info: FullSystemInfo) -> Optional[VMToken]:
         """Check if given value names valid target
 
         This function check if given value is not only syntactically correct,
@@ -410,7 +426,7 @@ class WildcardVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -419,6 +435,8 @@ class WildcardVM(Source, Target):
 
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[VMToken]:
         for name, domain in system_info["domains"].items():
+            if name.startswith("uuid:"):
+                continue
             yield IntendedTarget(name)
             if domain["template_for_dispvms"]:
                 yield DispVMTemplate("@dispvm:" + name)
@@ -443,7 +461,7 @@ class AnyVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -452,6 +470,8 @@ class AnyVM(Source, Target):
 
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[VMToken]:
         for name, domain in system_info["domains"].items():
+            if name.startswith("uuid:"):
+                continue
             if domain["type"] != "AdminVM":
                 yield IntendedTarget(name)
             if domain["template_for_dispvms"]:
@@ -476,19 +496,18 @@ class TypeVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
     ) -> bool:
-        _system_info = system_info["domains"]
-        return (
-            other in _system_info
-            and self.value == _system_info[other]["type"]
-        )
+        info = system_info["domains"]
+        return (other in info and self.value == info[other]["type"])
 
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[IntendedTarget]:
         for name, domain in system_info["domains"].items():
+            if name.startswith("uuid:"):
+                continue
             if domain["type"] == self.value:
                 yield IntendedTarget(name)
 
@@ -499,19 +518,18 @@ class TagVM(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
     ) -> bool:
-        _system_info = system_info["domains"]
-        return (
-            other in _system_info
-            and self.value in _system_info[other]["tags"]
-        )
+        info = system_info["domains"]
+        return (other in info and self.value in info[other]["tags"])
 
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[IntendedTarget]:
         for name, domain in system_info["domains"].items():
+            if name.startswith("uuid:"):
+                continue
             if self.value in domain["tags"]:
                 yield IntendedTarget(name)
 
@@ -522,7 +540,7 @@ class DispVM(Target, Redirect, IntendedTarget):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -556,20 +574,24 @@ class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
     ) -> bool:
+        assert self.startswith("@dispvm:"), f"missing prefix in {self!r}"
         if isinstance(other, DispVM) and source is not None:
-            return self == other.get_dispvm_template(
+            return match_strings(system_info["domains"], self, other.get_dispvm_template(
                 source, system_info=system_info
-            )
-        return self == other
+            ))
+        if not isinstance(other, DispVMTemplate):
+            return False # not a disposable VM template
+        return match_strings(system_info["domains"], self[8:], other[8:])
 
     def expand(self, *, system_info: FullSystemInfo) -> Iterable["DispVMTemplate"]:
-        if system_info["domains"][self.value]["template_for_dispvms"]:
-            yield self
+        info = system_info["domains"]
+        if info[self.value]["template_for_dispvms"]:
+            yield uuid_to_name(info, self)
         # else: log a warning?
 
     def verify(self, *, system_info: FullSystemInfo) -> "DispVMTemplate":
@@ -590,7 +612,7 @@ class DispVMTag(Source, Target):
 
     def match(
         self,
-        other: Optional[str],
+        other: str,
         *,
         system_info: FullSystemInfo,
         source: Optional[VMToken]=None
@@ -614,6 +636,8 @@ class DispVMTag(Source, Target):
 
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[VMToken]:
         for name, domain in system_info["domains"].items():
+            if name.startswith("uuid:"):
+                continue
             if self.value in domain["tags"] and domain["template_for_dispvms"]:
                 yield DispVMTemplate("@dispvm:" + name)
 
@@ -698,12 +722,30 @@ class AllowResolution(AbstractResolution):
         if request.source == target:
             raise AccessDenied("loopback qrexec connection not supported")
 
+        if target in ("@adminvm", "dom0", "uuid:00000000-0000-0000-0000-000000000000"):
+            return f"""\
+user={self.user or 'DEFAULT'}
+result=allow
+target=@adminvm
+autostart={self.autostart}
+requested_target={request.target}"""
+        if target.startswith("@dispvm:"):
+            target_info = request.system_info["domains"][target[8:]]
+            return f"""\
+user={self.user or 'DEFAULT'}
+result=allow
+target={self.target}
+target_uuid=@dispvm:uuid:{target_info['uuid']}
+autostart={self.autostart}
+requested_target={request.target}"""
+        target_info = request.system_info["domains"][target]
         return f"""\
 user={self.user or 'DEFAULT'}
 result=allow
 target={self.target}
+target_uuid=uuid:{target_info['uuid']}
 autostart={self.autostart}
-requested_target={self.request.target}"""
+requested_target={request.target}"""
 
 class AskResolution(AbstractResolution):
     """Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
@@ -1645,6 +1687,12 @@ class AbstractPolicy(AbstractParser):
         can also contains @dispvm like keywords.
         """
         targets: Set[str] = set()
+        info: SystemInfo = request.system_info["domains"]
+        source = request.source
+        if source.startswith("uuid:"):
+            source_uuid, source_name = source, info[source]["name"]
+        else:
+            source_uuid, source_name = "uuid:" + info[source]["uuid"], source
 
         # iterate over rules in reversed order to easier handle 'deny'
         # actions - simply remove matching domains from allowed set
@@ -1654,10 +1702,19 @@ class AbstractPolicy(AbstractParser):
                 rule_target = (
                     getattr(rule.action, "target", None) or rule.target
                 )
-                expansion = set(
-                    rule_target.expand(system_info=request.system_info)
-                )
-
+                expansion = set()
+                for potential_target in rule_target.expand(
+                        system_info=request.system_info):
+                    try:
+                        # The policy agent cannot handle UUIDs (and rightly so,
+                        # those are meaningless to humans). Convert them to names.
+                        # VM names can be reused, but in practice, this is unlikely
+                        # to happen except by user request or DispVM name reuse.
+                        # The latter will not happen for a week and so is unlikely
+                        # to confuse humans.
+                        expansion.add(uuid_to_name(info, potential_target))
+                    except KeyError:
+                        continue
                 if isinstance(rule.action, Action.deny.value):
                     targets.difference_update(expansion)
                 else:
@@ -1667,7 +1724,7 @@ class AbstractPolicy(AbstractParser):
         if "@dispvm" in targets:
             targets.remove("@dispvm")
             dispvm = DispVM("@dispvm").get_dispvm_template(
-                request.source, system_info=request.system_info
+                source, system_info=request.system_info
             )
             if dispvm is not None:
                 targets.add(dispvm)
@@ -1678,8 +1735,10 @@ class AbstractPolicy(AbstractParser):
             targets.add("dom0")
 
         # XXX remove when #951 gets fixed
-        if request.source in targets:
-            targets.remove(request.source)
+        if source_name in targets:
+            targets.remove(source_name)
+        if source_uuid in targets:
+            targets.remove(source_uuid)
 
         return targets
 

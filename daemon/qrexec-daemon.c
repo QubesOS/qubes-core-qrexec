@@ -20,6 +20,7 @@
  */
 
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/syscall.h>
@@ -135,24 +136,44 @@ static
 #endif
 int protocol_version;
 
-static char *remote_domain_name;	// guess what
+static const char *remote_domain_name;	// guess what
+static const char *remote_domain_uuid;
 static int remote_domain_id;
+
+static void unlink_or_exit(const char *path)
+{
+    int v = unlink(path);
+    if (v != 0 && !(v == -1 && errno == ENOENT))
+        err(1, "unlink(%s)", path);
+}
+
+static char __attribute__((format(printf, 1, 2))) *xasprintf(const char *fmt, ...)
+{
+    va_list x;
+    char *res;
+    va_start(x, fmt);
+    int r = vasprintf(&res, fmt, x);
+    va_end(x);
+    if (r < 0)
+        abort();
+    return res;
+}
 
 static void unlink_qrexec_socket(void)
 {
-    char *socket_address;
-    char *link_to_socket_name;
+    char *socket_name;
+    const char *p[2] = {remote_domain_name, remote_domain_uuid};
+    int i;
 
-    if (asprintf(&socket_address, "%s/qrexec.%d", socket_dir, remote_domain_id) < 0)
-        err(1, "asprintf");
-    if (unlink(socket_address) != 0 && errno != ENOENT)
-        err(1, "unlink(%s)", socket_address);
-    free(socket_address);
-    if (asprintf(&link_to_socket_name, "%s/qrexec.%s", socket_dir, remote_domain_name) < 0)
-        err(1, "asprintf");
-    if (unlink(link_to_socket_name) != 0 && errno != ENOENT)
-        err(1, "unlink(%s)", link_to_socket_name);
-    free(link_to_socket_name);
+    for (i = 0; i < 2; ++i) {
+        char *link_to_socket_name = xasprintf("qrexec.%s%s", i > 0 ? "uuid:" : "", p[i]);
+        unlink_or_exit(link_to_socket_name);
+        free(link_to_socket_name);
+    }
+    if (asprintf(&socket_name, "qrexec.%d", remote_domain_id) < 0)
+        abort();
+    unlink_or_exit(socket_name);
+    free(socket_name);
 }
 
 static void handle_vchan_error(const char *op)
@@ -161,27 +182,25 @@ static void handle_vchan_error(const char *op)
     exit(1);
 }
 
-
-static int create_qrexec_socket(int domid, const char *domname)
+static int create_qrexec_socket(int domid, const char *domname, const char *domuuid)
 {
-    char socket_address[40];
-    char *link_to_socket_name;
-
-    snprintf(socket_address, sizeof(socket_address),
-             "%s/qrexec.%d", socket_dir, domid);
-    if (asprintf(&link_to_socket_name,
-                 "%s/qrexec.%s", socket_dir, domname) < 0)
-        err(1, "asprintf");
-    unlink(link_to_socket_name);
-
     /* When running as root, make the socket accessible; perms on /var/run/qubes still apply */
     umask(0);
-    if (symlink(socket_address, link_to_socket_name)) {
-        PERROR("symlink(%s,%s)", socket_address, link_to_socket_name);
+
+    const char *p[2] = { domuuid, domname };
+    char *socket_address = xasprintf("qrexec.%d", domid);
+    for (int i = 0; i < 2; ++i) {
+        if (p[i] == NULL)
+            continue;
+        char *link_to_socket_name = xasprintf("qrexec.%s%s", i ? "" : "uuid:", p[i]);
+        unlink_or_exit(link_to_socket_name);
+        if (symlink(socket_address, link_to_socket_name)) {
+            PERROR("symlink(%s,%s)", socket_address, link_to_socket_name);
+        }
+        free(link_to_socket_name);
     }
     int fd = get_server_socket(socket_address);
     umask(0077);
-    free(link_to_socket_name);
     return fd;
 }
 
@@ -407,7 +426,7 @@ static void init(int xid, bool opt_direct)
 
     atexit(unlink_qrexec_socket);
     qrexec_daemon_unix_socket_fd =
-        create_qrexec_socket(xid, remote_domain_name);
+        create_qrexec_socket(xid, remote_domain_name, remote_domain_uuid);
 
     struct sigaction sigchld_action = {
         .sa_handler = signal_handler,
@@ -856,11 +875,12 @@ static int parse_policy_response(
     size_t result_bytes,
     bool daemon,
     char **user,
+    char **target_uuid,
     char **target,
     char **requested_target,
     int *autostart
 ) {
-    *user = *target = *requested_target = NULL;
+    *user = *target_uuid = *target = *requested_target = NULL;
     int result = *autostart = -1;
     const char *const msg = daemon ? "qrexec-policy-daemon" : "qrexec-policy-exec";
     // At least one byte must be returned
@@ -904,6 +924,12 @@ static int parse_policy_response(
                 goto bad_response;
             *target = strdup(current_response + (sizeof("target=") - 1));
             if (*target == NULL)
+                abort();
+        } else if (!strncmp(current_response, "target_uuid=", sizeof("target_uuid=") - 1)) {
+            if (*target_uuid != NULL)
+                goto bad_response;
+            *target_uuid = strdup(current_response + 12);
+            if (*target_uuid == NULL)
                 abort();
         } else if (!strncmp(current_response, "autostart=", sizeof("autostart=") - 1)) {
             current_response += sizeof("autostart=") - 1;
@@ -1001,6 +1027,7 @@ static enum policy_response connect_daemon_socket(
         const char *target_domain,
         const char *service_name,
         char **user,
+        char **target_uuid,
         char **target,
         char **requested_target,
         int *autostart
@@ -1028,7 +1055,7 @@ static enum policy_response connect_daemon_socket(
         size_t result_bytes;
         // this closes the socket
         char *result = qubes_read_all_to_malloc(daemon_socket, 64, 4096, &result_bytes);
-        int policy_result = parse_policy_response(result, result_bytes, true, user, target, requested_target, autostart);
+        int policy_result = parse_policy_response(result, result_bytes, true, user, target_uuid, target, requested_target, autostart);
         if (policy_result != RESPONSE_MALFORMED) {
             // This leaks 'result', but as the code execs later anyway this isn't a problem.
             // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
@@ -1099,7 +1126,7 @@ static enum policy_response connect_daemon_socket(
             // This leaks 'result', but as the code execs later anyway this isn't a problem.
             // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
             // the same buffer.
-            return parse_policy_response(result, result_bytes, true, user, target, requested_target, autostart);
+            return parse_policy_response(result, result_bytes, true, user, target_uuid, target, requested_target, autostart);
     }
 }
 
@@ -1132,11 +1159,11 @@ _Noreturn static void handle_execute_service_child(
         for (i = 3; i < MAX_FDS; i++)
             close(i);
 
-    char *user, *target, *requested_target;
-    int autostart;
+    char *user = NULL, *target = NULL, *requested_target = NULL, *target_uuid = NULL;
+    int autostart = -1;
     int policy_response =
         connect_daemon_socket(remote_domain_name, target_domain, service_name,
-                              &user, &target, &requested_target, &autostart);
+                              &user, &target_uuid, &target, &requested_target, &autostart);
 
     if (policy_response != RESPONSE_ALLOW)
         daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
@@ -1152,8 +1179,7 @@ _Noreturn static void handle_execute_service_child(
     const char *const trailer = strchr(service_name, '+') ? "" : "+";
 
     /* Check if the target is dom0, which requires special handling. */
-    bool target_is_dom0 = strcmp(target, "@adminvm") == 0 ||
-                          strcmp(target, "dom0") == 0;
+    bool target_is_dom0 = target_refers_to_dom0(target);
     if (target_is_dom0) {
         char *type;
         bool target_is_keyword = target_domain[0] == '@';
@@ -1178,6 +1204,8 @@ _Noreturn static void handle_execute_service_child(
                            5 /* 5 second timeout */,
                            false /* return 0 not remote status code */));
     } else {
+        bool const use_uuid = target_uuid != NULL;
+        const char *const selected_target = use_uuid ? target_uuid : target;
         int service_length = asprintf(&cmd, "%s:QUBESRPC %s%s %s",
                                       user,
                                       service_name,
@@ -1185,10 +1213,12 @@ _Noreturn static void handle_execute_service_child(
                                       remote_domain_name);
         if (service_length < 0)
             daemon__exit(QREXEC_EXIT_PROBLEM);
-        daemon__exit(qrexec_execute_vm(target, autostart, remote_domain_id,
+        daemon__exit(qrexec_execute_vm(selected_target, autostart,
+                                       remote_domain_id,
                                        cmd,
                                        (size_t)service_length + 1,
-                                       request_id->ident, false, false)
+                                       request_id->ident, false, false,
+                                       use_uuid)
                 ? 0 : QREXEC_EXIT_PROBLEM);
     }
 }
@@ -1514,7 +1544,7 @@ static int handle_agent_restart(int xid) {
         err(1, "sigaction");
 
     qrexec_daemon_unix_socket_fd =
-        create_qrexec_socket(xid, remote_domain_name);
+        create_qrexec_socket(xid, remote_domain_name, remote_domain_uuid);
     return 0;
 }
 
@@ -1524,6 +1554,7 @@ static struct option longopts[] = {
     { "socket-dir", required_argument, 0, 'd' + 128 },
     { "policy-program", required_argument, 0, 'p' },
     { "direct", no_argument, 0, 'D' },
+    { "uuid", required_argument, 0, 'u' },
     { NULL, 0, 0, 0 },
 };
 
@@ -1559,7 +1590,7 @@ int main(int argc, char **argv)
 
     setup_logging("qrexec-daemon");
 
-    while ((opt=getopt_long(argc, argv, "hqp:D", longopts, NULL)) != -1) {
+    while ((opt=getopt_long(argc, argv, "hqp:Du:", longopts, NULL)) != -1) {
         switch (opt) {
             case 'q':
                 opt_quiet = 1;
@@ -1574,6 +1605,9 @@ int main(int argc, char **argv)
                 break;
             case 'D':
                 opt_direct = 1;
+                break;
+            case 'u':
+                remote_domain_uuid = optarg;
                 break;
             case 'h':
             default: /* '?' */
