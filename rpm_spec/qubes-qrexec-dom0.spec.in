@@ -42,14 +42,13 @@ BuildRequires:	systemd-devel
 
 Requires:   python3
 Requires:   python3-inotify
-Requires:   qubes-core-dom0 >= 4.1.9
+# required --uuid option
+Requires:   qubes-core-dom0 >= 4.3.9
 Requires:   qubes-core-qrexec = %{version}-%{release}
 # The library is backwards compatible (new library works with old programs)
 # but not forwards compatible (old library does not work with new programs)
 Requires:   qubes-core-qrexec-libs >= %{version}-%{release}
 
-# changed qubesd socket protocol
-Conflicts:  qubes-core-dom0 < 4.1.12
 Conflicts:  qubes-core-dom0-linux < 4.0.9999
 
 Source0: qubes-core-qrexec-%{version}.tar.gz
