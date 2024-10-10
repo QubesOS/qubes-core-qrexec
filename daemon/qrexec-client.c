@@ -85,9 +85,10 @@ static struct option longopts[] = {
     { NULL, 0, 0, 0 },
 };
 
-_Noreturn static void usage(const char *const name)
+_Noreturn static void usage(const char *const name, int status)
 {
-    fprintf(stderr,
+    FILE *stream = status ? stderr : stdout;
+    fprintf(stream,
             "usage: %s [options] -d domain_name ["
             "-l local_prog|"
             "-c request_id,src_domain_name,src_domain_id|"
@@ -104,7 +105,7 @@ _Noreturn static void usage(const char *const name)
             "  --socket-dir=PATH -  directory for qrexec socket, default: %s\n"
             "  --use-stdin-socket - use fd 0 (which must be socket) for both stdin and stdout\n",
             name ? name : "qrexec-client", QREXEC_DAEMON_SOCKET_DIR);
-    exit(1);
+    exit(status);
 }
 
 static int parse_int(const char *str, const char *msg) {
@@ -173,11 +174,6 @@ int main(int argc, char **argv)
     bool exit_with_code = true;
     int rc = QREXEC_EXIT_PROBLEM;
 
-    if (argc < 3) {
-        // certainly too few arguments
-        usage(argv[0]);
-    }
-
     setup_logging("qrexec-client");
 
     while ((opt = getopt_long(argc, argv, "hd:l:eEc:tTw:Wk", longopts, NULL)) != -1) {
@@ -197,7 +193,7 @@ int main(int argc, char **argv)
             case 'c':
                 if (request_id != NULL) {
                     warnx("ERROR: -c passed more than once");
-                    usage(argv[0]);
+                    usage(argv[0], 1);
                 }
                 parse_connect(optarg, &request_id, &src_domain_name, &src_domain_id);
                 break;
@@ -238,11 +234,11 @@ int main(int argc, char **argv)
                 break;
             case 'h':
             default:
-                usage(argv[0]);
+                usage(argv[0], 0);
         }
     }
     if (optind >= argc || !domname)
-        usage(argv[0]);
+        usage(argv[0], 1);
     remote_cmdline = argv[optind];
 
     signal(SIGPIPE, SIG_IGN);
@@ -251,18 +247,18 @@ int main(int argc, char **argv)
 
     if (just_exec + (request_id != NULL) + (local_cmdline != NULL) > 1) {
         fprintf(stderr, "ERROR: only one of -e, -l, -c can be specified\n");
-        usage(argv[0]);
+        usage(argv[0], 1);
     }
 
     if ((local_cmdline != NULL) && (local_stdin_fd != 1)) {
         fprintf(stderr, "ERROR: at most one of -l and --use-stdin-socket can be specified\n");
-        usage(argv[0]);
+        usage(argv[0], 1);
     }
 
     if (target_refers_to_dom0(domname)) {
         if (request_id == NULL) {
             fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
-            usage(argv[0]);
+            usage(argv[0], 1);
         }
         strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
         svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
