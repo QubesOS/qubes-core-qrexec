@@ -980,6 +980,7 @@ struct QrexecPolicyRequest {
 static void send_request_to_daemon(
         const int daemon_socket,
         const char *remote_domain_name,
+        const char *source_domain,
         const char *target_domain,
         const char *service_name)
 {
@@ -987,9 +988,11 @@ static void send_request_to_daemon(
     ssize_t bytes_sent = 0;
     int command_size = asprintf(&command,
             "source=%s\n"
+            "remote_source=%s\n"
             "intended_target=%s\n"
             "service_and_arg=%s\n\n",
             remote_domain_name,
+            source_domain,
             target_domain,
             service_name);
     if (command_size < 0) {
@@ -1024,6 +1027,7 @@ static _Noreturn void null_exit(void)
 
 static enum policy_response connect_daemon_socket(
         const char *remote_domain_name,
+        const char *source_domain,
         const char *target_domain,
         const char *service_name,
         char **user,
@@ -1050,6 +1054,7 @@ static enum policy_response connect_daemon_socket(
     if (connect_result == 0) {
         send_request_to_daemon(daemon_socket,
                                remote_domain_name,
+                               source_domain,
                                target_domain,
                                service_name);
         size_t result_bytes;
@@ -1145,6 +1150,7 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
 _Noreturn static void handle_execute_service_child(
         const int remote_domain_id,
         const char *remote_domain_name,
+        const char *source_domain,
         const char *target_domain,
         const char *service_name,
         const struct service_params *request_id) {
@@ -1161,10 +1167,9 @@ _Noreturn static void handle_execute_service_child(
 
     char *user = NULL, *target = NULL, *requested_target = NULL, *target_uuid = NULL;
     int autostart = -1;
-    int policy_response =
-        connect_daemon_socket(remote_domain_name, target_domain, service_name,
-                              &user, &target_uuid, &target, &requested_target, &autostart);
-
+    int policy_response = connect_daemon_socket(remote_domain_name,
+        source_domain, target_domain, service_name,
+        &user, &target_uuid, &target, &requested_target, &autostart);
     if (policy_response != RESPONSE_ALLOW)
         daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
 
@@ -1226,6 +1231,7 @@ _Noreturn static void handle_execute_service_child(
 static void handle_execute_service(
         const int remote_domain_id,
         const char *remote_domain_name,
+        const char *source_domain,
         const char *target_domain,
         const char *service_name,
         const struct service_params *request_id)
@@ -1251,7 +1257,7 @@ static void handle_execute_service(
             if (sigaction(SIGTERM, &sa, NULL))
                 LOG(WARNING, "Failed to restore SIGTERM handler: %d", errno);
             handle_execute_service_child(remote_domain_id, remote_domain_name,
-                                         target_domain, service_name, request_id);
+                source_domain, target_domain, service_name, request_id);
             abort();
         default:
             policy_pending[policy_pending_slot].pid = pid;
@@ -1310,6 +1316,22 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
             if (untrusted_header->len - sizeof(struct trigger_service_params3)
                     > MAX_SERVICE_NAME_LEN) {
                 LOG(ERROR, "agent sent too large MSG_TRIGGER_SERVICE3 packet");
+                exit(1);
+            }
+            break;
+        case MSG_TRIGGER_SERVICE4:
+            if (protocol_version < QREXEC_PROTOCOL_V4) {
+                LOG(ERROR, "agent sent (new) MSG_TRIGGER_SERVICE4 "
+                    "although it uses protocol %d", protocol_version);
+                exit(1);
+            }
+            if (untrusted_header->len <= sizeof(struct trigger_service_params4)) {
+                LOG(ERROR, "agent sent invalid MSG_TRIGGER_SERVICE4 packet");
+                exit(1);
+            }
+            if (untrusted_header->len - sizeof(struct trigger_service_params4)
+                    > MAX_SERVICE_NAME_LEN) {
+                LOG(ERROR, "agent sent too large MSG_TRIGGER_SERVICE4 packet");
                 exit(1);
             }
             break;
@@ -1418,6 +1440,7 @@ void handle_message_from_agent(void)
             /* sanitize end */
 
             handle_execute_service(remote_domain_id, remote_domain_name,
+                    NULL,
                     params.target_domain,
                     params.service_name,
                     &params.request_id);
@@ -1458,6 +1481,7 @@ void handle_message_from_agent(void)
             /* sanitize end */
 
             handle_execute_service(remote_domain_id, remote_domain_name,
+                    NULL,
                     params3->target_domain,
                     params3->service_name,
                     &params3->request_id);
@@ -1466,6 +1490,53 @@ void handle_message_from_agent(void)
 fail3:
             send_service_refused(vchan, &untrusted_params3->request_id);
             free(untrusted_params3);
+            return;
+        }
+        case MSG_TRIGGER_SERVICE4: {
+            struct trigger_service_params4 *untrusted_params4, *params4;
+
+            untrusted_params4 = malloc(hdr.len);
+            if (!untrusted_params4)
+                handle_vchan_error("malloc(service_name)");
+
+            if (libvchan_recv(vchan, untrusted_params4, hdr.len) != (int)hdr.len) {
+                free(untrusted_params4);
+                handle_vchan_error("recv params4(service_name)");
+            }
+            size_t const service_name_len = hdr.len - sizeof(*untrusted_params4) - 1;
+
+            /* sanitize start */
+            ENSURE_NULL_TERMINATED(untrusted_params4->source_domain);
+            ENSURE_NULL_TERMINATED(untrusted_params4->target_domain);
+            sanitize_name(untrusted_params4->source_domain, "@:");
+            sanitize_name(untrusted_params4->target_domain, "@:");
+            if (!validate_request_id(&untrusted_params4->request_id, "MSG_TRIGGER_SERVICE4"))
+                goto fail4;
+            if (untrusted_params4->service_name[service_name_len] != 0) {
+                LOG(ERROR, "Service name not NUL-terminated");
+                goto fail4;
+            }
+            size_t const nul_offset = strlen(untrusted_params4->service_name);
+            if (nul_offset != service_name_len) {
+                LOG(ERROR, "Service name contains NUL byte at offset %zu", nul_offset);
+                goto fail4;
+            }
+            if (!validate_service_name(untrusted_params4->service_name))
+                goto fail4;
+            params4 = untrusted_params4;
+            untrusted_params4 = NULL;
+            /* sanitize end */
+
+            handle_execute_service(remote_domain_id, remote_domain_name,
+                    params4->source_domain,
+                    params4->target_domain,
+                    params4->service_name,
+                    &params4->request_id);
+            free(params4);
+            return;
+fail4:
+            send_service_refused(vchan, &untrusted_params4->request_id);
+            free(untrusted_params4);
             return;
         }
         case MSG_CONNECTION_TERMINATED:
@@ -1544,7 +1615,7 @@ static int handle_agent_restart(int xid) {
         err(1, "sigaction");
 
     qrexec_daemon_unix_socket_fd =
-        create_qrexec_socket(xid, remote_domain_name, remote_domain_uuid);
+    create_qrexec_socket(xid, remote_domain_name, remote_domain_uuid);
     return 0;
 }
 
