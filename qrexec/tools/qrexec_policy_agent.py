@@ -190,10 +190,12 @@ class VMListModeler:
 
                 entry_box.set_completion(completion)
 
-                def qube_matching_function(completion: Gtk.EntryCompletion,
-                                           key: str,
-                                           iterator: Gtk.TreeIter,
-                                           user_data: object) -> bool:
+                def qube_matching_function(
+                    completion: Gtk.EntryCompletion,
+                    key: str,
+                    iterator: Gtk.TreeIter,
+                    user_data: object,
+                ) -> bool:
                     # pylint: disable=unused-argument
                     modelstr = completion.get_model()[iterator][1]
                     return key.lower() in modelstr.lower()
@@ -334,7 +336,8 @@ class FocusStealingHelper(GtkOneTimerHelper):
 class RPCConfirmationWindow:
     # pylint: disable=too-few-public-methods,too-many-instance-attributes
     _source_file_ref = importlib.resources.files("qrexec").joinpath(
-        os.path.join("glade", "RPCConfirmationWindow.glade"))
+        os.path.join("glade", "RPCConfirmationWindow.glade")
+    )
 
     _source_id = {
         "window": "RPCConfirmationWindow",
@@ -613,9 +616,7 @@ class PolicyAgent(SocketService):
         elif resolution == "deny":
             app_icon = "dialog-error"
             summary = "Denied: {service}"
-            body = (
-                "Denied <b>{rpc}</b> from <b>{source}</b> to <b>{target}</b>"
-            )
+            body = "Denied <b>{rpc}</b> from <b>{source}</b> to <b>{target}</b>"
         elif resolution == "fail":
             app_icon = "dialog-warning"
             summary = "Failed: {service}"

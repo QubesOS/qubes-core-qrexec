@@ -71,29 +71,19 @@ def parse_string_policy(line, included_path="", include_service=False):
             StringPolicy(
                 policy={
                     "__main__": "!include-service * * inc",
-                    "inc": line, included_path: ""
+                    "inc": line,
+                    included_path: "",
                 }
             )
         else:
-            StringPolicy(
-                policy={
-                    "__main__": line, included_path: ""
-                }
-            )
+            StringPolicy(policy={"__main__": line, included_path: ""})
     else:
         if include_service:
             StringPolicy(
-                policy={
-                    "__main__": "!include-service * * inc",
-                    "inc": line
-                }
+                policy={"__main__": "!include-service * * inc", "inc": line}
             )
         else:
-            StringPolicy(
-                policy={
-                    "__main__": line
-                }
-            )
+            StringPolicy(policy={"__main__": line})
 
 
 def parse_file(path, show=False, include_service=False):
@@ -115,8 +105,8 @@ def parse_file(path, show=False, include_service=False):
             continue
 
         throw_exception = False
-        exception_msg = ''
-        included_path = ''
+        exception_msg = ""
+        included_path = ""
         if line.startswith("!"):
             directive, *params = line.split()
 
@@ -139,9 +129,7 @@ def parse_file(path, show=False, include_service=False):
 
         try:
             if throw_exception:
-                raise PolicySyntaxError(
-                    path, lineno, exception_msg
-                )
+                raise PolicySyntaxError(path, lineno, exception_msg)
 
             parse_string_policy(line, included_path, include_service)
         except PolicySyntaxError as exc:
@@ -161,25 +149,36 @@ def main(args=None):
     Parse arguments.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--show-line", action="store_true",
-                        default=False,
-                        help="show the line that caused the error")
-    parser.add_argument("-i", "--include-service", action="store_true",
-                        default=False,
-                        help="lint a policy that is included by another file "
-                             "via !include-service. When this option is "
-                             "specified, normal policies cannot be verified")
-    parser.add_argument("file", metavar="FILE",
-                        help="set file to be read , use \"-\" to read from "
-                             "stdin",
-                        nargs="+")
+    parser.add_argument(
+        "-s",
+        "--show-line",
+        action="store_true",
+        default=False,
+        help="show the line that caused the error",
+    )
+    parser.add_argument(
+        "-i",
+        "--include-service",
+        action="store_true",
+        default=False,
+        help="lint a policy that is included by another file "
+        "via !include-service. When this option is "
+        "specified, normal policies cannot be verified",
+    )
+    parser.add_argument(
+        "file",
+        metavar="FILE",
+        help='set file to be read , use "-" to read from ' "stdin",
+        nargs="+",
+    )
     args = parser.parse_args(args)
 
     exit_code = 0
     for file in args.file:
         try:
-            parse_file(file, show=args.show_line,
-                       include_service=args.include_service)
+            parse_file(
+                file, show=args.show_line, include_service=args.include_service
+            )
         except PolicySyntaxError:
             exit_code = 1
 

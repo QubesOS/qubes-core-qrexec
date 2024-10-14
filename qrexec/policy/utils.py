@@ -26,7 +26,10 @@ from . import parser
 
 class PolicyCache:
     def __init__(
-        self, path=(RUNTIME_POLICY_PATH, POLICYPATH), use_legacy=True, lazy_load=False
+        self,
+        path=(RUNTIME_POLICY_PATH, POLICYPATH),
+        use_legacy=True,
+        lazy_load=False,
     ) -> None:
         self.paths = list(path)
         self.outdated = lazy_load
@@ -51,11 +54,11 @@ class PolicyCache:
 
         # pylint: disable=no-member
         mask = (
-            pyinotify.IN_CREATE |
-            pyinotify.IN_DELETE |
-            pyinotify.IN_MODIFY |
-            pyinotify.IN_MOVED_FROM |
-            pyinotify.IN_MOVED_TO
+            pyinotify.IN_CREATE
+            | pyinotify.IN_DELETE
+            | pyinotify.IN_MODIFY
+            | pyinotify.IN_MOVED_FROM
+            | pyinotify.IN_MOVED_TO
         )
 
         loop = asyncio.get_event_loop()
@@ -66,7 +69,9 @@ class PolicyCache:
 
         for path in self.paths:
             str_path = str(path)
-            if str_path not in self.default_policy_paths and os.path.exists(str_path):
+            if str_path not in self.default_policy_paths and os.path.exists(
+                str_path
+            ):
                 self.watches.append(
                     self.watch_manager.add_watch(
                         str_path, mask, rec=True, auto_add=True
@@ -77,7 +82,9 @@ class PolicyCache:
             if not os.path.exists(path):
                 continue
             self.watches.append(
-                self.watch_manager.add_watch(str(path), mask, rec=True, auto_add=True)
+                self.watch_manager.add_watch(
+                    str(path), mask, rec=True, auto_add=True
+                )
             )
 
     def cleanup(self):

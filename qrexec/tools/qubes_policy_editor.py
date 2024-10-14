@@ -42,8 +42,10 @@ def validate_name(name):
     """
     invalid_chars = set(name) - RPCNAME_ALLOWED_CHARSET
     if invalid_chars:
-        print("invalid character(s) in the file name: {!r}".format(
-            "".join(sorted(invalid_chars)))
+        print(
+            "invalid character(s) in the file name: {!r}".format(
+                "".join(sorted(invalid_chars))
+            )
         )
         sys.exit(1)
 
@@ -89,7 +91,7 @@ def manage_policy(name, is_include=False):
         tmpfile = tempfile.NamedTemporaryFile(suffix="_" + name)
 
     if file_exists:
-        with open(tmpfile.name, 'w', encoding="utf-8") as current_file:
+        with open(tmpfile.name, "w", encoding="utf-8") as current_file:
             current_file.write(original_content)
             current_file.close()
     else:
@@ -120,7 +122,7 @@ def get_reply(path, is_include=False):
     :param path: path or "-"
     :param is_include: Boolean
     """
-    print("What now? ", end='')
+    print("What now? ", end="")
     reply = str(input())
     if reply == "e":
         lint_policy(path, is_include=is_include)
@@ -156,9 +158,11 @@ def lint_policy(path, is_include=False):
             print("The linting program 'qubes-policy-lint' is not installed.")
             sys.exit(1)
         else:
-            print("Linting failed, do you want to:\n"
-                  "  (e)dit again\n"
-                  "  (q)uit without saving changes?")
+            print(
+                "Linting failed, do you want to:\n"
+                "  (e)dit again\n"
+                "  (q)uit without saving changes?"
+            )
             get_reply(path, is_include=is_include)
 
 
@@ -168,17 +172,20 @@ def main():
     """
     default_file = "30-user"
     parser = argparse.ArgumentParser()
-    parser.add_argument("file", metavar="[include/]FILE",
-                        default=default_file,
-                        help="set file to be edited. The '.policy' suffix "
-                             "must not be included. Will search for an "
-                             "editor by looking at $EDITOR, $VISUAL if "
-                             "previous entry is unset or 'vi' if previous "
-                             "entry is also unset. Defaults to the user file.",
-                        nargs="?")
+    parser.add_argument(
+        "file",
+        metavar="[include/]FILE",
+        default=default_file,
+        help="set file to be edited. The '.policy' suffix "
+        "must not be included. Will search for an "
+        "editor by looking at $EDITOR, $VISUAL if "
+        "previous entry is unset or 'vi' if previous "
+        "entry is also unset. Defaults to the user file.",
+        nargs="?",
+    )
     args = parser.parse_args()
 
-    if VERSION == "dom0" and os.getuid()!= 0:
+    if VERSION == "dom0" and os.getuid() != 0:
         print("You need to run as root in dom0")
         sys.exit(1)
 
@@ -191,6 +198,7 @@ def main():
 
     name = validate_name(name)
     manage_policy(name, is_include)
+
 
 if __name__ == "__main__":
     main()

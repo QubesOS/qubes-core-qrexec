@@ -22,6 +22,7 @@ import json
 import socket
 import subprocess
 from typing import Set, Optional, TypedDict, List, Dict, cast, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from typing import TypeAlias
 
@@ -53,8 +54,11 @@ def _sanitize_char(input_char: str, extra_allowed_characters: Set[str]) -> str:
 # See https://github.com/QubesOS/qubes-core-admin-linux/blob/
 #  4f0878ccbf8a95f8264b54d2b6f4dc433ca0793a/qrexec/qrexec-daemon.c#L627-L646
 #
-def _sanitize_name(input_string: str, extra_allowed_characters: Set[str],
-                   assert_sanitized: bool) -> str:
+def _sanitize_name(
+    input_string: str,
+    extra_allowed_characters: Set[str],
+    assert_sanitized: bool,
+) -> str:
     result = "".join(
         _sanitize_char(character, extra_allowed_characters)
         for character in input_string
@@ -67,16 +71,24 @@ def _sanitize_name(input_string: str, extra_allowed_characters: Set[str],
     return result
 
 
-def sanitize_domain_name(input_string: str, assert_sanitized:bool=False) -> str:
+def sanitize_domain_name(
+    input_string: str, assert_sanitized: bool = False
+) -> str:
     return _sanitize_name(input_string, set(), assert_sanitized)
 
 
-def sanitize_service_name(input_string:str, assert_sanitized:bool=False) -> str:
+def sanitize_service_name(
+    input_string: str, assert_sanitized: bool = False
+) -> str:
     return _sanitize_name(input_string, {"+"}, assert_sanitized)
 
 
-def qubesd_call(dest: str, method: str, arg: Optional[str]=None,
-                payload:Optional[bytes]=None) -> bytes:
+def qubesd_call(
+    dest: str,
+    method: str,
+    arg: Optional[str] = None,
+    payload: Optional[bytes] = None,
+) -> bytes:
     if method.startswith("internal."):
         socket_path = QUBESD_INTERNAL_SOCK
     else:
@@ -107,6 +119,7 @@ def qubesd_call(dest: str, method: str, arg: Optional[str]=None,
         raise QubesMgmtException(exc_type.decode("ascii"))
     raise AssertionError("invalid qubesd response: {!r}".format(return_data))
 
+
 class SystemInfoEntry(TypedDict):
     tags: List[str]
     type: str
@@ -118,10 +131,13 @@ class SystemInfoEntry(TypedDict):
     uuid: Optional[str]
     name: str
 
-SystemInfo: 'TypeAlias' = Dict[str, SystemInfoEntry]
+
+SystemInfo: "TypeAlias" = Dict[str, SystemInfoEntry]
+
 
 class FullSystemInfo(TypedDict):
     domains: SystemInfo
+
 
 def uuid_to_name(info: SystemInfo, uuid_or_name: str) -> str:
     if uuid_or_name.startswith("uuid:"):
@@ -129,6 +145,7 @@ def uuid_to_name(info: SystemInfo, uuid_or_name: str) -> str:
     if uuid_or_name.startswith("@dispvm:uuid:"):
         return "@dispvm:" + info[uuid_or_name[13:]]["name"]
     return uuid_or_name
+
 
 def get_system_info() -> FullSystemInfo:
     """Get system information
@@ -145,7 +162,9 @@ def get_system_info() -> FullSystemInfo:
     """
 
     system_info = qubesd_call("dom0", "internal.GetSystemInfo")
-    system_info_decoded = cast(FullSystemInfo, json.loads(system_info.decode("utf-8")))
+    system_info_decoded = cast(
+        FullSystemInfo, json.loads(system_info.decode("utf-8"))
+    )
     inner = system_info_decoded["domains"]
     for i, j in list(inner.items()):
         j["name"] = i

@@ -1,4 +1,6 @@
 include:
+  - file: /common.yml
+    project: QubesOS/qubes-continuous-integration
   - file: /r4.3/gitlab-base.yml
     project: QubesOS/qubes-continuous-integration
   - file: /r4.3/gitlab-host.yml
@@ -42,3 +44,9 @@ checks:fuzz:
   extends: .qrexec_checks
   script:
    - make -C fuzz test
+
+lint:
+  extends: .lint
+  variables:
+    SKIP_PYLINT: 1
+    DIR: .

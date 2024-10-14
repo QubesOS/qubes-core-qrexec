@@ -27,7 +27,13 @@ import os
 
 from ..utils import sanitize_domain_name, get_system_info
 from .qrexec_policy_exec import handle_request
-from .. import POLICYPATH, POLICYSOCKET, POLICY_EVAL_SOCKET, POLICY_GUI_SOCKET, RUNTIME_POLICY_PATH
+from .. import (
+    POLICYPATH,
+    POLICYSOCKET,
+    POLICY_EVAL_SOCKET,
+    POLICY_GUI_SOCKET,
+    RUNTIME_POLICY_PATH,
+)
 from ..policy.utils import PolicyCache
 
 argparser = argparse.ArgumentParser(description="Evaluate qrexec policy daemon")
@@ -37,7 +43,7 @@ argparser.add_argument(
     type=pathlib.Path,
     default=[RUNTIME_POLICY_PATH, POLICYPATH],
     help="Use alternative policy path",
-    action='append',
+    action="append",
 )
 argparser.add_argument(
     "--socket-path",
@@ -120,7 +126,9 @@ async def handle_client_connection(log, policy_cache, reader, writer):
             **args, log=log, policy_cache=policy_cache
         )
 
-        writer.write(result.encode("ascii", "strict") if result else b"result=deny\n")
+        writer.write(
+            result.encode("ascii", "strict") if result else b"result=deny\n"
+        )
         await writer.drain()
 
     finally:
@@ -257,7 +265,6 @@ async def qrexec_policy_eval(
 async def handle_qrexec_connection(
     reader, writer, *, log, policy_cache, check_gui, service_name
 ):
-
     """
     Handle a connection to the qrexec policy socket.
     """
@@ -328,7 +335,7 @@ async def start_serving(args=None):
             log=log,
             policy_cache=policy_cache,
             check_gui=True,
-            service_name=b"policy.EvalGUI"
+            service_name=b"policy.EvalGUI",
         ),
         path=args.gui_socket_path,
     )

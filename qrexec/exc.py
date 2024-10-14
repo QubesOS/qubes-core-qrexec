@@ -21,6 +21,7 @@
 import pathlib
 from typing import Optional
 
+
 class AccessDenied(Exception):
     """
     Raised when qrexec policy denied access.
@@ -30,7 +31,7 @@ class AccessDenied(Exception):
     (e.g. because we applied a policy that says `notify=no`).
     """
 
-    def __init__(self, msg: str, notify:bool=True):
+    def __init__(self, msg: str, notify: bool = True):
         super().__init__(msg)
         self.notify = notify
 
@@ -38,10 +39,13 @@ class AccessDenied(Exception):
 class PolicySyntaxError(AccessDenied):
     """Syntax error in qrexec policy, abort parsing"""
 
-    def __init__(self, filepath: Optional[pathlib.PurePath], lineno: Optional[int], msg: str):
-        super().__init__(
-            f"{filepath or '<unknown>'}:{lineno}: {msg}"
-        )
+    def __init__(
+        self,
+        filepath: Optional[pathlib.PurePath],
+        lineno: Optional[int],
+        msg: str,
+    ):
+        super().__init__(f"{filepath or '<unknown>'}:{lineno}: {msg}")
 
 
 class PolicyNotFound(AccessDenied):

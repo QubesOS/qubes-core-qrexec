@@ -74,7 +74,7 @@ argparser.add_argument(
     "--full-output",
     action="store_true",
     help="Output complete policy scheme, including detailed action "
-         "specifications and service arguments.",
+    "specifications and service arguments.",
 )
 
 
@@ -94,8 +94,10 @@ def handle_single_action(args, action):
         return ""
     if args.full_output:
         color = "orange" if isinstance(action, parser.AskResolution) else "red"
-        return f'  "{action.request.source}" -> "{target}" ' \
-               f'[label="{service} {action.rule.action}" color={color}];\n'
+        return (
+            f'  "{action.request.source}" -> "{target}" '
+            f'[label="{service} {action.rule.action}" color={color}];\n'
+        )
     if isinstance(action, parser.AskResolution):
         if args.include_ask:
             return f'  "{action.request.source}" -> "{target}" [label="{service}" color=orange];\n'
@@ -123,20 +125,24 @@ def main(args=None, output=sys.stdout):
             try:
                 targets.add(parser.Redirect(target))
             except exc.PolicySyntaxError:
-                argparser.error(f"--target {target} is not a valid actual call target")
+                argparser.error(
+                    f"--target {target} is not a valid actual call target"
+                )
         args.target = targets
 
     if args.output:
         # pylint: disable=consider-using-with
-        output = open(args.output, "w", encoding='utf-8')
+        output = open(args.output, "w", encoding="utf-8")
 
     if args.system_info:
-        with open(args.system_info, encoding='utf-8') as f_system_info:
+        with open(args.system_info, encoding="utf-8") as f_system_info:
             system_info = json.load(f_system_info)
     else:
         system_info = utils.get_system_info()
 
-    targets = [key for key in system_info["domains"] if not key.startswith("uuid")]
+    targets = [
+        key for key in system_info["domains"] if not key.startswith("uuid")
+    ]
     if args.source:
         sources = args.source
     else:
@@ -146,8 +152,10 @@ def main(args=None, output=sys.stdout):
     targets.extend(
         "@dispvm:" + dom
         for dom in system_info["domains"]
-        if (not dom.startswith("uuid:")
-            and system_info["domains"][dom]["template_for_dispvms"])
+        if (
+            not dom.startswith("uuid:")
+            and system_info["domains"][dom]["template_for_dispvms"]
+        )
     )
     targets.append("@default")
 
@@ -166,8 +174,9 @@ def main(args=None, output=sys.stdout):
             service, arg = service.split("+", 1)
             arg = "+" + arg
         services.add((service, arg))
-    for service, argument in sorted(services,
-                                    key=lambda x: (x[0] or "", x[1] or "")):
+    for service, argument in sorted(
+        services, key=lambda x: (x[0] or "", x[1] or "")
+    ):
         if (
             args.service
             and service not in args.service

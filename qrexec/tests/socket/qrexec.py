@@ -120,6 +120,7 @@ class QrexecServer(QrexecClient):
     def shutdown(self, arg):
         self.conn.shutdown(arg)
 
+
 def vchan_client(socket_dir, domain, remote_domain, port):
     vchan_socket_path = os.path.join(
         socket_dir, "vchan.{}.{}.{}.sock".format(domain, remote_domain, port)
@@ -147,7 +148,7 @@ def socket_server(socket_path, socket_path_alt=()):
     except FileNotFoundError:
         pass
     for i in socket_path_alt:
-        assert i[0] == '/', "path not absolute"
+        assert i[0] == "/", "path not absolute"
         try:
             os.unlink(i)
         except FileNotFoundError:

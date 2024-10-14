@@ -47,7 +47,12 @@ from typing import (
     Sequence,
 )
 
-from .. import POLICYPATH, RPCNAME_ALLOWED_CHARSET, POLICYSUFFIX, RUNTIME_POLICY_PATH
+from .. import (
+    POLICYPATH,
+    RPCNAME_ALLOWED_CHARSET,
+    POLICYSUFFIX,
+    RUNTIME_POLICY_PATH,
+)
 from ..utils import FullSystemInfo, SystemInfo, uuid_to_name
 from .. import exc
 from ..exc import (
@@ -92,8 +97,9 @@ def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
     return filepaths
 
 
-def parse_service_and_argument(rpcname: Union[str, pathlib.PurePath], *,
-                               no_arg: str ="+") -> Tuple[str, str]:
+def parse_service_and_argument(
+    rpcname: Union[str, pathlib.PurePath], *, no_arg: str = "+"
+) -> Tuple[str, str]:
     """Parse service and argument string.
 
     Parse ``SERVICE+ARGUMENT``. Argument may be empty (single ``+`` at the end)
@@ -114,9 +120,11 @@ def parse_service_and_argument(rpcname: Union[str, pathlib.PurePath], *,
     return service, argument
 
 
-def get_invalid_characters(s: str,
-                           allowed: FrozenSet[str]=RPCNAME_ALLOWED_CHARSET,
-                           disallowed: Iterable[str]="") -> Sequence[str]:
+def get_invalid_characters(
+    s: str,
+    allowed: FrozenSet[str] = RPCNAME_ALLOWED_CHARSET,
+    disallowed: Iterable[str] = "",
+) -> Sequence[str]:
     """Return characters contained in *disallowed* and/or not int *allowed*"""
     # pylint: disable=invalid-name
     return tuple(
@@ -197,16 +205,19 @@ def validate_service_and_argument(
 class VMTokenMeta(abc.ABCMeta):
     # pylint: disable=missing-docstring
     exacts: collections.OrderedDict[str, Type[str]] = collections.OrderedDict()
-    prefixes: collections.OrderedDict[str, Type[str]] = collections.OrderedDict()
+    prefixes: collections.OrderedDict[str, Type[str]] = (
+        collections.OrderedDict()
+    )
 
     def __init__(cls, name: str, bases: Tuple[type], dict_: Dict[str, str]):
         super().__init__(name, bases, dict_)
 
         assert not ("EXACT" in dict_ and "PREFIX" in dict_)
         if "EXACT" in dict_:
-            cls.exacts[dict_["EXACT"]] = cls # type: ignore
+            cls.exacts[dict_["EXACT"]] = cls  # type: ignore
         if "PREFIX" in dict_:
-            cls.prefixes[dict_["PREFIX"]] = cls # type: ignore
+            cls.prefixes[dict_["PREFIX"]] = cls  # type: ignore
+
 
 def match_strings(info: SystemInfo, self: str, other: str) -> bool:
     if self.startswith("uuid:"):
@@ -222,6 +233,7 @@ def match_strings(info: SystemInfo, self: str, other: str) -> bool:
         except KeyError:
             return False
     return self == other
+
 
 class VMToken(str, metaclass=VMTokenMeta):
     """A domain specification
@@ -244,8 +256,13 @@ class VMToken(str, metaclass=VMTokenMeta):
     other strings.
     """
 
-    def __new__(cls, token: str, *, filepath: Optional[pathlib.Path]=None,
-                lineno: Optional[int]=None) -> "VMToken":
+    def __new__(
+        cls,
+        token: str,
+        *,
+        filepath: Optional[pathlib.Path] = None,
+        lineno: Optional[int] = None,
+    ) -> "VMToken":
         orig_token = token
 
         # first, adjust some aliases
@@ -294,14 +311,20 @@ class VMToken(str, metaclass=VMTokenMeta):
     value: str
     filepath: Optional[pathlib.Path]
     lineno: Optional[int]
-    def __init__(self, token: str, *, filepath: Optional[pathlib.Path]=None,
-                 lineno: Optional[int]=None):
+
+    def __init__(
+        self,
+        token: str,
+        *,
+        filepath: Optional[pathlib.Path] = None,
+        lineno: Optional[int] = None,
+    ):
         # pylint: disable=unused-argument
         super().__init__()
         self.filepath = filepath
         self.lineno = lineno
         try:
-            self.value = self[len(self.PREFIX) :] # type: ignore
+            self.value = self[len(self.PREFIX) :]  # type: ignore
             assert self.value[0] != "@"
         except AttributeError:
             # self.value = self
@@ -317,7 +340,7 @@ class VMToken(str, metaclass=VMTokenMeta):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional["VMToken"]=None
+        source: Optional["VMToken"] = None,
     ) -> bool:
         """Check if this token matches opposite token"""
         # pylint: disable=unused-argument,too-many-return-statements
@@ -359,6 +382,7 @@ class _BaseTarget(VMToken):
         if self in info:
             yield IntendedTarget(uuid_to_name(info, self))
 
+
 class Target(_BaseTarget):
     # pylint: disable=missing-docstring
     pass
@@ -370,12 +394,12 @@ class Redirect(_BaseTarget):
         cls,
         value: Optional[str],
         *,
-        filepath: Optional[pathlib.Path]=None,
-        lineno: Optional[int]=None,
+        filepath: Optional[pathlib.Path] = None,
+        lineno: Optional[int] = None,
     ) -> "Redirect":
         if value is None:
-            return None # type: ignore
-        return super().__new__(cls, value, filepath=filepath, lineno=lineno) # type: ignore
+            return None  # type: ignore
+        return super().__new__(cls, value, filepath=filepath, lineno=lineno)  # type: ignore
 
 
 # this method (with overloads in subclasses) was verify_target_value
@@ -429,7 +453,7 @@ class WildcardVM(Source, Target):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional[VMToken] = None,
     ) -> bool:
         return True
 
@@ -464,7 +488,7 @@ class AnyVM(Source, Target):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional[VMToken] = None,
     ) -> bool:
         return other != "@adminvm"
 
@@ -499,12 +523,14 @@ class TypeVM(Source, Target):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional[VMToken] = None,
     ) -> bool:
         info = system_info["domains"]
-        return (other in info and self.value == info[other]["type"])
+        return other in info and self.value == info[other]["type"]
 
-    def expand(self, *, system_info: FullSystemInfo) -> Iterable[IntendedTarget]:
+    def expand(
+        self, *, system_info: FullSystemInfo
+    ) -> Iterable[IntendedTarget]:
         for name, domain in system_info["domains"].items():
             if name.startswith("uuid:"):
                 continue
@@ -521,12 +547,14 @@ class TagVM(Source, Target):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional[VMToken] = None,
     ) -> bool:
         info = system_info["domains"]
-        return (other in info and self.value in info[other]["tags"])
+        return other in info and self.value in info[other]["tags"]
 
-    def expand(self, *, system_info: FullSystemInfo) -> Iterable[IntendedTarget]:
+    def expand(
+        self, *, system_info: FullSystemInfo
+    ) -> Iterable[IntendedTarget]:
         for name, domain in system_info["domains"].items():
             if name.startswith("uuid:"):
                 continue
@@ -543,7 +571,7 @@ class DispVM(Target, Redirect, IntendedTarget):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional[VMToken] = None,
     ) -> bool:
         return self == other
 
@@ -568,6 +596,7 @@ class DispVM(Target, Redirect, IntendedTarget):
             return None
         return DispVMTemplate("@dispvm:" + template)
 
+
 class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
     # pylint: disable=missing-docstring,unused-argument
     PREFIX = "@dispvm:"
@@ -577,18 +606,22 @@ class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional[VMToken] = None,
     ) -> bool:
         assert self.startswith("@dispvm:"), f"missing prefix in {self!r}"
         if isinstance(other, DispVM) and source is not None:
-            return match_strings(system_info["domains"], self, other.get_dispvm_template(
-                source, system_info=system_info
-            ))
+            return match_strings(
+                system_info["domains"],
+                self,
+                other.get_dispvm_template(source, system_info=system_info),
+            )
         if not isinstance(other, DispVMTemplate):
-            return False # not a disposable VM template
+            return False  # not a disposable VM template
         return match_strings(system_info["domains"], self[8:], other[8:])
 
-    def expand(self, *, system_info: FullSystemInfo) -> Iterable["DispVMTemplate"]:
+    def expand(
+        self, *, system_info: FullSystemInfo
+    ) -> Iterable["DispVMTemplate"]:
         info = system_info["domains"]
         if info[self.value]["template_for_dispvms"]:
             yield uuid_to_name(info, self)
@@ -615,7 +648,7 @@ class DispVMTag(Source, Target):
         other: str,
         *,
         system_info: FullSystemInfo,
-        source: Optional[VMToken]=None
+        source: Optional[VMToken] = None,
     ) -> bool:
         if isinstance(other, DispVM):
             assert source is not None
@@ -652,7 +685,10 @@ class AbstractResolution(metaclass=abc.ABCMeta):
     either ask or allow action"""
 
     notify: bool
-    def __init__(self, rule: "Rule", request: "Request", *, user: Optional[str]):
+
+    def __init__(
+        self, rule: "Rule", request: "Request", *, user: Optional[str]
+    ):
 
         #: policy rule from which this action is derived
         self.rule = rule
@@ -692,14 +728,11 @@ class AllowResolution(AbstractResolution):
         #: target domain the service should be connected to
         self.target = target
         self.autostart = autostart
-        assert isinstance(self.autostart,bool)
+        assert isinstance(self.autostart, bool)
 
     @classmethod
     def from_ask_resolution(
-        cls,
-        ask_resolution: "AskResolution",
-        *,
-        target: str
+        cls, ask_resolution: "AskResolution", *, target: str
     ) -> "AllowResolution":
         """This happens after user manually approved the call"""
         if target.startswith("@dispvm:"):
@@ -716,13 +749,17 @@ class AllowResolution(AbstractResolution):
         """Return the allowed action"""
         request, target = self.request, self.target
         assert target is not None
-        assert isinstance(self.autostart,bool)
+        assert isinstance(self.autostart, bool)
 
         # XXX remove when #951 gets fixed
         if request.source == target:
             raise AccessDenied("loopback qrexec connection not supported")
 
-        if target in ("@adminvm", "dom0", "uuid:00000000-0000-0000-0000-000000000000"):
+        if target in (
+            "@adminvm",
+            "dom0",
+            "uuid:00000000-0000-0000-0000-000000000000",
+        ):
             return f"""\
 user={self.user or 'DEFAULT'}
 result=allow
@@ -747,6 +784,7 @@ target_uuid=uuid:{target_info['uuid']}
 autostart={self.autostart}
 requested_target={request.target}"""
 
+
 class AskResolution(AbstractResolution):
     """Resolution returned for :py:class:`Rule` with :py:class:`Ask`.
 
@@ -761,24 +799,29 @@ class AskResolution(AbstractResolution):
 
     The child class should be supplied as part of :py:class:`Request`.
     """
+
     # pylint: disable=too-many-arguments
-    def __init__(self,
-                 rule: "Rule",
-                 request: "Request",
-                 *,
-                 # targets for the user to choose from
-                 targets_for_ask: Sequence[str],
-                 # default target, or None
-                 default_target: Optional[str],
-                 autostart: bool,
-                 user: Optional[str]):
+    def __init__(
+        self,
+        rule: "Rule",
+        request: "Request",
+        *,
+        # targets for the user to choose from
+        targets_for_ask: Sequence[str],
+        # default target, or None
+        default_target: Optional[str],
+        autostart: bool,
+        user: Optional[str],
+    ):
         super().__init__(rule, request, user=user)
         assert default_target is None or default_target in targets_for_ask
         self.targets_for_ask = targets_for_ask
         self.default_target = default_target
         self.autostart = autostart
 
-    def handle_user_response(self, response: bool, target: str) -> AllowResolution:
+    def handle_user_response(
+        self, response: bool, target: str
+    ) -> AllowResolution:
         """
         Handle user response for the 'ask' action. Children class'
         :py:meth:`execute` is supposed to call this method to report the
@@ -861,8 +904,8 @@ class Request:
         target: str,
         *,
         system_info: FullSystemInfo,
-        allow_resolution_type: Type[AllowResolution]=AllowResolution,
-        ask_resolution_type: Type[AskResolution]=AskResolution
+        allow_resolution_type: Type[AllowResolution] = AllowResolution,
+        ask_resolution_type: Type[AskResolution] = AskResolution,
     ):
 
         if target == "":
@@ -904,6 +947,7 @@ class ActionType(metaclass=abc.ABCMeta):
     """
 
     target: Optional[_BaseTarget]
+
     def __init__(self, rule: "Rule"):
         #: the rule that holds this action
         self.rule = rule
@@ -956,7 +1000,7 @@ class ActionType(metaclass=abc.ABCMeta):
 
 class Deny(ActionType):
     # pylint: disable=missing-docstring
-    def __init__(self, rule: "Rule", *, notify: Optional[bool]=None):
+    def __init__(self, rule: "Rule", *, notify: Optional[bool] = None):
         super().__init__(rule)
         self.notify = True if notify is None else notify
 
@@ -990,15 +1034,16 @@ class Allow(ActionType):
     notify: bool
     user: Optional[str]
     target: Redirect
+
     def __init__(
         self,
         rule: "Rule",
         *,
-        target: Optional[str]=None,
+        target: Optional[str] = None,
         user: Optional[str] = None,
         notify: bool = False,
         autostart: bool = True,
-    ): # pylint: disable=too-many-arguments
+    ):  # pylint: disable=too-many-arguments
         super().__init__(rule)
         self.target = Redirect(
             target, filepath=self.rule.filepath, lineno=self.rule.lineno
@@ -1041,7 +1086,7 @@ class Allow(ActionType):
                 )
             )
         if isinstance(target, DispVM):
-            target_ = target.get_dispvm_template( # pylint: disable=no-member
+            target_ = target.get_dispvm_template(  # pylint: disable=no-member
                 request.source, system_info=request.system_info
             )
             if target_ is None:
@@ -1068,7 +1113,11 @@ class Allow(ActionType):
             )
 
         return request.allow_resolution_type(
-            self.rule, request, user=self.user, target=target, autostart=self.autostart
+            self.rule,
+            request,
+            user=self.user,
+            target=target,
+            autostart=self.autostart,
         )
 
 
@@ -1078,8 +1127,8 @@ class Ask(ActionType):
         self,
         rule: "Rule",
         *,
-        target: Optional[str]=None,
-        default_target: Optional[str]=None,
+        target: Optional[str] = None,
+        default_target: Optional[str] = None,
         user: Optional[str] = None,
         notify: bool = False,
         autostart: bool = True,
@@ -1187,6 +1236,7 @@ class Rule:
     # pylint: disable=too-many-instance-attributes,too-many-positional-arguments
 
     action: Union[Allow, Deny, Ask]
+
     def __init__(
         self,
         service: str,
@@ -1298,10 +1348,10 @@ class Rule:
     def __str__(self) -> str:
         return_str = f"{self.service}\t"
         if self.argument:
-            return_str += f'{self.argument}\t'
+            return_str += f"{self.argument}\t"
         else:
-            return_str += '*\t'
-        return_str += f'{self.source}\t{self.target}\t{str(self.action)}'
+            return_str += "*\t"
+        return_str += f"{self.source}\t{self.target}\t{str(self.action)}"
         return return_str
 
     @classmethod
@@ -1610,7 +1660,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
         included_path: pathlib.PurePosixPath,
         *,
         filepath,
-        lineno
+        lineno,
     ):
         """Handle ``!include-service`` line when encountered in
         :meth:`policy_load_file`.
@@ -1704,7 +1754,8 @@ class AbstractPolicy(AbstractParser):
                 )
                 expansion = set()
                 for potential_target in rule_target.expand(
-                        system_info=request.system_info):
+                    system_info=request.system_info
+                ):
                     try:
                         # The policy agent cannot handle UUIDs (and rightly so,
                         # those are meaningless to humans). Convert them to names.
@@ -1769,11 +1820,15 @@ class AbstractFileLoader(AbstractParser):
         resolved_included_path: pathlib.Path = self.resolve_path(included_path)
         if not resolved_included_path.is_file():
             raise exc.PolicySyntaxError(
-                filepath, lineno, "not a file: {}".format(resolved_included_path)
+                filepath,
+                lineno,
+                "not a file: {}".format(resolved_included_path),
             )
         # pylint: disable=consider-using-with
-        return (open(str(resolved_included_path), encoding='utf-8'),
-                pathlib.PurePath(resolved_included_path))
+        return (
+            open(str(resolved_included_path), encoding="utf-8"),
+            pathlib.PurePath(resolved_included_path),
+        )
 
     def handle_include(
         self, included_path: pathlib.PurePosixPath, *, filepath, lineno
@@ -1791,7 +1846,7 @@ class AbstractFileLoader(AbstractParser):
         included_path: pathlib.PurePosixPath,
         *,
         filepath,
-        lineno
+        lineno,
     ):
         service, argument = validate_service_and_argument(
             service, argument, filepath=filepath, lineno=lineno
@@ -1822,7 +1877,9 @@ class AbstractDirectoryLoader(AbstractFileLoader):
         resolved_included_path = self.resolve_path(included_path)
         if not resolved_included_path.is_dir():
             raise exc.PolicySyntaxError(
-                filepath, lineno, "not a directory: {}".format(resolved_included_path)
+                filepath,
+                lineno,
+                "not a directory: {}".format(resolved_included_path),
             )
         return resolved_included_path
 
@@ -1858,10 +1915,11 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
     """
 
     policy_path: Optional[pathlib.Path]
+
     def __init__(
         self,
         *,
-        policy_path: Union[None, pathlib.PurePath, Iterable[pathlib.PurePath]]
+        policy_path: Union[None, pathlib.PurePath, Iterable[pathlib.PurePath]],
     ) -> None:
         super().__init__()
         if policy_path is None:
@@ -1871,7 +1929,9 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
         elif isinstance(policy_path, list):
             iterable_policy_paths = policy_path
         else:
-            raise TypeError("unexpected type of policy path in AbstractFileSystemLoader.__init__!")
+            raise TypeError(
+                "unexpected type of policy path in AbstractFileSystemLoader.__init__!"
+            )
         try:
             self.load_policy_dirs(iterable_policy_paths)
         except OSError as err:
@@ -1898,8 +1958,12 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
                 finally:
                     self.policy_path = None
 
-    def resolve_path(self, included_path: pathlib.PurePosixPath) -> pathlib.Path:
-        assert self.policy_path is not None, "Tried to resolve a path when not loading policy"
+    def resolve_path(
+        self, included_path: pathlib.PurePosixPath
+    ) -> pathlib.Path:
+        assert (
+            self.policy_path is not None
+        ), "Tried to resolve a path when not loading policy"
         return (self.policy_path / included_path).resolve()
 
 
@@ -1937,14 +2001,16 @@ class ValidateParser(FilePolicy):
         self,
         *,
         overrides: Dict[pathlib.Path, Optional[str]],
-        policy_path: Union[None, pathlib.PurePath, Iterable[pathlib.PurePath]] = None,
+        policy_path: Union[
+            None, pathlib.PurePath, Iterable[pathlib.PurePath]
+        ] = None,
     ) -> None:
         self.overrides = overrides
         super().__init__(policy_path=policy_path)
 
     def load_policy_dirs(self, paths: Iterable[pathlib.PurePath]) -> None:
         assert len(paths) == 1
-        path, = paths
+        (path,) = paths
         self.policy_path = path
         self.load_policy_dir(path)
 
@@ -1979,6 +2045,7 @@ class ValidateParser(FilePolicy):
 
 class ToposortMixIn:
     """A helper for topological sorting the policy files"""
+
     # pylint can't deal with mixins
     # pylint: disable=no-member
 
@@ -2080,7 +2147,7 @@ class ToposortMixIn:
             filepath,
         )
         self.save_included_path(included_path, filepath=filepath, lineno=lineno)
-        super().handle_include(included_path, filepath=filepath, lineno=lineno) # type: ignore
+        super().handle_include(included_path, filepath=filepath, lineno=lineno)  # type: ignore
 
     def handle_include_service(
         self,
@@ -2089,7 +2156,7 @@ class ToposortMixIn:
         included_path: pathlib.PurePosixPath,
         *,
         filepath,
-        lineno
+        lineno,
     ):
         # pylint: disable=missing-docstring
         logging.debug(
@@ -2098,7 +2165,7 @@ class ToposortMixIn:
             filepath,
         )
         self.save_included_path(included_path, filepath=filepath, lineno=lineno)
-        super().handle_include_service( # type: ignore
+        super().handle_include_service(  # type: ignore
             service, argument, included_path, filepath=filepath, lineno=lineno
         )
 

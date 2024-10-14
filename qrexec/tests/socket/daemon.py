@@ -238,17 +238,23 @@ exit $exit_code
         for service_name in (b"\0", b"", b"\0a", b"\0+a", b"+", b"+a"):
             agent.send_message(
                 qrexec.MSG_TRIGGER_SERVICE,
-                struct.pack("<64s32s32s", service_name,
-                            target_domain_name.encode(), ident)
+                struct.pack(
+                    "<64s32s32s",
+                    service_name,
+                    target_domain_name.encode(),
+                    ident,
+                ),
             )
             message_type, data = agent.recv_message()
             self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
             self.assertEqual(len(data), 32)
-            self.assertEqual(data[:len(ident)], ident)
-            self.assertEqual(data[len(ident):], b"\0" * (32 - len(ident)))
-            self.assertFalse(os.path.exists(
-                os.path.join(self.tempdir, "qrexec-policy-params")
-            )),
+            self.assertEqual(data[: len(ident)], ident)
+            self.assertEqual(data[len(ident) :], b"\0" * (32 - len(ident)))
+            self.assertFalse(
+                os.path.exists(
+                    os.path.join(self.tempdir, "qrexec-policy-params")
+                )
+            ),
 
     def test_bad_new_style_request(self):
         """
@@ -268,9 +274,11 @@ exit $exit_code
             self.assertEqual(len(data), 32)
             self.assertEqual(data[:2], b"ab")
             self.assertEqual(data[2:], b"\0" * 30)
-            self.assertFalse(os.path.exists(
-                os.path.join(self.tempdir, "qrexec-policy-params")
-            )),
+            self.assertFalse(
+                os.path.exists(
+                    os.path.join(self.tempdir, "qrexec-policy-params")
+                )
+            ),
 
         # missing NUL terminator
         agent.send_message(
@@ -306,9 +314,15 @@ exit $exit_code
         self.set_policy_params(1, 1)
 
         result = subprocess.run(
-            [policy_program_path, "--", "somedomain", "anotherdomain", "someservice"],
+            [
+                policy_program_path,
+                "--",
+                "somedomain",
+                "anotherdomain",
+                "someservice",
+            ],
             capture_output=True,
-            text=True
+            text=True,
         )
         assert result.stdout == "result=deny\n"
 
@@ -316,16 +330,25 @@ exit $exit_code
         self.set_policy_params(1, 0)
 
         result = subprocess.run(
-            [policy_program_path, "--", "somedomain", "anotherdomain", "someservice"],
+            [
+                policy_program_path,
+                "--",
+                "somedomain",
+                "anotherdomain",
+                "someservice",
+            ],
             capture_output=True,
-            text=True
+            text=True,
         )
-        assert result.stdout == """result=allow
+        assert (
+            result.stdout
+            == """result=allow
 autostart=True
 user=toto
 target=anotherdomain
 requested_target=anotherdomain
 """
+        )
 
         # check allowed request
         agent.send_message(
@@ -336,9 +359,7 @@ requested_target=anotherdomain
         message_type, data = agent.recv_message()
         self.assertEqual(message_type, qrexec.MSG_EXEC_CMDLINE)
         self.assertTrue(
-            os.path.exists(
-                os.path.join(self.tempdir, "qrexec-policy-params")
-            )
+            os.path.exists(os.path.join(self.tempdir, "qrexec-policy-params"))
         )
 
     def test_qsb_089(self):
@@ -355,12 +376,13 @@ requested_target=anotherdomain
 
         agent.send_message(
             qrexec.MSG_TRIGGER_SERVICE3,
-            struct.pack("<64s32s", target_domain_name.encode(), ident.encode()))
+            struct.pack("<64s32s", target_domain_name.encode(), ident.encode()),
+        )
         # qrexec-daemon will terminate
         self.assertEqual(agent.recvall(1), b"")
-        self.assertFalse(os.path.exists(
-            os.path.join(self.tempdir, "qrexec-policy-params")
-        ))
+        self.assertFalse(
+            os.path.exists(os.path.join(self.tempdir, "qrexec-policy-params"))
+        )
 
     def send_trigger_service(
         self, agent, target_domain_name: str, service_name: str, ident: str
@@ -652,16 +674,24 @@ class TestClient(unittest.TestCase):
             self.client.communicate()
             self.client = None
 
-    def connect_daemon(self, domain_id, domain_name, domain_uuid = ""):
+    def connect_daemon(self, domain_id, domain_name, domain_uuid=""):
         assert isinstance(domain_id, int), "domain ID is first"
         assert isinstance(domain_name, str), "domain name is second"
         assert isinstance(domain_uuid, str), "domain UUID is third"
         daemon = qrexec.socket_server(
             os.path.join(self.tempdir, "qrexec.{}".format(domain_id)),
             (
-                os.path.join(self.tempdir, "qrexec.{}".format(domain_name)),
-                os.path.join(self.tempdir, "qrexec.uuid:{}".format(domain_uuid)),
-            ) if domain_uuid else (os.path.join(self.tempdir, "qrexec.{}".format(domain_name)),),
+                (
+                    os.path.join(self.tempdir, "qrexec.{}".format(domain_name)),
+                    os.path.join(
+                        self.tempdir, "qrexec.uuid:{}".format(domain_uuid)
+                    ),
+                )
+                if domain_uuid
+                else (
+                    os.path.join(self.tempdir, "qrexec.{}".format(domain_name)),
+                )
+            ),
         )
         self.addCleanup(daemon.close)
         return daemon
@@ -683,7 +713,9 @@ class TestClient(unittest.TestCase):
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain, target_domain_name, target_domain_uuid)
+        target_daemon = self.connect_daemon(
+            target_domain, target_domain_name, target_domain_uuid
+        )
         self.start_client(["-d", target_domain_name, cmd])
         target_daemon.accept()
         target_daemon.handshake()
@@ -720,8 +752,12 @@ class TestClient(unittest.TestCase):
         target_domain = 42
         target_port = 513
 
-        target_daemon = self.connect_daemon(target_domain, target_domain_name, target_domain_uuid)
-        self.start_client(["-d", "uuid:" + target_domain_uuid, "-l", local_cmd, cmd])
+        target_daemon = self.connect_daemon(
+            target_domain, target_domain_name, target_domain_uuid
+        )
+        self.start_client(
+            ["-d", "uuid:" + target_domain_uuid, "-l", local_cmd, cmd]
+        )
         target_daemon.accept()
         target_daemon.handshake()
 
@@ -865,7 +901,9 @@ class TestClient(unittest.TestCase):
         self.assertEqual(self.client.returncode, 0)
 
     def exec_service_with_invalid_config(self, invalid_config):
-        config_path = os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg")
+        config_path = os.path.join(
+            self.tempdir, "rpc-config", "qubes.Service+arg"
+        )
         if invalid_config is not None:
             with open(config_path, "w") as f:
                 f.write(invalid_config)
@@ -893,7 +931,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         self.exec_service_with_invalid_config("wait-for-session = \n")
 
     def test_exec_service_with_invalid_config_4(self):
-        self.exec_service_with_invalid_config("wait-for-session = \"a\"\n")
+        self.exec_service_with_invalid_config('wait-for-session = "a"\n')
 
     def test_exec_service_with_invalid_config_5(self):
         self.exec_service_with_invalid_config("wait-for-session\n")
@@ -913,7 +951,9 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 """,
         )
 
-        cmd = ("nogui:" if nogui else "") + "QUBESRPC qubes.Service+arg src_domain name src_domain"
+        cmd = (
+            "nogui:" if nogui else ""
+        ) + "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
         source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
@@ -939,7 +979,9 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
     def test_run_dom0_service_exec_nogui(self):
         self._test_run_dom0_service_exec(True)
 
-    def _test_run_dom0_service_failed(self, exit_status=qrexec.QREXEC_EXIT_PROBLEM):
+    def _test_run_dom0_service_failed(
+        self, exit_status=qrexec.QREXEC_EXIT_PROBLEM
+    ):
         cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
 
@@ -990,10 +1032,13 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 
         cmd = "QUBESRPC qubes.Service+arg src_domain name src_domain"
         source = self.connect_service_request(cmd)
-        self.assertEqual(source.recv_message(), (
-            qrexec.MSG_DATA_STDOUT,
-            b"wait for session: remote domain: src_domain\n",
-        ))
+        self.assertEqual(
+            source.recv_message(),
+            (
+                qrexec.MSG_DATA_STDOUT,
+                b"wait for session: remote domain: src_domain\n",
+            ),
+        )
 
         source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data\n")
         source.send_message(qrexec.MSG_DATA_STDIN, b"")
@@ -1014,9 +1059,12 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 
     def test_run_dom0_service_socket_no_send_descriptor(self):
         """Socket based service with no service descriptor"""
-        config_path = os.path.join(self.tempdir, "rpc-config", "qubes.SocketService+arg")
+        config_path = os.path.join(
+            self.tempdir, "rpc-config", "qubes.SocketService+arg"
+        )
         with open(config_path, "w") as f:
             f.write("skip-service-descriptor = true\n")
+
         def callback(source, server):
             message = b"stdin data"
             source.send_message(qrexec.MSG_DATA_STDIN, message)
@@ -1025,10 +1073,12 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 
             server.sendall(b"stdout data")
             server.close()
+
         self._test_run_dom0_service_socket_meta(callback)
 
     def test_run_dom0_service_socket(self):
         """Socket based service"""
+
         def callback(source, server):
             expected = b"qubes.SocketService+arg src_domain name src_domain\0"
             self.assertEqual(server.recvall(len(expected)), expected)
@@ -1040,6 +1090,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 
             server.sendall(b"stdout data")
             server.close()
+
         self._test_run_dom0_service_socket_meta(callback)
 
     def _test_run_dom0_service_socket_meta(self, callback):
@@ -1069,18 +1120,22 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 
     def test_run_dom0_service_socket_no_read(self):
         """Socket based service that don't read its input stream"""
+
         def callback(source, server):
             server.sendall(b"stdout data")
             server.close()
             source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data")
             source.send_message(qrexec.MSG_DATA_STDIN, b"")
+
         self._test_run_dom0_service_socket_meta(callback)
 
     def test_run_dom0_service_socket_close(self):
         """Socket service closes connection"""
+
         def callback(source, server):
             server.sendall(b"stdout data")
             server.close()
+
         self._test_run_dom0_service_socket_meta(callback)
 
     def test_run_dom0_service_socket_shutdown_rd(self):

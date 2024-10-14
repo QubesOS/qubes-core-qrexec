@@ -25,6 +25,7 @@ from types import MappingProxyType as Proxy
 
 from ..tools.qrexec_policy_graph import main
 
+
 @pytest.fixture(autouse=True)
 def system_info():
     system_info = {
@@ -93,6 +94,7 @@ def system_info():
         mock_system_info.return_value = system_info
         yield system_info
 
+
 def test_simple_graph():
     with tempfile.TemporaryDirectory() as policy_dir:
         with open(os.path.join(policy_dir, "10-test.policy"), "w") as policy:
@@ -113,9 +115,15 @@ def test_simple_ask():
         with open(os.path.join(policy_dir, "10-test.policy"), "w") as policy:
             policy.write("test.Service * work personal ask\n")
         with tempfile.NamedTemporaryFile() as output:
-            main(["--policy-dir", policy_dir,
-                  "--output", output.name,
-                  "--include-ask"])
+            main(
+                [
+                    "--policy-dir",
+                    policy_dir,
+                    "--output",
+                    output.name,
+                    "--include-ask",
+                ]
+            )
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "personal" [label="test.Service" color=orange];
@@ -131,9 +139,16 @@ def test_simple_service():
             policy.write("test.Service2 * sys-usb personal allow\n")
             policy.write("test.Service * sys-usb personal allow\n")
         with tempfile.NamedTemporaryFile() as output:
-            main(["--policy-dir", policy_dir,
-                  "--output", output.name,
-                  "--service", "test.Service"])
+            main(
+                [
+                    "--policy-dir",
+                    policy_dir,
+                    "--output",
+                    output.name,
+                    "--service",
+                    "test.Service",
+                ]
+            )
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "personal" [label="test.Service" color=red];
@@ -150,9 +165,16 @@ def test_simple_service_arg():
             policy.write("test.Service2 * sys-usb personal allow\n")
             policy.write("test.Service +arg sys-usb personal allow\n")
         with tempfile.NamedTemporaryFile() as output:
-            main(["--policy-dir", policy_dir,
-                  "--output", output.name,
-                  "--service", "test.Service+arg"])
+            main(
+                [
+                    "--policy-dir",
+                    policy_dir,
+                    "--output",
+                    output.name,
+                    "--service",
+                    "test.Service+arg",
+                ]
+            )
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "personal" [label="test.Service" color=red];
@@ -161,15 +183,23 @@ def test_simple_service_arg():
 """
             assert content == expected
 
+
 def test_simple_service_arg_single():
     with tempfile.TemporaryDirectory() as policy_dir:
         with open(os.path.join(policy_dir, "10-test.policy"), "w") as policy:
             policy.write("test.Service * work personal allow\n")
             policy.write("test.Service2 * sys-usb personal allow\n")
         with tempfile.NamedTemporaryFile() as output:
-            main(["--policy-dir", policy_dir,
-                  "--output", output.name,
-                  "--service", "test.Service+arg"])
+            main(
+                [
+                    "--policy-dir",
+                    policy_dir,
+                    "--output",
+                    output.name,
+                    "--service",
+                    "test.Service+arg",
+                ]
+            )
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "personal" [label="test.Service" color=red];
@@ -185,9 +215,16 @@ def test_simple_service_no_wildcard():
             policy.write("test.Service +arg2 work personal allow\n")
             policy.write("test.Service2 +arg sys-usb personal allow\n")
         with tempfile.NamedTemporaryFile() as output:
-            main(["--policy-dir", policy_dir,
-                  "--output", output.name,
-                  "--service", "test.Service"])
+            main(
+                [
+                    "--policy-dir",
+                    policy_dir,
+                    "--output",
+                    output.name,
+                    "--service",
+                    "test.Service",
+                ]
+            )
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "personal" [label="test.Service" color=red];
@@ -203,10 +240,17 @@ def test_simple_service_no_wildcard_full():
             policy.write("test.Service +arg2 work personal allow\n")
             policy.write("test.Service2 +arg sys-usb personal allow\n")
         with tempfile.NamedTemporaryFile() as output:
-            main(["--policy-dir", policy_dir,
-                  "--output", output.name,
-                  "--full-output",
-                  "--service", "test.Service"])
+            main(
+                [
+                    "--policy-dir",
+                    policy_dir,
+                    "--output",
+                    output.name,
+                    "--full-output",
+                    "--service",
+                    "test.Service",
+                ]
+            )
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "personal" [label="test.Service+arg allow" color=red];
@@ -221,13 +265,19 @@ def test_simple_redirect():
         with open(os.path.join(policy_dir, "10-test.policy"), "w") as policy:
             policy.write("test.Service * work personal allow target=dom0\n")
         with tempfile.NamedTemporaryFile() as output:
-            main(["--policy-dir", policy_dir,
-                  "--output", output.name,
-                  "--target", "dom0"])
+            main(
+                [
+                    "--policy-dir",
+                    policy_dir,
+                    "--output",
+                    output.name,
+                    "--target",
+                    "dom0",
+                ]
+            )
             content = output.read().decode()
             expected = """digraph g {
   "work" -> "@adminvm" [label="test.Service" color=red];
 }
 """
             assert content == expected
-

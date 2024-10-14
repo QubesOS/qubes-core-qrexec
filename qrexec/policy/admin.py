@@ -90,9 +90,10 @@ class PolicyAdmin:
 
         if not all(char in RPCNAME_ALLOWED_CHARSET for char in arg):
             raise PolicyAdminException(
-                "Invalid argument: \"{}\"\n"
+                'Invalid argument: "{}"\n'
                 "Valid characters are letters, numbers, dot, plus, hyphen and "
-                "underline".format(arg))
+                "underline".format(arg)
+            )
 
         func = self._find_method(service_name)
         if not func:
@@ -244,12 +245,14 @@ class PolicyAdmin:
     @method("policy.GetFiles", no_payload=True)
     def policy_get_files(self, arg):
         if not isinstance(arg, str) or not arg:
-            raise PolicyAdminException('Service cannot be empty.')
+            raise PolicyAdminException("Service cannot be empty.")
         invalid_chars = get_invalid_characters(arg, disallowed="+")
         if invalid_chars:
             raise PolicyAdminException(
                 "Service {!r} contains invalid characters: {!r}".format(
-                    arg, invalid_chars))
+                    arg, invalid_chars
+                )
+            )
 
         service = arg
 
@@ -267,16 +270,17 @@ class PolicyAdmin:
             if path_to_append not in file_list:
                 file_list.append(path_to_append)
 
-        return ("".join(f"{f}\n" for f in file_list)).encode('utf-8')
+        return ("".join(f"{f}\n" for f in file_list)).encode("utf-8")
 
     # helpers
 
-    def _get_path(self, arg: str, dir_path: str , suffix: str) -> Path:
-        if not re.compile(r'^[\w-]+$').match(arg):
+    def _get_path(self, arg: str, dir_path: str, suffix: str) -> Path:
+        if not re.compile(r"^[\w-]+$").match(arg):
             raise PolicyAdminException(
                 f"Invalid policy file name: {arg}\n"
                 "Names must contain only alphanumeric characters, "
-                "underscore and hyphen.")
+                "underscore and hyphen."
+            )
         path = dir_path / (arg + suffix)
         path = path.resolve()
         if path.parent != dir_path:

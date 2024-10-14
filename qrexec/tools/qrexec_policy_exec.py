@@ -37,7 +37,7 @@ from ..utils import FullSystemInfo
 
 
 def create_default_policy(service_name):
-    with open(str(POLICYPATH / service_name), "w", encoding='utf-8') as policy:
+    with open(str(POLICYPATH / service_name), "w", encoding="utf-8") as policy:
         policy.write(DEFAULT_POLICY)
 
 
@@ -74,11 +74,16 @@ class AgentAskResolution(parser.AskResolution):
             assert False, "handle_user_response should throw"
 
         # prepare icons
-        icons = {name: domains[name]["icon"] for name in domains.keys()
-                 if not name.startswith("uuid:")}
+        icons = {
+            name: domains[name]["icon"]
+            for name in domains.keys()
+            if not name.startswith("uuid:")
+        }
         for dispvm_base in domains:
-            if (dispvm_base.startswith("uuid:")
-                or not domains[dispvm_base]["template_for_dispvms"]):
+            if (
+                dispvm_base.startswith("uuid:")
+                or not domains[dispvm_base]["template_for_dispvms"]
+            ):
                 continue
             dispvm_api_name = "@dispvm:" + dispvm_base
             icons[dispvm_api_name] = domains[dispvm_base]["icon"]
@@ -186,7 +191,8 @@ def prepare_resolution_types(
     return ret
 
 
-argparser = argparse.ArgumentParser(usage="""qrexec-policy-exec -h
+argparser = argparse.ArgumentParser(
+    usage="""qrexec-policy-exec -h
 usage: qrexec-policy-exec [--assume-yes-for-ask] [--just-evaluate] [--path PATH] SOURCE TARGET service+argument
 usage: qrexec-policy-exec [--assume-yes-for-ask] [--just-evaluate] [--path PATH] domain-id SOURCE TARGET service+argument process-ident
 
@@ -205,7 +211,8 @@ To actually run a qrexec call, pass 5 positional arguments:
 - Qrexec process identifier (for data channel connection)
 
 Note that this usage is deprecated.
-""")
+"""
+)
 
 argparser.add_argument(
     "--assume-yes-for-ask",
@@ -227,12 +234,13 @@ argparser.add_argument(
     type=pathlib.Path,
     default=[RUNTIME_POLICY_PATH, POLICYPATH],
     help="Use alternative policy path",
-    action='append',
+    action="append",
 )
 argparser.add_argument(
     "args",
     nargs="*",
 )
+
 
 # pylint: disable=too-many-locals
 def get_result(args: Optional[List[str]]) -> Union[str, int]:
@@ -255,10 +263,14 @@ def get_result(args: Optional[List[str]]) -> Union[str, int]:
     if arglen == 3:
         source, intended_target, service_and_arg = args
     elif arglen == 5:
-        domain_id, source, intended_target, service_and_arg, process_ident = args
+        domain_id, source, intended_target, service_and_arg, process_ident = (
+            args
+        )
         no_exec = False
     else:
-        argparser.error(f"Must have 3 or 5 positional arguments, not {arglen!r}")
+        argparser.error(
+            f"Must have 3 or 5 positional arguments, not {arglen!r}"
+        )
         assert False, "argparser.error should raise"
     result_str = asyncio.run(
         handle_request(
@@ -289,7 +301,7 @@ def get_result(args: Optional[List[str]]) -> Union[str, int]:
     cmd = f"QUBESRPC {service_and_arg} {source}"
     if target in ("dom0", "@adminvm"):
         target_type = "name"
-        if intended_target[0] == '@':
+        if intended_target[0] == "@":
             target_type = "keyword"
             intended_target = intended_target[1:]
         cmd += f" {target_type} {intended_target}"
@@ -297,19 +309,23 @@ def get_result(args: Optional[List[str]]) -> Union[str, int]:
         target = result["target_uuid"]
         cmd = f"{result['user'] or 'DEFAULT'}:" + cmd
         if dispvm:
-            target = (utils.qubesd_call(target, "admin.vm.CreateDisposable", payload=b"uuid")
-                           .decode("ascii", "strict"))
+            target = utils.qubesd_call(
+                target, "admin.vm.CreateDisposable", payload=b"uuid"
+            ).decode("ascii", "strict")
         utils.qubesd_call(target, "admin.vm.Start")
     # pylint: disable=possibly-used-before-assignment
-    return subprocess.call((
-        QREXEC_CLIENT,
-        "-EWkd" if dispvm else "-Ed",
-        target,
-        "-c",
-        ",".join((process_ident, source, domain_id)),
-        "--",
-        cmd,
-    ))
+    return subprocess.call(
+        (
+            QREXEC_CLIENT,
+            "-EWkd" if dispvm else "-Ed",
+            target,
+            "-c",
+            ",".join((process_ident, source, domain_id)),
+            "--",
+            cmd,
+        )
+    )
+
 
 def main(args=None) -> int:
     result = get_result(args)
@@ -317,11 +333,13 @@ def main(args=None) -> int:
         sys.stdout.write(result)
         sys.stdout.write("\n")
         sys.stdout.flush()
-        return 0 if (
-            "\nresult=allow\n" in result or
-            result == "result=allow"
-        ) else 1
+        return (
+            0
+            if ("\nresult=allow\n" in result or result == "result=allow")
+            else 1
+        )
     return result
+
 
 # pylint: disable=too-many-arguments,too-many-locals
 async def handle_request(
@@ -332,9 +350,9 @@ async def handle_request(
     *,
     just_evaluate: bool = False,
     assume_yes_for_ask: bool = False,
-    allow_resolution_type: Optional[type]=None,
-    policy_cache: Optional[PolicyCache]=None,
-    system_info: Optional[FullSystemInfo]=None,
+    allow_resolution_type: Optional[type] = None,
+    policy_cache: Optional[PolicyCache] = None,
+    system_info: Optional[FullSystemInfo] = None,
 ) -> str:
     # Add source domain information, required by qrexec-client for establishing
     # connection
@@ -371,7 +389,7 @@ async def handle_request(
                 just_evaluate=just_evaluate,
                 assume_yes_for_ask=assume_yes_for_ask,
                 allow_resolution_type=allow_resolution_class,
-            )
+            ),
         )
         resolution = policy.evaluate(request)
         return await resolution.execute()

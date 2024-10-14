@@ -73,7 +73,10 @@ class MockPolicy:
 
         if self.resolution_type == "allow":
             return request.allow_resolution_type(
-                self.rule, request, user="user", target=self.target,
+                self.rule,
+                request,
+                user="user",
+                target=self.target,
                 autostart=True,
             )
 
@@ -96,7 +99,12 @@ def policy():
         yield policy
 
     assert mock_policy.mock_calls == [
-        mock.call(policy_path=[PosixPath("/run/qubes/policy.d"), PosixPath("/etc/qubes/policy.d")]),
+        mock.call(
+            policy_path=[
+                PosixPath("/run/qubes/policy.d"),
+                PosixPath("/etc/qubes/policy.d"),
+            ]
+        ),
     ]
 
 
@@ -216,12 +224,15 @@ def test_000_allow(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == """user=user
+    assert (
+        retval
+        == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
+    )
     assert agent_service.mock_calls == []
 
 
@@ -230,15 +241,19 @@ def test_001_allow_notify(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == """user=user
+    assert (
+        retval
+        == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
+    )
     assert agent_service.mock_calls == [
         notify_call("allow"),
     ]
+
 
 def test_002_allow_notify_failed(policy, agent_service):
     policy.set_allow("test-vm1", notify=True)
@@ -247,12 +262,15 @@ def test_002_allow_notify_failed(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == """user=user
+    assert (
+        retval
+        == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
+    )
     assert agent_service.mock_calls == [
         notify_call("allow"),
     ]
@@ -265,12 +283,15 @@ def test_004_allow_no_guivm(policy, system_info, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == """user=user
+    assert (
+        retval
+        == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
+    )
     assert agent_service.mock_calls == []
 
 
@@ -280,12 +301,15 @@ def test_010_ask_allow(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == """user=user
+    assert (
+        retval
+        == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
+    )
     assert agent_service.mock_calls == [
         ask_call(),
     ]
@@ -297,12 +321,15 @@ def test_011_ask_allow_notify(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == """user=user
+    assert (
+        retval
+        == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
+    )
     assert agent_service.mock_calls == [
         ask_call(),
         notify_call("allow"),
@@ -312,10 +339,11 @@ requested_target=test-vm1"""
 def test_012_ask_allow_notify_no_argument(policy, agent_service):
     policy.set_ask(["test-vm1", "test-vm2"], notify=True)
     agent_service.return_value = "allow:test-vm1"
-    retval = qrexec_policy_exec.get_result(
-        ["source", "test-vm1", "service"]
+    retval = qrexec_policy_exec.get_result(["source", "test-vm1", "service"])
+    assert (
+        retval
+        == "user=user\nresult=allow\ntarget=test-vm1\ntarget_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065\nautostart=True\nrequested_target=test-vm1"
     )
-    assert retval == "user=user\nresult=allow\ntarget=test-vm1\ntarget_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065\nautostart=True\nrequested_target=test-vm1"
     assert agent_service.mock_calls == [
         ask_call(argument="+"),
         notify_call("allow", argument="+"),
@@ -353,12 +381,15 @@ def test_017_ask_default_target(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert retval == """user=user
+    assert (
+        retval
+        == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
+    )
     assert agent_service.mock_calls == [
         ask_call(default_target="test-vm1"),
     ]
@@ -476,23 +507,29 @@ def test_033_just_evaluate_ask_assume_yes(policy, agent_service):
 
 def test_034_allow_policy_exec(policy, agent_service):
     policy.set_allow("test-vm1")
-    with mock.patch("subprocess.call", return_value=0) as m, \
-         mock.patch("qrexec.utils.qubesd_call") as c:
+    with mock.patch("subprocess.call", return_value=0) as m, mock.patch(
+        "qrexec.utils.qubesd_call"
+    ) as c:
         retval = qrexec_policy_exec.get_result(
-            ["source-id", "source", "test-vm1", "service+arg",
-             "process_ident"]
+            ["source-id", "source", "test-vm1", "service+arg", "process_ident"]
         )
-        assert c.mock_calls == [mock.call("uuid:42d488d0-1168-44eb-9829-81bde8f43065", "admin.vm.Start")]
+        assert c.mock_calls == [
+            mock.call(
+                "uuid:42d488d0-1168-44eb-9829-81bde8f43065", "admin.vm.Start"
+            )
+        ]
         assert agent_service.mock_calls == []
         assert retval == 0
         assert m.mock_calls == [
-            mock.call((
-                QREXEC_CLIENT,
-                "-Ed",
-                "uuid:42d488d0-1168-44eb-9829-81bde8f43065",
-                "-c",
-                "process_ident,source,source-id",
-                "--",
-                "user:QUBESRPC service+arg source",
-            )),
+            mock.call(
+                (
+                    QREXEC_CLIENT,
+                    "-Ed",
+                    "uuid:42d488d0-1168-44eb-9829-81bde8f43065",
+                    "-c",
+                    "process_ident,source,source-id",
+                    "--",
+                    "user:QUBESRPC service+arg source",
+                )
+            ),
         ]

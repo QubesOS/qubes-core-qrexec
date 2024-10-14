@@ -108,6 +108,7 @@ SYSTEM_INFO = {
     },
 }
 
+
 def patch_system_info():
     """
     We *really* do not want any code to modify SYSTEM_INFO,
@@ -123,12 +124,12 @@ def patch_system_info():
         assert not i.startswith("uuid:")
         j["name"] = i
         j["tags"] = tuple(j["tags"])
-        system_info["uuid:" + j["uuid"]] = system_info[i] = \
-                MappingProxyType(j)
+        system_info["uuid:" + j["uuid"]] = system_info[i] = MappingProxyType(j)
     SYSTEM_INFO["domains"] = MappingProxyType(system_info)
     for i in system_info.values():
         assert not i["name"].startswith("uuid:")
     SYSTEM_INFO = MappingProxyType(SYSTEM_INFO)
+
 
 patch_system_info()
 
@@ -136,6 +137,7 @@ patch_system_info()
 _req = functools.partial(
     parser.Request, "test.Service", "+argument", system_info=SYSTEM_INFO
 )
+
 
 # async mock
 class AsyncMock(unittest.mock.MagicMock):
@@ -215,10 +217,16 @@ class TC_00_VMToken(unittest.TestCase):
             ["@adminvm"],
         )
         self.assertEqual(
-            list(parser.Target("dom0").expand(system_info=SYSTEM_INFO)), ["@adminvm"]
+            list(parser.Target("dom0").expand(system_info=SYSTEM_INFO)),
+            ["@adminvm"],
         )
         self.assertEqual(
-            list(parser.Target("uuid:00000000-0000-0000-0000-000000000000").expand(system_info=SYSTEM_INFO)), ["@adminvm"]
+            list(
+                parser.Target(
+                    "uuid:00000000-0000-0000-0000-000000000000"
+                ).expand(system_info=SYSTEM_INFO)
+            ),
+            ["@adminvm"],
         )
         self.assertEqual(
             list(parser.Target("@anyvm").expand(system_info=SYSTEM_INFO)),
@@ -395,7 +403,11 @@ class TC_00_VMToken(unittest.TestCase):
         cases = [
             ("uuid:00000000-0000-0000-0000-000000000000", "@adminvm", True),
             ("uuid:00000000-0000-0000-0000-000000000000", "dom0", True),
-            ("uuid:00000000-0000-0000-0000-000000000000", "@dispvm:default-dvm", False),
+            (
+                "uuid:00000000-0000-0000-0000-000000000000",
+                "@dispvm:default-dvm",
+                False,
+            ),
             ("uuid:00000000-0000-0000-0000-000000000000", "test-vm1", False),
             ("@anyvm", "test-vm1", True),
             ("@anyvm", "@default", True),
@@ -435,12 +447,32 @@ class TC_00_VMToken(unittest.TestCase):
             ("@dispvm", "test-vm1", False),
             ("@dispvm", "default-dvm", False),
             ("@dispvm:default-dvm", "default-dvm", False),
-            ("uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33", "test-standalone", True),
+            (
+                "uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33",
+                "test-standalone",
+                True,
+            ),
             ("uuid:f3e538bd-4427-4697-bed7-45ef3270df21", "default-dvm", True),
-            ("@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21", "@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21", True),
-            ("@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21", "@dispvm:default-dvm", True),
-            ("@dispvm:default-dvm", "@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21", True),
-            ("test-standalone", "uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33", True),
+            (
+                "@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21",
+                "@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21",
+                True,
+            ),
+            (
+                "@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21",
+                "@dispvm:default-dvm",
+                True,
+            ),
+            (
+                "@dispvm:default-dvm",
+                "@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21",
+                True,
+            ),
+            (
+                "test-standalone",
+                "uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33",
+                True,
+            ),
         ]
 
         for token, target, expected_result in cases:
@@ -794,18 +826,22 @@ class TC_10_Rule(unittest.TestCase):
         )
 
     def test_060_serialization(self):
-        lines = ["test.Service\t+argument\t@anyvm\t@anyvm\tallow",
-                 "test.Service\t+argument\t@anyvm\t@anyvm\task",
-                 "test.Service\t+argument\t@anyvm\t@anyvm\tdeny",
-                 "test.Service\t*\t@anyvm\t@anyvm\tdeny",
-                 "test.Service\t+argument\t@anyvm\t@dispvm:default-dvm\tallow",
-                 "test.Service\t+argument\t@tag:tag1\t@type:AppVM\task target=test-vm2 user=user",
-                 "test.Service\t+argument\t@anyvm\t@anyvm\tallow target=@adminvm"]
+        lines = [
+            "test.Service\t+argument\t@anyvm\t@anyvm\tallow",
+            "test.Service\t+argument\t@anyvm\t@anyvm\task",
+            "test.Service\t+argument\t@anyvm\t@anyvm\tdeny",
+            "test.Service\t*\t@anyvm\t@anyvm\tdeny",
+            "test.Service\t+argument\t@anyvm\t@dispvm:default-dvm\tallow",
+            "test.Service\t+argument\t@tag:tag1\t@type:AppVM\task target=test-vm2 user=user",
+            "test.Service\t+argument\t@anyvm\t@anyvm\tallow target=@adminvm",
+        ]
 
         for line in lines:
             rule = parser.Rule.from_line(
-                None, line, filepath="filename", lineno=12)
+                None, line, filepath="filename", lineno=12
+            )
             assert str(rule) == line
+
 
 #   def test_070_expand_override_target(self):
 #       line = parser.Rule.from_line(None,
@@ -1247,7 +1283,9 @@ class TC_20_Policy(unittest.TestCase):
         )
 
         self.assertCountEqual(
-            sorted(policy.collect_targets_for_ask(_req("test-vm1", "@default"))),
+            sorted(
+                policy.collect_targets_for_ask(_req("test-vm1", "@default"))
+            ),
             [
                 "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
@@ -1268,7 +1306,11 @@ class TC_20_Policy(unittest.TestCase):
             policy.collect_targets_for_ask(_req("test-vm3", "@default")), []
         )
         self.assertEqual(
-            sorted(policy.collect_targets_for_ask(_req("test-standalone", "@default"))),
+            sorted(
+                policy.collect_targets_for_ask(
+                    _req("test-standalone", "@default")
+                )
+            ),
             [
                 "@dispvm:default-dvm",
                 "default-dvm",
@@ -1501,23 +1543,27 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.request.target, "test-vm2")
         self.assertCountEqual(
             sorted(resolution.targets_for_ask),
-            sorted([
-                "test-vm1",
-                "test-vm2",
-                "test-vm3",
-                "@dispvm:test-vm3",
-                "default-dvm",
-                "@dispvm:default-dvm",
-                "test-invalid-dvm",
-                "test-no-dvm",
-                "test-template",
-            ]),
+            sorted(
+                [
+                    "test-vm1",
+                    "test-vm2",
+                    "test-vm3",
+                    "@dispvm:test-vm3",
+                    "default-dvm",
+                    "@dispvm:default-dvm",
+                    "test-invalid-dvm",
+                    "test-no-dvm",
+                    "test-template",
+                ]
+            ),
         )
 
     def test_041_eval_ask(self):
         for i in SYSTEM_INFO["domains"].values():
             assert not i["name"].startswith("uuid:")
-        resolution = self.policy.evaluate(_req("uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33", "test-vm3"))
+        resolution = self.policy.evaluate(
+            _req("uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33", "test-vm3")
+        )
 
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, self.policy.rules[3])
@@ -1837,9 +1883,7 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.target, "test-vm2")
 
     def test_120_execute(self):
-        asyncio.run(
-            self._test_120_execute()
-        )
+        asyncio.run(self._test_120_execute())
 
     async def _test_120_execute(self):
         rule = parser.Rule.from_line(
@@ -1847,7 +1891,11 @@ class TC_40_evaluate(unittest.TestCase):
         )
         request = _req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
-            rule, request, user=None, target="test-vm2", autostart=True,
+            rule,
+            request,
+            user=None,
+            target="test-vm2",
+            autostart=True,
         )
         result = await resolution.execute()
         self.assertEqual(
@@ -1882,7 +1930,7 @@ result=allow
 target=@adminvm
 autostart=True
 requested_target=@adminvm\
-"""
+""",
         )
 
     def test_121_execute_dom0_keyword(self):
@@ -1894,7 +1942,11 @@ requested_target=@adminvm\
         )
         request = _req("test-vm1", "@adminvm")
         resolution = parser.AllowResolution(
-            rule, request, user=None, target="@adminvm", autostart=True,
+            rule,
+            request,
+            user=None,
+            target="@adminvm",
+            autostart=True,
         )
         result = await resolution.execute()
         self.assertEqual(
@@ -1905,7 +1957,7 @@ result=allow
 target=@adminvm
 autostart=True
 requested_target=@adminvm\
-"""
+""",
         )
 
     def test_122_execute_dispvm(self):
@@ -1936,7 +1988,8 @@ target=@dispvm:default-dvm
 target_uuid=@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21
 autostart=True
 requested_target=@dispvm:default-dvm\
-""")
+""",
+        )
 
     def test_123_execute_already_running(self):
         asyncio.run(self._test_123_execute_already_running())
@@ -1947,7 +2000,11 @@ requested_target=@dispvm:default-dvm\
         )
         request = _req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
-            rule, request, user=None, target="test-vm2", autostart=True,
+            rule,
+            request,
+            user=None,
+            target="test-vm2",
+            autostart=True,
         )
         result = await resolution.execute()
         self.assertTrue(result.index("uuid:") != 0)
@@ -1960,7 +2017,9 @@ target=test-vm2
 target_uuid=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4
 autostart=True
 requested_target=test-vm2\
-""")
+""",
+        )
+
 
 # class TC_30_Misc(qubes.tests.QubesTestCase):
 class TC_50_Misc(unittest.TestCase):

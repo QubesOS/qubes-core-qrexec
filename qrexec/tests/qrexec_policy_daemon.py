@@ -143,11 +143,7 @@ class TestPolicyDaemon:
     @pytest.mark.asyncio
     async def test_simple_request(self, mock_request, async_server, tmp_path):
 
-        data = (
-            b"source=b\n"
-            b"intended_target=c\n"
-            b"service_and_arg=d\n"
-        )
+        data = b"source=b\n" b"intended_target=c\n" b"service_and_arg=d\n"
 
         await self.send_data(async_server, tmp_path, data)
 
