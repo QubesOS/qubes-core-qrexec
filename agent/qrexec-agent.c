@@ -28,9 +28,11 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <errno.h>
+#include <dirent.h>
 #include <err.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <string.h>
 #include <getopt.h>
 #include <pwd.h>
@@ -120,6 +122,43 @@ static struct pam_conv conv = {
     NULL
 };
 #endif
+
+static void set_cloexec_on_all_fds(void) {
+    int const procfd = open("/proc/self/fd", O_DIRECTORY|O_RDONLY|O_CLOEXEC|O_NOCTTY);
+    if (procfd == -1) {
+        PERROR("open /proc/self/fd");
+        exit(1);
+    }
+    DIR *dir = fdopendir(procfd);
+    if (!dir) {
+        PERROR("fdopendir");
+        exit(1);
+    }
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(dir);
+        char *endptr;
+        long fd_num;
+        if (!entry) {
+            if (errno)
+                err(1, "readdir(/proc/self/fd)");
+            break;
+        }
+        errno = 0;
+        fd_num = strtol(entry->d_name, &endptr, 10);
+        if (errno || !endptr || *endptr || fd_num < 0 || fd_num > INT_MAX)
+            errx(1, "bad number in /proc/self/fd");
+        if (fd_num > 2 && fd_num != procfd) {
+            /* not fcntl() in case other file descriptor flags are added */
+            if (ioctl((int)fd_num, FIOCLEX)) {
+                PERROR("ioctl FIOCLEX");
+                abort(); /* should NEVER happen */
+            }
+        }
+    }
+    closedir(dir);
+}
+
 /* Start program requested by dom0 in already prepared process
  * (stdin/stdout/stderr already set, etc)
  * Called in two cases:
@@ -139,6 +178,7 @@ static struct pam_conv conv = {
  */
 _Noreturn void do_exec(const char *cmd, const char *user)
 {
+    int nullfd;
 #ifdef HAVE_PAM
     int retval, status;
     pam_handle_t *pamh=NULL;
@@ -198,14 +238,23 @@ _Noreturn void do_exec(const char *cmd, const char *user)
     pw->pw_dir = strdup(pw->pw_dir);
     pw->pw_shell = strdup(pw->pw_shell);
     endpwent();
+    if (!pw->pw_name || !pw->pw_passwd || !pw->pw_dir || !pw->pw_shell)
+        exit(1);
 
     shell_basename = basename (pw->pw_shell);
     /* this process is going to die shortly, so don't care about freeing */
     arg0 = malloc (strlen (shell_basename) + 2);
     if (!arg0)
-        goto error;
+        exit(1);
     arg0[0] = '-';
     strcpy (arg0 + 1, shell_basename);
+
+    set_cloexec_on_all_fds();
+
+    if ((nullfd = open("/dev/null", O_RDONLY|O_NOCTTY|O_CLOEXEC)) == -1) {
+        PERROR("open /dev/null");
+        exit(1);
+    }
 
     retval = pam_start("qrexec", user, &conv, &pamh);
     if (retval != PAM_SUCCESS)
@@ -288,9 +337,10 @@ _Noreturn void do_exec(const char *cmd, const char *user)
             /* parent */
             /* close std*, so when child process closes them, qrexec-agent will receive EOF */
             /* this is the main purpose of this reimplementation of /bin/su... */
-            close(0);
-            close(1);
-            close(2);
+            dup2(nullfd, 0);
+            dup2(nullfd, 1);
+            dup2(nullfd, 2);
+            close(nullfd);
     }
 
     /* reachable only in parent */
@@ -316,6 +366,7 @@ error:
     pam_end(pamh, PAM_ABORT);
     exit(1);
 #else
+    set_cloexec_on_all_fds();
     /* call QUBESRPC if requested */
     exec_qubes_rpc_if_requested(cmd, environ);
 
