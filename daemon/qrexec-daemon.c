@@ -878,9 +878,10 @@ static int parse_policy_response(
     char **target_uuid,
     char **target,
     char **requested_target,
+    char **service_name,
     int *autostart
 ) {
-    *user = *target_uuid = *target = *requested_target = NULL;
+    *user = *target_uuid = *target = *requested_target = *service_name = NULL;
     int result = *autostart = -1;
     const char *const msg = daemon ? "qrexec-policy-daemon" : "qrexec-policy-exec";
     // At least one byte must be returned
@@ -946,6 +947,12 @@ static int parse_policy_response(
                 goto bad_response;
             *requested_target = strdup(current_response + (sizeof("requested_target=") - 1));
             if (*requested_target == NULL)
+                abort();
+        } else if (!strncmp(current_response, "service=", sizeof("service=") - 1)) {
+            if (*service_name != NULL)
+                goto bad_response;
+            *service_name = strdup(current_response + (sizeof("service=") - 1));
+            if (*service_name == NULL)
                 abort();
         } else {
             char *p = strchr(current_response, '=');
@@ -1029,11 +1036,12 @@ static enum policy_response connect_daemon_socket(
         const char *remote_domain_name,
         const char *source_domain,
         const char *target_domain,
-        const char *service_name,
+        const char *requested_service_name,
         char **user,
         char **target_uuid,
         char **target,
         char **requested_target,
+        char **service_name,
         int *autostart
 ) {
     int pid = -1;
@@ -1056,11 +1064,12 @@ static enum policy_response connect_daemon_socket(
                                remote_domain_name,
                                source_domain,
                                target_domain,
-                               service_name);
+                               requested_service_name);
         size_t result_bytes;
         // this closes the socket
         char *result = qubes_read_all_to_malloc(daemon_socket, 64, 4096, &result_bytes);
-        int policy_result = parse_policy_response(result, result_bytes, true, user, target_uuid, target, requested_target, autostart);
+        int policy_result = parse_policy_response(result, result_bytes, true, user, target_uuid, target,
+            requested_target, service_name, autostart);
         if (policy_result != RESPONSE_MALFORMED) {
             // This leaks 'result', but as the code execs later anyway this isn't a problem.
             // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
@@ -1104,7 +1113,7 @@ static enum policy_response connect_daemon_socket(
                         "--",
                         remote_domain_name,
                         target_domain,
-                        service_name,
+                        requested_service_name,
                         NULL);
                 PERROR("execl");
             } else {
@@ -1131,7 +1140,8 @@ static enum policy_response connect_daemon_socket(
             // This leaks 'result', but as the code execs later anyway this isn't a problem.
             // 'result' cannot be freed as 'user', 'target', and 'requested_target' point into
             // the same buffer.
-            return parse_policy_response(result, result_bytes, true, user, target_uuid, target, requested_target, autostart);
+            return parse_policy_response(result,
+                result_bytes, true, user, target_uuid, target, requested_target, service_name, autostart);
     }
 }
 
@@ -1152,7 +1162,7 @@ _Noreturn static void handle_execute_service_child(
         const char *remote_domain_name,
         const char *source_domain,
         const char *target_domain,
-        const char *service_name,
+        const char *requested_service_name,
         const struct service_params *request_id) {
     int i;
 
@@ -1165,17 +1175,25 @@ _Noreturn static void handle_execute_service_child(
         for (i = 3; i < MAX_FDS; i++)
             close(i);
 
-    char *user = NULL, *target = NULL, *requested_target = NULL, *target_uuid = NULL;
+    char *user = NULL, *target = NULL, *requested_target = NULL, *target_uuid, *service_name = NULL;
     int autostart = -1;
     int policy_response = connect_daemon_socket(remote_domain_name,
-        source_domain, target_domain, service_name,
-        &user, &target_uuid, &target, &requested_target, &autostart);
+        source_domain, target_domain, requested_service_name,
+        &user, &target_uuid, &target, &requested_target, &service_name, &autostart);
     if (policy_response != RESPONSE_ALLOW)
         daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
 
     /* Replace the target domain with the version normalized by the policy engine */
     target_domain = requested_target;
     char *cmd = NULL;
+    const char *target_service_name = NULL;
+    if(service_name) {
+        /* If policy program has not provided service replacement then,
+         use the requested one. Service replacement happens for RemoteVM. */
+        target_service_name = service_name;
+    } else {
+        target_service_name = requested_service_name;
+    }
 
     /*
      * If there was no service argument, pretend that an empty argument was
@@ -1195,7 +1213,7 @@ _Noreturn static void handle_execute_service_child(
             type = "name";
         }
         if (asprintf(&cmd, "QUBESRPC %s%s %s %s %s",
-                     service_name,
+                     target_service_name,
                      trailer,
                      remote_domain_name,
                      type,
@@ -1213,7 +1231,7 @@ _Noreturn static void handle_execute_service_child(
         const char *const selected_target = use_uuid ? target_uuid : target;
         int service_length = asprintf(&cmd, "%s:QUBESRPC %s%s %s",
                                       user,
-                                      service_name,
+                                      target_service_name,
                                       trailer,
                                       remote_domain_name);
         if (service_length < 0)
