@@ -346,7 +346,16 @@ int qrexec_process_io(const struct process_io_request *req,
                         vchan, stdout_fd, stdout_msg_type,
                         &prefix, &remote_buffer)) {
                 case REMOTE_ERROR:
-                    handle_vchan_error("send(handle_input stdout)");
+                    if (!is_service && remote_status == -1) {
+                        /* Even if sending fails, still try to read remaining
+                         * data, if any - especially the exit code. But don't
+                         * send anything anymore.
+                         */
+                        LOG(ERROR, "Error while vchan send (handle_input stdout), reading remaining data");
+                        close_stdout();
+                    } else {
+                        handle_vchan_error("send(handle_input stdout)");
+                    }
                     break;
                 case REMOTE_EOF:
                     close_stdout();
