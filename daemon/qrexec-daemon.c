@@ -41,7 +41,9 @@
 #include "../libqrexec/ioall.h"
 #include "qrexec-daemon-common.h"
 
-#define QREXEC_MIN_VERSION QREXEC_PROTOCOL_V2
+#define QREXEC_AGENT_MIN_VERSION QREXEC_PROTOCOL_V2
+#define QREXEC_CLIENT_MIN_VERSION QREXEC_PROTOCOL_V3
+
 #define QREXEC_SOCKET_PATH "/run/qubes/policy.sock"
 
 #ifdef COVERAGE
@@ -68,6 +70,7 @@ enum vchan_port_state {
 
 struct _client {
     int state;		// enum client_state
+    int version;
 };
 
 enum policy_response {
@@ -233,7 +236,6 @@ static int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
 {
     struct msg_header hdr;
     struct peer_info info;
-    int actual_version;
 
     if (libvchan_recv(ctrl, &hdr, sizeof(hdr)) != sizeof(hdr)) {
         LOG(ERROR, "Failed to read agent HELLO hdr");
@@ -250,10 +252,10 @@ static int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
         return -1;
     }
 
-    actual_version = info.version < QREXEC_PROTOCOL_VERSION ? info.version : QREXEC_PROTOCOL_VERSION;
-
-    if (actual_version < QREXEC_MIN_VERSION) {
-        LOG(ERROR, "Incompatible agent protocol version (remote %d, local %d)", info.version, QREXEC_PROTOCOL_VERSION);
+    if (info.version < QREXEC_AGENT_MIN_VERSION) {
+        LOG(ERROR, "Incompatible agent protocol version (remote %d, local %d)",
+            info.version, QREXEC_PROTOCOL_VERSION);
+        LOG(ERROR, "Minimum supported version is %d.", QREXEC_AGENT_MIN_VERSION);
         incompatible_protocol_error_message(domain_name, info.version);
         return -1;
     }
@@ -275,7 +277,7 @@ static int handle_agent_hello(libvchan_t *ctrl, const char *domain_name)
         return -1;
     }
 
-    return actual_version;
+    return info.version;
 }
 
 static void signal_handler(int sig);
@@ -728,12 +730,15 @@ static void handle_client_hello(int fd)
         terminate_client(fd);
         return;
     }
-    if (info.version != QREXEC_PROTOCOL_VERSION) {
-        LOG(ERROR, "Incompatible client protocol version (remote %d, local %d)", info.version, QREXEC_PROTOCOL_VERSION);
+    if (info.version < QREXEC_CLIENT_MIN_VERSION) {
+        LOG(ERROR, "Incompatible client protocol version (remote %d, local %d)",
+            info.version, QREXEC_PROTOCOL_VERSION);
+        LOG(ERROR, "Minimum supported version is %d.", QREXEC_CLIENT_MIN_VERSION);
         terminate_client(fd);
         return;
     }
     clients[fd].state = CLIENT_CMDLINE;
+    clients[fd].version = info.version;
 }
 
 /* handle data received from one of qrexec_client processes */
@@ -1323,7 +1328,7 @@ static void sanitize_message_from_agent(struct msg_header *untrusted_header)
             break;
         case MSG_TRIGGER_SERVICE3:
             if (protocol_version < QREXEC_PROTOCOL_V3) {
-                LOG(ERROR, "agent sent (new) MSG_TRIGGER_SERVICE3 "
+                LOG(ERROR, "agent sent MSG_TRIGGER_SERVICE3 "
                     "although it uses protocol %d", protocol_version);
                 exit(1);
             }
