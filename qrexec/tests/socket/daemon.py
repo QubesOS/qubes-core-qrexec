@@ -28,6 +28,7 @@ from typing import Tuple
 import time
 import itertools
 import socket
+import signal
 
 import psutil
 
@@ -569,6 +570,7 @@ class TestClient(unittest.TestCase):
         self.client = subprocess.Popen(
             cmd,
             env=env,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
         )
         self.addCleanup(self.stop_client)
@@ -631,6 +633,64 @@ class TestClient(unittest.TestCase):
         target.send_message(qrexec.MSG_DATA_STDOUT, b"")
         self.assertEqual(self.client.stdout.read(), b"stdout data\n")
         target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42))
+        self.client.wait()
+        self.assertEqual(self.client.returncode, 42)
+
+    def test_run_vm_command_from_dom0_reject_stdin(self):
+        """Test if qrexec-client properly returns remote exit code even if
+        service didn't read all of stdin"""
+        cmd = "user:command"
+        target_domain_name = "target_domain"
+        target_domain = 42
+        target_port = 513
+
+        target_daemon = self.connect_daemon(
+            target_domain, target_domain_name
+        )
+        self.start_client(["-d", target_domain_name, cmd])
+        target_daemon.accept()
+        target_daemon.handshake()
+
+        # negotiate_connection_params
+        self.assertEqual(
+            target_daemon.recv_message(),
+            (
+                qrexec.MSG_EXEC_CMDLINE,
+                struct.pack("<LL", 0, 0) + cmd.encode() + b"\0",
+            ),
+        )
+        target_daemon.send_message(
+            qrexec.MSG_EXEC_CMDLINE,
+            struct.pack("<LL", target_domain, target_port),
+        )
+
+        target = self.connect_target(target_domain, target_port)
+        target.handshake()
+
+        self.client.send_signal(signal.SIGSTOP)
+
+        # select_loop
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
+        target.send_message(qrexec.MSG_DATA_STDOUT, b"")
+        target.send_message(qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", 42))
+        target.close()
+
+        # ...but still send some data
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.write(b"A" * 4096)
+        self.client.stdin.flush()
+
+        # and only now let the client process both data streams
+        self.client.send_signal(signal.SIGCONT)
+
+        self.assertEqual(self.client.stdout.read(), b"stdout data\n")
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
 
