@@ -1,3 +1,17 @@
+qubes-core-qrexec (4.3.1-1) unstable; urgency=medium
+
+  [ Ali Mirjamali ]
+  * Pipe `qrexec-client(-vm) --help` output to stdout
+
+  [ Frédéric Pierret (fepitre) ]
+  * Blacken the whole repository and add CI job
+
+  [ Marek Marczykowski-Górecki ]
+  * Try to retrieve exit code of a failed service call
+  * Add a test for qrexec-client race condition
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 11 Dec 2024 01:22:56 +0100
+
 qubes-core-qrexec (4.3.0-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
