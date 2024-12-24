@@ -97,6 +97,9 @@ rm -f %{name}-%{version}
 %preun
 %systemd_preun qubes-qrexec-agent.service
 
+%pre selinux
+%selinux_relabel_pre
+
 %post selinux
 %selinux_modules_install %{_datadir}/selinux/packages/qubes-core-qrexec.pp || :
 
