@@ -92,7 +92,7 @@ _Noreturn static void usage(const char *const name, int status)
             "usage: %s [options] -d domain_name ["
             "-l local_prog|"
             "-c request_id,src_domain_name,src_domain_id|"
-            "-e] remote_cmdline\n"
+            "-e] user:remote_cmdline\n"
             "Options:\n"
             "  -h, --help - display usage\n"
             "  -e - exit after sending cmd\n"
