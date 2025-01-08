@@ -2020,6 +2020,76 @@ requested_target=test-vm2\
 """,
         )
 
+    def test_124_execute_bad_username(self):
+        asyncio.run(self._test_124_execute_bad_username())
+
+    async def _test_124_execute_bad_username(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * @anyvm @anyvm allow user=:bogus",
+            filepath="filename",
+            lineno=12,
+        )
+        request = _req("test-vm1", "test-vm2")
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=":bogus",
+            target="test-vm2",
+            autostart=True,
+        )
+        with self.assertRaises(exc.AccessDenied) as e:
+            await resolution.execute()
+
+    def test_125_execute_loopback(self):
+        asyncio.run(self._test_125_execute_loopback())
+
+    async def _test_125_execute_loopback(self):
+        rule = parser.Rule.from_line(
+            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
+        )
+        request = _req("test-vm1", "test-vm1")
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test-vm1",
+            autostart=True,
+        )
+        with self.assertRaises(exc.AccessDenied) as e:
+            await resolution.execute()
+
+    def test_126_execute_bad_but_permitted_username(self):
+        asyncio.run(self._test_126_execute_bad_but_permitted_username())
+
+    async def _test_126_execute_bad_but_permitted_username(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * @anyvm @anyvm allow user=a:nogui",
+            filepath="filename",
+            lineno=12,
+        )
+        request = _req("test-vm1", "test-vm2")
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user="a:nogui",
+            target="test-vm2",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=a:nogui
+result=allow
+target=test-vm2
+target_uuid=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4
+autostart=True
+requested_target=test-vm2\
+""",
+        )
+
 
 # class TC_30_Misc(qubes.tests.QubesTestCase):
 class TC_50_Misc(unittest.TestCase):
