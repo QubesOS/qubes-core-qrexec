@@ -148,6 +148,7 @@ void register_exec_func(do_exec_t *func);
  * \param program Full path to program to execute.
  * \param cmd RPC command, excluding "QUBESRPC " prefix.
  * \param envp Environment passed to execve().
+ * \param use_shell If true, use a login shell to spawn the program.
  *
  * Execute *program* as an RPC service or call _exit() on failure.
  * *cmd* is used to set the argument (if any) and "QREXEC_*" environment variables.
@@ -155,7 +156,8 @@ void register_exec_func(do_exec_t *func);
  * "QREXEC_SERVICE_PATH" and "QREXEC_AGENT_PID", which are inherited.
  */
 __attribute__((visibility("default")))
-_Noreturn void exec_qubes_rpc(const char *program, const char *cmd, char *const envp[]);
+_Noreturn void exec_qubes_rpc2(const char *program, const char *cmd, char *const envp[],
+                               bool use_shell);
 
 /* Execute `qubes.WaitForSession` service, do not return on success, return -1
  * (maybe setting errno) on failure. */

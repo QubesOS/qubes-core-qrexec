@@ -172,8 +172,10 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             exit(1);
         }
         /* call QUBESRPC if requested */
-        if (prog)
-            exec_qubes_rpc(prog, cmd, environ);
+        if (prog) {
+            /* no point in creating a login shell for test environmens */
+            exec_qubes_rpc2(prog, cmd, environ, false);
+        }
 
         /* otherwise exec shell */
         execl("/bin/sh", "sh", "-c", cmd, NULL);
@@ -280,9 +282,10 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
                 warn("chdir(%s)", pw->pw_dir);
 
             /* call QUBESRPC if requested */
-            if (prog)
-                exec_qubes_rpc(prog, cmd, env);
-
+            if (prog) {
+                /* Set up environment variables for a login shell. */
+                exec_qubes_rpc2(prog, cmd, env, true);
+            }
             /* otherwise exec shell */
             execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
             _exit(QREXEC_EXIT_PROBLEM);
@@ -319,9 +322,10 @@ error:
     exit(1);
 #else
     /* call QUBESRPC if requested */
-    if (prog)
-        exec_qubes_rpc(prog, cmd, environ);
-
+    if (prog) {
+        /* Set up environment variables for a login session. */
+        exec_qubes_rpc2(prog, cmd, environ, true);
+    }
     /* otherwise exec shell */
     execl("/bin/su", "su", "-", user, "-c", cmd, NULL);
     PERROR("execl");

@@ -60,7 +60,8 @@ static bool should_strip_env_var(const char *var)
            !STARTS_WITH_LITERAL(rest, "_AGENT_PID=");
 }
 
-void exec_qubes_rpc(const char *program, const char *cmd, char *const envp[]) {
+void exec_qubes_rpc2(const char *program, const char *cmd, char *const envp[],
+                     bool use_shell) {
     /* avoid calling RPC service through shell */
     char *prog_copy;
     char *tok, *savetok;
@@ -109,7 +110,7 @@ void exec_qubes_rpc(const char *program, const char *cmd, char *const envp[]) {
         _exit(QREXEC_EXIT_PROBLEM);
     }
 
-    argv[i++] = (char *)program;
+    argv[i++] = program;
     tok=strtok_r(prog_copy, " ", &savetok);
     while (tok != NULL) {
         if (i >= sizeof(argv)/sizeof(argv[0])-1) {
@@ -137,17 +138,33 @@ void exec_qubes_rpc(const char *program, const char *cmd, char *const envp[]) {
     }
     EXTEND("QREXEC_SERVICE_FULL_NAME=%s", argv[1]);
     EXTEND("QREXEC_REMOTE_DOMAIN=%s", argv[2]);
+
     const char *p = strchr(argv[1], '+');
     argv[1] = NULL;
-    argv[2] = NULL;
     if (p != NULL) {
         EXTEND("QREXEC_SERVICE_ARGUMENT=%s", p + 1);
-        if (p[1])
+        if (p[1] != '\0') {
             argv[1] = p + 1;
+            argv[2] = NULL;
+        }
     }
     assert(iterator <= env_amount);
     buf[iterator] = NULL;
-    execve(argv[0], (char *const *)argv, buf);
+    if (program[0] != '/') {
+        LOG(ERROR, "Program to execute not absolute path");
+        _exit(QREXEC_EXIT_PROBLEM);
+    }
+    if (use_shell) {
+        argv[3] = argv[0];
+        argv[4] = argv[1];
+        argv[5] = NULL;
+        argv[0] = "-sh";
+        argv[1] = "-lcunset LESSOPEN LESSCLOSE&&exec \"$@\"";
+        argv[2] = "sh";
+        execve("/bin/sh", (char *const *)argv, buf);
+    } else {
+        execve(program, (char *const *)argv, buf);
+    }
     _exit(errno == ENOENT ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM);
 bad_asprintf:
     PERROR("asprintf");
