@@ -71,9 +71,11 @@ static libvchan_t *ctrl_vchan;
 
 static pid_t wait_for_session_pid = -1;
 
-static int trigger_fd;
+static int trigger_fd = -1;
 
 static int terminate_requested;
+
+static int null_fd = -1;
 
 static int meminfo_write_started = 0;
 
@@ -156,9 +158,14 @@ static void close_std(void)
 {
     /* close std*, so when child process closes them, qrexec-agent will receive EOF */
     /* this is the main purpose of this reimplementation of /bin/su... */
-    close(0);
-    close(1);
-    close(2);
+    for (int i = 0; i < 3; ++i) {
+        int j;
+        do {
+            j = dup2(null_fd, i);
+        } while (j == -1 && (errno == EINTR || errno == EBUSY));
+        if (j != i)
+            abort();
+    }
 }
 
 static int really_wait(pid_t child)
@@ -921,6 +928,7 @@ static _Noreturn void usage(const char *argv0)
 int main(int argc, char **argv)
 {
     sigset_t selectmask;
+    null_fd = qrexec_open_dev_null();
 
     setup_logging("qrexec-agent");
 

@@ -162,6 +162,11 @@ void buffer_append(struct buffer *b, const char *data, int len);
 void buffer_remove(struct buffer *b, int len);
 int buffer_len(struct buffer *b);
 void *buffer_data(struct buffer *b);
+/* Open /dev/null and keep it from being closed before the exec func is called.
+ * Returns the newly opened FD. Crashes if called twice. The FD is marked CLOEXEC,
+ * so it doesn't need to be closed before execve(). */
+__attribute__((visibility("default")))
+int qrexec_open_dev_null(void);
 
 int flush_client_data(int fd, struct buffer *buffer);
 int write_stdin(int fd, const char *data, int len, struct buffer *buffer);
