@@ -71,7 +71,7 @@ static libvchan_t *ctrl_vchan;
 
 static pid_t wait_for_session_pid = -1;
 
-static int trigger_fd;
+static int trigger_fd = -1;
 
 static int terminate_requested;
 
@@ -155,13 +155,18 @@ _Noreturn static void really_exec(const char *prog, const struct passwd *pw,
     _exit(QREXEC_EXIT_PROBLEM);
 }
 
-static void close_std(void)
+static void close_std(int null_fd)
 {
     /* close std*, so when child process closes them, qrexec-agent will receive EOF */
     /* this is the main purpose of this reimplementation of /bin/su... */
-    close(0);
-    close(1);
-    close(2);
+    for (int i = 0; i < 3; ++i) {
+        int j;
+        do {
+            j = dup2(null_fd, i);
+        } while (j == -1 && (errno == EINTR || errno == EBUSY));
+        if (j != i)
+            abort();
+    }
 }
 
 static int really_wait(pid_t child)
@@ -231,6 +236,12 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             exit(QREXEC_EXIT_PROBLEM);
         }
 
+        int null_fd = open("/dev/null", O_RDWR|O_CLOEXEC|O_NOCTTY);
+        if (null_fd == -1) {
+            LOG(ERROR, "cannot open /dev/null");
+            exit(QREXEC_EXIT_PROBLEM);
+        }
+
         /* FORK HERE */
         child = fork();
 
@@ -241,7 +252,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
                 really_exec(prog, pw, environ, cmd);
             default:
                 /* parent */
-                close_std();
+                close_std(null_fd);
                 exit(really_wait(child));
         }
     }
@@ -330,6 +341,12 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
     if (retval != PAM_SUCCESS)
         goto error;
 
+    int null_fd = open("/dev/null", O_RDWR|O_CLOEXEC|O_NOCTTY);
+    if (null_fd == -1) {
+        LOG(ERROR, "cannot open /dev/null");
+        goto error;
+    }
+
     /* FORK HERE */
     child = fork();
 
@@ -349,7 +366,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             really_exec(prog, pw, env, cmd);
         default:
             /* parent */
-            close_std();
+            close_std(null_fd);
     }
 
     /* reachable only in parent */
