@@ -123,6 +123,25 @@ static struct pam_conv conv = {
 };
 #endif
 
+_Noreturn static void really_exec(const struct passwd *pw, char **env,
+                                  const char *cmd, const char *arg0)
+{
+    /* child */
+    setsid();
+
+    /* try to enter home dir, but don't abort if it fails */
+    int retval = chdir(pw->pw_dir);
+    if (retval == -1)
+        warn("chdir(%s)", pw->pw_dir);
+
+    /* call QUBESRPC if requested */
+    exec_qubes_rpc_if_requested(cmd, env);
+
+    /* otherwise exec shell */
+    execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
+    _exit(QREXEC_EXIT_PROBLEM);
+}
+
 static int really_wait(pid_t child)
 {
     int status;
@@ -306,21 +325,10 @@ _Noreturn void do_exec(const char *cmd, const char *user)
                 _exit(QREXEC_EXIT_PROBLEM);
             if (setuid (pw->pw_uid))
                 _exit(QREXEC_EXIT_PROBLEM);
-            setsid();
             /* This is a copy but don't care to free as we exec later anyway.  */
             env = pam_getenvlist (pamh);
 
-            /* try to enter home dir, but don't abort if it fails */
-            retval = chdir(pw->pw_dir);
-            if (retval == -1)
-                warn("chdir(%s)", pw->pw_dir);
-
-            /* call QUBESRPC if requested */
-            exec_qubes_rpc_if_requested(cmd, env);
-
-            /* otherwise exec shell */
-            execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
-            _exit(QREXEC_EXIT_PROBLEM);
+            really_exec(pw, env, cmd, arg0);
         default:
             /* parent */
             /* close std*, so when child process closes them, qrexec-agent will receive EOF */
