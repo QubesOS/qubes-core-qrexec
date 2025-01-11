@@ -138,22 +138,29 @@ int handle_handshake(libvchan_t *ctrl)
 
 static int handle_just_exec(struct qrexec_parsed_command *cmd)
 {
-    int fdn, pid;
+    int fdn, pid, log_fd;
 
     if (cmd == NULL)
         return QREXEC_EXIT_PROBLEM;
 
+    char file_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
+    struct buffer buf = { .data = file_path, .buflen = (int)sizeof(file_path) };
+    struct buffer stdin_buffer;
+    buffer_init(&stdin_buffer);
     if (cmd->service_descriptor) {
         int socket_fd;
         struct buffer stdin_buffer;
         buffer_init(&stdin_buffer);
-        int status = find_qrexec_service(cmd, &socket_fd, &stdin_buffer);
+        int status = find_qrexec_service(cmd, &socket_fd, &stdin_buffer, &buf);
         if (status == -1)
             return QREXEC_EXIT_SERVICE_NOT_FOUND;
         if (status != 0)
             return QREXEC_EXIT_PROBLEM;
         if (socket_fd != -1)
-            return write_all(socket_fd, stdin_buffer.data, stdin_buffer.buflen) ? 0 : QREXEC_EXIT_PROBLEM;
+            return write_all(socket_fd, stdin_buffer.data, stdin_buffer.buflen) ?
+                0 : QREXEC_EXIT_PROBLEM;
+    } else {
+        buf.data = NULL;
     }
     switch (pid = fork()) {
         case -1:
@@ -161,11 +168,22 @@ static int handle_just_exec(struct qrexec_parsed_command *cmd)
             return QREXEC_EXIT_PROBLEM;
         case 0:
             fdn = open("/dev/null", O_RDWR);
-            fix_fds(fdn, fdn, fdn);
-            do_exec(cmd->command, cmd->username);
+            if (fdn < 0) {
+                LOG(ERROR, "open /dev/null failed");
+                _exit(QREXEC_EXIT_PROBLEM);
+            }
+            int other_pid;
+            log_fd = cmd->service_descriptor ? open_logger(cmd, &other_pid) : fdn;
+            if (log_fd < 0)
+                _exit(QREXEC_EXIT_PROBLEM);
+            fix_fds(fdn, fdn, log_fd);
+            do_exec(buf.data, cmd->command, cmd->username);
         default:;
     }
-    LOG(INFO, "executed (nowait): %s (pid %d)", cmd->command, pid);
+    if (buf.data)
+        LOG(INFO, "executed (nowait): %s %s (pid %d)", buf.data, cmd->command, pid);
+    else
+        LOG(INFO, "executed (nowait): %s (pid %d)", cmd->command, pid);
     return 0;
 }
 
@@ -261,6 +279,7 @@ static int handle_new_process_common(
             return 0;
     }
 
+    int logger_pid = 0;
     req.vchan = data_vchan;
     req.stdin_buf = &stdin_buf;
 
@@ -280,6 +299,8 @@ static int handle_new_process_common(
 
     req.prefix_data.data = NULL;
     req.prefix_data.len = 0;
+    if (cmd->service_descriptor != NULL)
+        req.logger_fd = open_logger(cmd, &logger_pid);
 
     exit_code = qrexec_process_io(&req, cmd);
 
