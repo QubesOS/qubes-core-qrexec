@@ -77,6 +77,8 @@ static int terminate_requested;
 
 static int meminfo_write_started = 0;
 
+static uid_t myuid;
+
 static const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
 static const char *fork_server_path = QREXEC_FORK_SERVER_SOCKET;
 
@@ -158,10 +160,10 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
     signal(SIGPIPE, SIG_DFL);
 
 #ifdef HAVE_PAM
-    if (geteuid() != 0) {
+    if (myuid != 0) {
         /* We're not root, assume this is a testing environment. */
 
-        pw = getpwuid(geteuid());
+        pw = getpwuid(myuid);
         if (!pw) {
             PERROR("getpwuid");
             exit(QREXEC_EXIT_PROBLEM);
@@ -404,6 +406,7 @@ static void init(void)
     if (handle_handshake(ctrl_vchan) < 0)
         exit(1);
     old_umask = umask(0);
+    myuid = geteuid();
     trigger_fd = get_server_socket(agent_trigger_path);
     umask(old_umask);
     register_exec_func(do_exec);
