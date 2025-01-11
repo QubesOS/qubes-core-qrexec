@@ -36,6 +36,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <err.h>
 #include "qrexec.h"
 #include "libqrexec-utils.h"
 #include "private.h"
@@ -45,6 +46,26 @@ void register_exec_func(do_exec_t *func) {
     if (exec_func != NULL)
         abort();
     exec_func = func;
+}
+
+static int null_fd = -1;
+int qrexec_open_dev_null(void) {
+    if (null_fd != -1)
+        abort();
+    null_fd = open("/dev/null", O_RDWR|O_CLOEXEC|O_NOCTTY);
+    if (null_fd < 3) {
+        int problem = errno;
+        if (null_fd == 2 || (fcntl(2, F_GETFD) == -1 && errno == EBADF)) {
+            return 1;
+        }
+        /* stderr is open */
+        if (null_fd == -1) {
+            errno = problem;
+            err(1, "open /dev/null");
+        }
+        errx(1, "File descriptor %d is closed, cannot continue", null_fd);
+    }
+    return null_fd;
 }
 
 void exec_qubes_rpc_if_requested(const char *prog, char *const envp[]) {
@@ -99,7 +120,16 @@ void fix_fds(int fdin, int fdout, int fderr)
         abort();
     }
 #ifdef SYS_close_range
-    int close_range_res = syscall(SYS_close_range, 3, ~0U, 0);
+    int close_range_res;
+    if (null_fd == -1) {
+        close_range_res = syscall(SYS_close_range, 3, ~0U, 0);
+    } else {
+        assert(null_fd >= 3);
+        close_range_res = syscall(SYS_close_range, null_fd + 1, ~0U, 0);
+        if (null_fd > 3 && close_range_res == 0) {
+            close_range_res = syscall(SYS_close_range, 3, (unsigned)(null_fd - 1), 0);
+        }
+    }
     if (close_range_res == 0)
         return;
     assert(close_range_res == -1);
@@ -108,8 +138,10 @@ void fix_fds(int fdin, int fdout, int fderr)
         abort();
     }
 #endif
-    for (int i = 3; i < 256; ++i)
-        close(i);
+    for (int i = 3; i < 256; ++i) {
+        if (i != null_fd)
+            close(i);
+    }
 }
 
 static int do_fork_exec(const char *user,
