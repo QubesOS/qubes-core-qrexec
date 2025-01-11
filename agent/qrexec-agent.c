@@ -124,7 +124,7 @@ static struct pam_conv conv = {
 #endif
 
 _Noreturn static void really_exec(const struct passwd *pw, char **env,
-                                  const char *cmd, const char *arg0)
+                                  const char *cmd)
 {
     /* child */
     setsid();
@@ -138,6 +138,16 @@ _Noreturn static void really_exec(const struct passwd *pw, char **env,
     exec_qubes_rpc_if_requested(cmd, env);
 
     /* otherwise exec shell */
+    char *shell_dup = strdup(pw->pw_shell);
+    if (shell_dup == NULL)
+        _exit(QREXEC_EXIT_PROBLEM);
+    char *shell_basename = basename (shell_dup);
+    /* this process is going to die shortly, so don't care about freeing */
+    char *arg0 = malloc (strlen (shell_basename) + 2);
+    if (!arg0)
+        _exit(QREXEC_EXIT_PROBLEM);
+    arg0[0] = '-';
+    strcpy (arg0 + 1, shell_basename);
     execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
     _exit(QREXEC_EXIT_PROBLEM);
 }
@@ -195,8 +205,6 @@ _Noreturn void do_exec(const char *cmd, const char *user)
     pid_t child;
     char **env;
     char env_buf[64];
-    char *arg0;
-    char *shell_basename;
 #endif
     sigset_t sigmask;
 
@@ -249,16 +257,6 @@ _Noreturn void do_exec(const char *cmd, const char *user)
         exit(QREXEC_EXIT_PROBLEM);
     }
     endpwent();
-
-    shell_basename = basename (pw->pw_shell);
-    /* this process is going to die shortly, so don't care about freeing */
-    arg0 = malloc (strlen (shell_basename) + 2);
-    if (!arg0) {
-        PERROR("malloc");
-        exit(QREXEC_EXIT_PROBLEM);
-    }
-    arg0[0] = '-';
-    strcpy (arg0 + 1, shell_basename);
 
     retval = pam_start("qrexec", user, &conv, &pamh);
     if (retval != PAM_SUCCESS) {
@@ -337,7 +335,7 @@ _Noreturn void do_exec(const char *cmd, const char *user)
             /* This is a copy but don't care to free as we exec later anyway.  */
             env = pam_getenvlist (pamh);
 
-            really_exec(pw, env, cmd, arg0);
+            really_exec(pw, env, cmd);
         default:
             /* parent */
             close_std();
