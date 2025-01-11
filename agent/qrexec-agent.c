@@ -241,28 +241,38 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
         goto error;
 
     /* provide this variable to child process */
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "QREXEC_AGENT_PID=%d", getppid()) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "QREXEC_AGENT_PID=%d", getppid()) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "HOME=%s", pw->pw_dir) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "HOME=%s", pw->pw_dir) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "SHELL=%s", pw->pw_shell) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "SHELL=%s", pw->pw_shell) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "USER=%s", pw->pw_name) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "USER=%s", pw->pw_name) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "LOGNAME=%s", pw->pw_name) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "LOGNAME=%s", pw->pw_name) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
