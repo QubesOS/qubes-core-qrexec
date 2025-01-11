@@ -122,6 +122,24 @@ static struct pam_conv conv = {
     NULL
 };
 #endif
+
+static int really_wait(pid_t child)
+{
+    int status;
+    pid_t pid;
+    do {
+        pid = waitpid (child, &status, 0);
+    } while (pid == -1 && errno == EINTR);
+    if (pid != (pid_t)-1) {
+        if (WIFSIGNALED (status))
+            status = WTERMSIG (status) + 128;
+        else
+            status = WEXITSTATUS (status);
+    } else
+        status = QREXEC_EXIT_PROBLEM;
+    return status;
+}
+
 /* Start program requested by dom0 in already prepared process
  * (stdin/stdout/stderr already set, etc)
  * Called in two cases:
@@ -146,7 +164,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
     pam_handle_t *pamh=NULL;
     struct passwd *pw;
     struct passwd pw_copy;
-    pid_t child, pid;
+    pid_t child;
     char **env;
     char env_buf[64];
     char *arg0;
@@ -319,15 +337,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
     }
 
     /* reachable only in parent */
-    pid = waitpid (child, &status, 0);
-    if (pid != (pid_t)-1) {
-        if (WIFSIGNALED (status))
-            status = WTERMSIG (status) + 128;
-        else
-            status = WEXITSTATUS (status);
-    } else
-        status = 1;
-
+    status = really_wait(child);
     retval = pam_close_session (pamh, 0);
 
     retval = pam_setcred (pamh, PAM_DELETE_CRED | PAM_SILENT);
