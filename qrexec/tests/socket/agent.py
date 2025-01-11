@@ -602,7 +602,7 @@ wait-for-session = 1 # line comment
             messages[-2:],
             [
                 (qrexec.MSG_DATA_STDERR, b""),
-                (qrexec.MSG_DATA_EXIT_CODE, b"\175\0\0\0"),
+                (qrexec.MSG_DATA_EXIT_CODE, b"\1\0\0\0"),
             ],
         )
         for msg_type, msg_value in messages[1:-2]:
