@@ -230,16 +230,20 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
                 user, pw->pw_name);
             exit(QREXEC_EXIT_PROBLEM);
         }
-        /* call QUBESRPC if requested */
-        if (prog) {
-            /* no point in creating a login shell for test environments */
-            exec_qubes_rpc2(prog, cmd, environ, false);
-        }
 
-        /* otherwise exec shell */
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
-        PERROR("execl");
-        exit(QREXEC_EXIT_PROBLEM);
+        /* FORK HERE */
+        child = fork();
+
+        switch (child) {
+            case -1:
+                goto error;
+            case 0:
+                really_exec(prog, pw, environ, cmd);
+            default:
+                /* parent */
+                close_std();
+                exit(really_wait(child));
+        }
     }
 
     pw = getpwnam(user);
