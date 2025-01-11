@@ -123,9 +123,8 @@ static struct pam_conv conv = {
 };
 #endif
 
-_Noreturn static void really_exec(const char *prog,
-                                  const struct passwd *pw, char **env,
-                                  const char *cmd, const char *arg0)
+_Noreturn static void really_exec(const char *prog, const struct passwd *pw,
+                                  char **env, const char *cmd)
 {
     /* child */
     setsid();
@@ -141,6 +140,17 @@ _Noreturn static void really_exec(const char *prog,
         exec_qubes_rpc2(prog, cmd, env, true);
     }
     /* otherwise exec shell */
+    char *shell_dup = strdup(pw->pw_shell);
+    if (shell_dup == NULL)
+        _exit(QREXEC_EXIT_PROBLEM);
+    char *shell_basename = basename (shell_dup);
+    /* this process is going to die shortly, so don't care about freeing */
+    size_t len = strlen(shell_basename) + 1;
+    char *arg0 = malloc(len + 1);
+    if (!arg0)
+        _exit(QREXEC_EXIT_PROBLEM);
+    arg0[0] = '-';
+    memcpy(arg0 + 1, shell_basename, len);
     execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
     _exit(QREXEC_EXIT_PROBLEM);
 }
@@ -198,8 +208,6 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
     pid_t child;
     char **env;
     char env_buf[64];
-    char *arg0;
-    char *shell_basename;
 #endif
     sigset_t sigmask;
 
@@ -255,16 +263,6 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
         exit(QREXEC_EXIT_PROBLEM);
     }
     endpwent();
-
-    shell_basename = basename (pw->pw_shell);
-    /* this process is going to die shortly, so don't care about freeing */
-    arg0 = malloc (strlen (shell_basename) + 2);
-    if (!arg0) {
-        PERROR("malloc");
-        exit(QREXEC_EXIT_PROBLEM);
-    }
-    arg0[0] = '-';
-    strcpy (arg0 + 1, shell_basename);
 
     retval = pam_start("qrexec", user, &conv, &pamh);
     if (retval != PAM_SUCCESS) {
@@ -344,7 +342,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             /* This is a copy but don't care to free as we exec later anyway.  */
             env = pam_getenvlist (pamh);
 
-            really_exec(prog, pw, env, cmd, arg0);
+            really_exec(prog, pw, env, cmd);
         default:
             /* parent */
             close_std();
