@@ -164,12 +164,12 @@ _Noreturn void do_exec(const char *cmd, const char *user)
         pw = getpwuid(geteuid());
         if (!pw) {
             PERROR("getpwuid");
-            exit(1);
+            exit(QREXEC_EXIT_PROBLEM);
         }
         if (strcmp(pw->pw_name, user)) {
             LOG(ERROR, "requested user %s, but qrexec-agent is running as user %s",
                 user, pw->pw_name);
-            exit(1);
+            exit(QREXEC_EXIT_PROBLEM);
         }
         /* call QUBESRPC if requested */
         exec_qubes_rpc_if_requested(cmd, environ);
@@ -177,14 +177,14 @@ _Noreturn void do_exec(const char *cmd, const char *user)
         /* otherwise exec shell */
         execl("/bin/sh", "sh", "-c", cmd, NULL);
         PERROR("execl");
-        exit(1);
+        exit(QREXEC_EXIT_PROBLEM);
     }
 
     pw = getpwnam(user);
     if (! (pw && pw->pw_name && pw->pw_name[0] && pw->pw_dir && pw->pw_dir[0]
                 && pw->pw_passwd)) {
         LOG(ERROR, "user %s does not exist", user);
-        exit(1);
+        exit(QREXEC_EXIT_PROBLEM);
     }
 
     /* Make a copy of the password information and point pw at the local
@@ -309,12 +309,12 @@ _Noreturn void do_exec(const char *cmd, const char *user)
 
     if (pam_end(pamh, retval) != PAM_SUCCESS) {     /* close Linux-PAM */
         pamh = NULL;
-        exit(1);
+        exit(QREXEC_EXIT_PROBLEM);
     }
     exit(status);
 error:
     pam_end(pamh, PAM_ABORT);
-    exit(1);
+    exit(QREXEC_EXIT_PROBLEM);
 #else
     /* call QUBESRPC if requested */
     exec_qubes_rpc_if_requested(cmd, environ);
@@ -322,7 +322,7 @@ error:
     /* otherwise exec shell */
     execl("/bin/su", "su", "-", user, "-c", cmd, NULL);
     PERROR("execl");
-    exit(1);
+    exit(QREXEC_EXIT_PROBLEM);
 #endif
 
 }
