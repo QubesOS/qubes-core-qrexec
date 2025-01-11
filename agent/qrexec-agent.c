@@ -145,6 +145,15 @@ _Noreturn static void really_exec(const char *prog,
     _exit(QREXEC_EXIT_PROBLEM);
 }
 
+static void close_std(void)
+{
+    /* close std*, so when child process closes them, qrexec-agent will receive EOF */
+    /* this is the main purpose of this reimplementation of /bin/su... */
+    close(0);
+    close(1);
+    close(2);
+}
+
 static int really_wait(pid_t child)
 {
     int status;
@@ -338,11 +347,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             really_exec(prog, pw, env, cmd, arg0);
         default:
             /* parent */
-            /* close std*, so when child process closes them, qrexec-agent will receive EOF */
-            /* this is the main purpose of this reimplementation of /bin/su... */
-            close(0);
-            close(1);
-            close(2);
+            close_std();
     }
 
     /* reachable only in parent */
