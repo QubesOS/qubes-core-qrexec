@@ -196,23 +196,31 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
      */
     pw_copy = *pw;
     pw = &pw_copy;
-    pw->pw_name = strdup(pw->pw_name);
-    pw->pw_passwd = strdup(pw->pw_passwd);
-    pw->pw_dir = strdup(pw->pw_dir);
-    pw->pw_shell = strdup(pw->pw_shell);
+    if (!((pw->pw_name = strdup(pw->pw_name)) &&
+          (pw->pw_passwd = strdup(pw->pw_passwd)) &&
+          (pw->pw_dir = strdup(pw->pw_dir)) &&
+          (pw->pw_shell = strdup(pw->pw_shell)))) {
+        PERROR("strdup");
+        exit(QREXEC_EXIT_PROBLEM);
+    }
     endpwent();
 
     shell_basename = basename (pw->pw_shell);
     /* this process is going to die shortly, so don't care about freeing */
     arg0 = malloc (strlen (shell_basename) + 2);
-    if (!arg0)
-        goto error;
+    if (!arg0) {
+        PERROR("malloc");
+        exit(QREXEC_EXIT_PROBLEM);
+    }
     arg0[0] = '-';
     strcpy (arg0 + 1, shell_basename);
 
     retval = pam_start("qrexec", user, &conv, &pamh);
-    if (retval != PAM_SUCCESS)
+    if (retval != PAM_SUCCESS) {
+        LOG(ERROR, "PAM handle could not be acquired");
+        pamh = NULL;
         goto error;
+    }
 
     retval = pam_authenticate(pamh, 0);
     if (retval != PAM_SUCCESS)
