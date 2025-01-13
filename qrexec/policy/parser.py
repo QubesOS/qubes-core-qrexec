@@ -766,6 +766,7 @@ result=allow
 target=@adminvm
 autostart={self.autostart}
 requested_target={request.target}"""
+
         if target.startswith("@dispvm:"):
             target_info = request.system_info["domains"][target[8:]]
             return f"""\
@@ -775,7 +776,23 @@ target={self.target}
 target_uuid=@dispvm:uuid:{target_info['uuid']}
 autostart={self.autostart}
 requested_target={request.target}"""
+
         target_info = request.system_info["domains"][target]
+        if target_info.get("relayvm", None):
+            relayvm_name = target_info["relayvm"]
+            relayvm_info = request.system_info["domains"][relayvm_name]
+            for tag in relayvm_info["tags"]:
+                if tag.startswith("transport-rpc-"):
+                    transport_rpc = tag[14:]
+                    return f"""\
+user={self.user or 'DEFAULT'}
+result=allow
+target={relayvm_name}
+target_uuid=uuid:{relayvm_info['uuid']}
+autostart={self.autostart}
+requested_target={request.target}
+service={transport_rpc}+{request.target}+{request.service}{request.argument}"""
+
         return f"""\
 user={self.user or 'DEFAULT'}
 result=allow
