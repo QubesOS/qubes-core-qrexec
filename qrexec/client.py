@@ -24,7 +24,6 @@ from .utils import prepare_subprocess_kwds
 
 QREXEC_CLIENT_DOM0 = "/usr/bin/qrexec-client"
 QREXEC_CLIENT_VM = "/usr/bin/qrexec-client-vm"
-RPC_MULTIPLEXER = "/usr/lib/qubes/qubes-rpc-multiplexer"
 
 VERSION = None
 
@@ -104,11 +103,6 @@ def make_command(dest, rpcname, arg):
     if arg is not None:
         assert " " not in arg
         rpcname = f"{rpcname}+{arg}"
-
-    if VERSION == "dom0" and dest == "dom0":
-        # Invoke qubes-rpc-multiplexer directly. This will work for non-socket
-        # services only.
-        return [RPC_MULTIPLEXER, rpcname, "dom0"]
 
     if VERSION == "dom0":
         return [

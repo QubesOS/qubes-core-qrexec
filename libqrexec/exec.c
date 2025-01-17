@@ -786,7 +786,9 @@ int find_qrexec_service(
     const char *qrexec_service_path = getenv("QREXEC_SERVICE_PATH");
     if (!qrexec_service_path)
         qrexec_service_path = QREXEC_SERVICE_PATH;
-    *socket_fd = -1;
+    if (socket_fd != NULL) {
+        *socket_fd = -1;
+    }
 
     struct stat statbuf;
 
@@ -807,6 +809,9 @@ int find_qrexec_service(
 
     if (S_ISSOCK(statbuf.st_mode)) {
         /* Socket-based service. */
+        if (socket_fd == NULL) {
+            goto bad_socket_service;
+        }
         int s;
         if ((s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1) {
             PERROR("socket");
@@ -827,6 +832,9 @@ int find_qrexec_service(
         *socket_fd = s;
         return 0;
     } else if (S_ISLNK(statbuf.st_mode)) {
+        if (socket_fd == NULL) {
+            goto bad_socket_service;
+        }
         /* TCP-based service */
         assert(path_buffer->buflen >= (int)sizeof("/dev/tcp") - 1);
         assert(memcmp(path_buffer->data, "/dev/tcp", sizeof("/dev/tcp") - 1) == 0);
@@ -914,6 +922,11 @@ int find_qrexec_service(
     }
 
     LOG(ERROR, "Unknown service type (not executable, not a socket): %.*s",
+        path_buffer->buflen, path_buffer->data);
+    return -2;
+bad_socket_service:
+    LOG(ERROR, "Service %.*s is a socket or /dev/tcp symlink, but this is not "
+               "supported for dom0 -> dom0 calls",
         path_buffer->buflen, path_buffer->data);
     return -2;
 }

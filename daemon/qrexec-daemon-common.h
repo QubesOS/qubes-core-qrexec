@@ -147,3 +147,7 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
 extern int local_stdin_fd;
 __attribute__((warn_unused_result))
 bool target_refers_to_dom0(const char *target);
+
+/** Wait for a session if needed. */
+__attribute__((warn_unused_result))
+bool wait_for_session_maybe(struct qrexec_parsed_command *cmd);

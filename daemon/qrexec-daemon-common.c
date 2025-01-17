@@ -364,7 +364,7 @@ static void sigchld_handler(int x __attribute__((__unused__)))
 }
 
 /* See also qrexec-agent.c:wait_for_session_maybe() */
-static bool wait_for_session_maybe(struct qrexec_parsed_command *cmd)
+bool wait_for_session_maybe(struct qrexec_parsed_command *cmd)
 {
     pid_t pid;
     int status;

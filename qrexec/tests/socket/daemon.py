@@ -641,7 +641,7 @@ class TestClient(unittest.TestCase):
     def make_executable_service(self, *args):
         util.make_executable_service(self.tempdir, *args)
 
-    def start_client(self, args):
+    def start_client(self, args, stderr=None):
         env = os.environ.copy()
         env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
         env["VCHAN_DOMAIN"] = "0"
@@ -664,6 +664,7 @@ class TestClient(unittest.TestCase):
             env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
+            stderr=stderr,
         )
         self.addCleanup(self.stop_client)
 
@@ -1018,6 +1019,64 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
                 (qrexec.MSG_DATA_STDOUT, b""),
                 (qrexec.MSG_DATA_EXIT_CODE, struct.pack("<L", exit_code)),
             ],
+        )
+
+    def _test_run_service_in_dom0(self, requested_target):
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh -eu
+read input
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input, service path: $QREXEC_SERVICE_PATH"
+case $QREXEC_REQUESTED_TARGET_TYPE in
+(name) echo "requested target name: $QREXEC_REQUESTED_TARGET";;
+(keyword) echo "requested target keyword: $QREXEC_REQUESTED_TARGET_KEYWORD";;
+esac
+""",
+        )
+        requested_target_type = "name"
+        if requested_target.startswith("@"):
+            requested_target = requested_target[1:]
+            requested_target_type = "keyword"
+
+        cmd = f"DEFAULT:QUBESRPC qubes.Service+arg src_domain {requested_target_type} {requested_target}"
+        self.start_client(["-d", "dom0", cmd], stderr=subprocess.PIPE)
+        stdout, stderr = self.client.communicate(b"stdin data\n")
+        self.client.wait()
+        self.assertFalse(stderr, stderr)
+        self.assertEqual(stderr, b"")
+        self.assertEqual(self.client.returncode, 0)
+        service_path = (
+            ":".join(
+                [
+                    os.path.join(self.tempdir, "local-rpc"),
+                    os.path.join(self.tempdir, "rpc"),
+                ]
+            )
+        ).encode("ascii", "strict")
+        self.assertEqual(
+            stdout,
+            b"arg: arg, remote domain: src_domain, "
+            b"input: stdin data, service path: %s\n"
+            b"requested target %s: %s\n"
+            % (
+                service_path,
+                requested_target_type.encode("ascii", "strict"),
+                requested_target.encode("ascii", "strict"),
+            ),
+        )
+
+    def test_dom0_to_dom0(self):
+        self._test_run_service_in_dom0("@adminvm")
+
+    def test_dom0_to_dom0_v1(self):
+        self._test_run_service_in_dom0("dom0")
+
+    def test_dom0_to_dom0_v2(self):
+        self._test_run_service_in_dom0(
+            "uuid:00000000-0000-0000-0000-000000000000"
         )
 
     def _test_run_dom0_service_exec(self, nogui, requested_target="src_domain"):

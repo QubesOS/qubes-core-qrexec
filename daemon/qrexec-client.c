@@ -199,6 +199,10 @@ int main(int argc, char **argv)
                     usage(argv[0], 1);
                 }
                 parse_connect(optarg, &request_id, &src_domain_name, &src_domain_id);
+                if (target_refers_to_dom0(src_domain_name) || src_domain_id == 0) {
+                    warnx("ERROR: -c cannot be used for requests to dom0");
+                    usage(argv[0], 1);
+                }
                 break;
             case 't':
                 replace_chars_stdout = true;
@@ -259,22 +263,80 @@ int main(int argc, char **argv)
     }
 
     if (target_refers_to_dom0(domname)) {
-        if (request_id == NULL) {
-            fprintf(stderr, "ERROR: when target domain is 'dom0', -c must be specified\n");
-            usage(argv[0], 1);
+        if (request_id != NULL) {
+            if (request_id[0] == '\0') {
+                warnx("ERROR: request ID cannot be empty");
+                usage(argv[0], 1);
+            }
+            strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
+            svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
+            if (src_domain_name == NULL) {
+                LOG(ERROR, "internal error: src_domain_name should not be NULL here");
+                abort();
+            }
+            rc = run_qrexec_to_dom0(&svc_params,
+                                    src_domain_id,
+                                    src_domain_name,
+                                    remote_cmdline,
+                                    connection_timeout,
+                                    exit_with_code);
+        } else {
+            /* dom0 -> dom0 fake service call */
+            assert(src_domain_id == 0);
+            if (local_cmdline != NULL) {
+                warnx("dom0 -> dom0 qrexec calls with LOCAL_COMMAND not yet implemented");
+                errx(QREXEC_EXIT_PROBLEM, "please file an issue if you need this");
+            }
+            /*
+             * Normally calls to dom0 omit the username, but in this case
+             * that would require the caller to pass the user if and only if the target is _not_
+             * dom0, and that's annoying.  In the past, qrexec-client was called by qrexec-daemon
+             * which got it right, but now the main caller of qrexec-client is Python scripts
+             * that don't have access to the C target_refers_to_dom0() function.
+             * Therefore, parse the username and fail if it is not "DEFAULT".
+             */
+#define DEFAULT_USER "DEFAULT"
+            if (strncmp(remote_cmdline, DEFAULT_USER ":", sizeof(DEFAULT_USER)) != 0) {
+                errx(QREXEC_EXIT_PROBLEM, "dom0 -> dom0 commands must be prefixed with " DEFAULT_USER ":");
+            }
+            remote_cmdline += sizeof(DEFAULT_USER);
+            struct qrexec_parsed_command *command = parse_qubes_rpc_command(remote_cmdline, false);
+            int prepare_ret;
+            char file_path[QUBES_SOCKADDR_UN_MAX_PATH_LEN];
+            struct buffer buf = { .data = file_path, .buflen = (int)sizeof(file_path) };
+            if (command == NULL) {
+                prepare_ret = -2;
+            } else if (command->service_descriptor == NULL) {
+                LOG(ERROR, "For dom0 -> dom0 commands, only proper qrexec calls are allowed");
+                prepare_ret = -2;
+            } else if (!wait_for_session_maybe(command)) {
+                LOG(ERROR, "Cannot load service configuration, or forking process failed");
+                prepare_ret = -2;
+            } else {
+                prepare_ret = find_qrexec_service(command, NULL, NULL, &buf);
+            }
+            switch (prepare_ret) {
+            case -2:
+                rc = QREXEC_EXIT_PROBLEM;
+                break;
+            case -1:
+                rc = QREXEC_EXIT_SERVICE_NOT_FOUND;
+                break;
+            case 0:
+                assert(command->username == NULL);
+                assert(command->command);
+                /* qrexec-client is always in a login session. */
+                exec_qubes_rpc_if_requested2(buf.data, command->command, environ, false);
+                /* not reached, so fall through to crash */
+                assert(false);
+                rc = QREXEC_EXIT_PROBLEM;
+                break;
+            default:
+                assert(false);
+                rc = QREXEC_EXIT_PROBLEM;
+                break;
+            }
         }
-        strncpy(svc_params.ident, request_id, sizeof(svc_params.ident) - 1);
-        svc_params.ident[sizeof(svc_params.ident) - 1] = '\0';
-        if (src_domain_name == NULL) {
-            LOG(ERROR, "internal error: src_domain_name should not be NULL here");
-            abort();
-        }
-        rc = run_qrexec_to_dom0(&svc_params,
-                           src_domain_id,
-                           src_domain_name,
-                           remote_cmdline,
-                           connection_timeout,
-                           exit_with_code);
     } else {
         if (request_id) {
             bool const use_uuid = strncmp(domname, "uuid:", 5) == 0;
