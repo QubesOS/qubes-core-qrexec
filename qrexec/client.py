@@ -18,6 +18,7 @@
 import pathlib
 import subprocess
 import asyncio
+from typing import Optional
 
 from .utils import prepare_subprocess_kwds
 
@@ -33,7 +34,7 @@ elif pathlib.Path(QREXEC_CLIENT_VM).is_file():
     VERSION = "vm"
 
 
-def call(dest, rpcname, arg=None, *, input=None):
+def call(dest: str, rpcname: str, arg: Optional[str] = None, *, input=None):
     """Invoke qrexec call
 
     The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
