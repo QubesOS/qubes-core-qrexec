@@ -134,7 +134,7 @@ static void parse_connect(char *str, char **request_id,
     if (token == NULL)
         goto bad_c_param;
     if ((size_t)(token - str) >= sizeof(struct service_params))
-        errx(1, "Invalid -c parameter (request_id too long, max %zu)\n",
+        errx(1, "Invalid -c parameter (request_id too long, max %zu)",
              sizeof(struct service_params)-1);
     *token = 0;
     *request_id = str;
