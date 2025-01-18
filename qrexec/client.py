@@ -100,7 +100,9 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
 
 def make_command(dest, rpcname, arg):
     assert "+" not in rpcname
+    assert " " not in rpcname
     if arg is not None:
+        assert " " not in arg
         rpcname = f"{rpcname}+{arg}"
 
     if VERSION == "dom0" and dest == "dom0":
