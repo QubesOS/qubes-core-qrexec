@@ -118,7 +118,7 @@ def make_command(dest, rpcname, arg):
             f"DEFAULT:QUBESRPC {rpcname} dom0",
         ]
     if VERSION == "vm":
-        return [QREXEC_CLIENT_VM, dest, rpcname]
+        return [QREXEC_CLIENT_VM, "--", dest, rpcname]
 
     assert VERSION is None
     raise NotImplementedError("qrexec not available")
