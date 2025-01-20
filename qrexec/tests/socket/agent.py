@@ -425,6 +425,28 @@ printf 'something on stderr' >&2
         )
         self.check_dom0(dom0)
 
+    def test_exec_service_stderr_redirection(self):
+        """
+        USB forwarding expects to open /proc/PID/fd/2 for writing.
+        Check that this works.
+        """
+        util.make_executable_service(
+            self.tempdir,
+            "rpc",
+            "qubes.Service",
+            """\
+#!/bin/sh
+echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
+printf 'something on stderr' > /proc/self/fd/2
+""",
+        )
+        target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self.assertExpectedStdoutStderr(
+            target, b"arg: arg, remote domain: domX\n", b"something on stderr"
+        )
+        self.check_dom0(dom0)
+
     def test_exec_service_keyword(self):
         util.make_executable_service(
             self.tempdir,
