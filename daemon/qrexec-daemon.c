@@ -296,7 +296,7 @@ static void init(int xid, bool opt_direct)
     }
     startup_timeout_str = getenv("QREXEC_STARTUP_TIMEOUT");
     if (startup_timeout_str) {
-        startup_timeout = atoi(startup_timeout_str);
+        startup_timeout = parse_int(startup_timeout_str, "startup timeout");
         if (startup_timeout <= 0)
             // invalid or negative number
             startup_timeout = MAX_STARTUP_TIME_DEFAULT;
@@ -1142,6 +1142,36 @@ static _Noreturn void do_exec(const char *prog, const char *username __attribute
     _exit(QREXEC_EXIT_PROBLEM);
 }
 
+/* check that the input is non-empty with only safe characters */
+static bool check_single_word(const char *token)
+{
+    const char *cursor = token;
+    switch (*cursor++) {
+    case 'A' ... 'Z':
+    case 'a' ... 'z':
+        break;
+    default:
+        return false;
+    }
+    for (;;) {
+        switch (*cursor++) {
+        case 'A' ... 'Z':
+        case 'a' ... 'z':
+        case '0' ... '9':
+        case '_':
+        case ':':
+        case '-':
+        case '.':
+        case '@': // not used today but might be in future
+            break;
+        case '\0':
+            return true;
+        default:
+            return false;
+        }
+    }
+}
+
 _Noreturn static void handle_execute_service_child(
         const int remote_domain_id,
         const char *remote_domain_name,
@@ -1167,6 +1197,19 @@ _Noreturn static void handle_execute_service_child(
 
     if (policy_response != RESPONSE_ALLOW)
         daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
+    else {
+        const char *p = strchr(user, ':');
+        // It is possible to use a user ending in ":nogui" to emulate
+        // --no-gui on the dom0 qvm-run command line.  This is a bug,
+        // but it can be used to work around a limitation in the Windows
+        // agent, so allow it until R5.0.  However, don't mention the
+        // misfeature in the error message, so that others are not
+        // encouraged to use it.
+        if (p != NULL && strcmp(p + 1, "nogui") != 0) {
+            LOG(ERROR, "Username %s contains a colon, refusing", user);
+            daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
+        }
+    }
 
     /* Replace the target domain with the version normalized by the policy engine */
     target_domain = requested_target;
@@ -1188,6 +1231,11 @@ _Noreturn static void handle_execute_service_child(
             type = "keyword";
         } else {
             type = "name";
+        }
+        /* ensure that commands are syntactically correct by construction */
+        if (!check_single_word(target_domain)) {
+            LOG(ERROR, "BUG: policy engine returned invalid target '%s'", target_domain);
+            daemon__exit(126);
         }
         if (asprintf(&cmd, "QUBESRPC %s%s %s %s %s",
                      service_name,
@@ -1622,10 +1670,16 @@ int main(int argc, char **argv)
         fprintf(stderr, "Domain UUID option missing!\n");
         usage(argv[0]);
     }
-    remote_domain_id = atoi(argv[optind]);
+    remote_domain_id = parse_int(argv[optind], "remote domain ID");
     remote_domain_name = argv[optind+1];
+    /* this is inserted into the generated command line */
+    if (!check_single_word(remote_domain_name))
+        errx(1, "Invalid remote domain name %s", remote_domain_name);
     if (argc - optind >= 3)
         default_user = argv[optind+2];
+    /* qubes_parse_rpc_command() considers ':' to terminate the username */
+    if (strchr(default_user, ':') != NULL)
+        errx(1, "Invalid default username '%s' (colon not allowed)", default_user);
     init(remote_domain_id, opt_direct);
 
     sigemptyset(&selectmask);

@@ -147,3 +147,12 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
 extern int local_stdin_fd;
 __attribute__((warn_unused_result))
 bool target_refers_to_dom0(const char *target);
+/**
+ * Parse an integer, which must not be negative.
+ *
+ * @param str The integer.
+ * @param message A human-readable string that will be used in error messages.
+ *
+ * Returns a non-negative int on success.  Calls exit(1) on failure.
+ */
+int parse_int(const char *str, const char *msg);
