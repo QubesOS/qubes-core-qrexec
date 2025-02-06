@@ -135,6 +135,7 @@ int main(int argc, char **argv) {
             exit(0);
     }
     signal(SIGCHLD, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
     register_exec_func(do_exec);
 
     while (1) {
