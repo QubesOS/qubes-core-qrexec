@@ -46,7 +46,6 @@ BuildRequires:  python%{python3_pkgversion}-rpm-macros
 %endif
 
 Requires:   python%{python3_pkgversion}
-Requires:   python%{python3_pkgversion}-gbulb
 %if 0%{?is_opensuse}
 Requires:   python%{python3_pkgversion}-pyinotify
 %else

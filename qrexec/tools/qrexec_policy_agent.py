@@ -35,11 +35,9 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio
+from gi.events import GLibEventLoopPolicy
 
 # pylint: enable=import-error
-
-# pylint: disable=wrong-import-order
-import gbulb
 
 from .. import POLICY_AGENT_SOCKET_PATH
 from ..utils import sanitize_domain_name, sanitize_service_name
@@ -500,7 +498,16 @@ class RPCConfirmationWindow:
         self._rpc_window.close()
 
     async def _wait_for_close(self):
-        await gbulb.wait_signal(self._rpc_window, "delete-event")
+        future = asyncio.Future()
+        hnd = None
+        def _delete_callback(*k):
+            self._rpc_window.disconnect(hnd)
+            future.set_result(k)
+        hnd = self._rpc_window.connect(
+            "delete-event",
+            _delete_callback,
+        )
+        await future
 
     def _show(self):
         self._rpc_window.set_keep_above(True)
@@ -660,10 +667,12 @@ parser.add_argument(
 def main():
     args = parser.parse_args()
 
-    gbulb.install()
+    asyncio.set_event_loop_policy(GLibEventLoopPolicy())
+    loop = asyncio.get_event_loop()
+
     agent = PolicyAgent(args.socket_path)
 
-    asyncio.run(agent.run())
+    loop.run_until_complete(agent.run())
 
 
 if __name__ == "__main__":

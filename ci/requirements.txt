@@ -6,4 +6,3 @@ sphinx
 pytest-asyncio
 pyinotify
 psutil
-gbulb
