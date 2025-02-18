@@ -1,3 +1,50 @@
+qubes-core-qrexec (4.2.23-1) unstable; urgency=medium
+
+  [ Piotr Bartman-Szwarc ]
+  * actually sanitize service name
+
+  [ Marek Marczykowski-Górecki ]
+  * daemon: restore SIGTERM default handler in child process
+  * daemon: log a bit more info on errors
+
+  [ Frédéric Pierret (fepitre) ]
+  * qrexec-client-vm: fix missing option in usage and reorder it
+
+  [ Marek Marczykowski-Górecki ]
+  * Remove unused test
+
+  [ Ali Mirjamali ]
+  * Provide clear error on invalid policy file name
+  * Pipe `qrexec-client(-vm) --help` output to stdout
+
+  [ Marek Marczykowski-Górecki ]
+  * Try to retrieve exit code of a failed service call
+  * Add a test for qrexec-client race condition
+  * rpm: adjust SELinux snippets for relabeling
+
+  [ Zaz Brown ]
+  * docs: qrexec-client accepts user:command not command
+
+  [ Demi Marie Obenour ]
+  * Add additional tests for running services in dom0
+  * Test that stderr from qrexec-agent is properly received
+  * Fix spurious newline in error message
+  * Add type annotation to Python code
+  * Call abort() if there is a qrexec buffer problem
+  * Test that opening /proc/self/fd/2 for writing works
+
+  [ Marek Marczykowski-Górecki ]
+  * Ignore SIGPIPE in qrexec-fork-server too
+
+  [ Demi Marie Obenour ]
+  * qrexec-agent: Require an argument to --fork-server-socket
+  * Use QREXEC_EXIT_PROBLEM for errors spawning child process
+
+  [ Marek Marczykowski-Górecki ]
+  * pylint: deal with too-many-positional-arguments
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Tue, 18 Feb 2025 02:44:08 +0100
+
 qubes-core-qrexec (4.2.21-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
