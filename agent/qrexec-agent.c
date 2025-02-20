@@ -71,11 +71,13 @@ static libvchan_t *ctrl_vchan;
 
 static pid_t wait_for_session_pid = -1;
 
-static int trigger_fd;
+static int trigger_fd = -1;
 
 static int terminate_requested;
 
 static int meminfo_write_started = 0;
+
+static uid_t myuid;
 
 static const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
 static const char *fork_server_path = QREXEC_FORK_SERVER_SOCKET;
@@ -120,6 +122,70 @@ static struct pam_conv conv = {
     NULL
 };
 #endif
+
+_Noreturn static void really_exec(const char *prog, const struct passwd *pw,
+                                  char **env, const char *cmd)
+{
+    /* child */
+    setsid();
+
+    /* try to enter home dir, but don't abort if it fails */
+    int retval = chdir(pw->pw_dir);
+    if (retval == -1)
+        warn("chdir(%s)", pw->pw_dir);
+
+    /* call QUBESRPC if requested */
+    if (prog) {
+        /* Set up environment variables for a login shell. */
+        exec_qubes_rpc2(prog, cmd, env, true);
+    }
+    /* otherwise exec shell */
+    char *shell_dup = strdup(pw->pw_shell);
+    if (shell_dup == NULL)
+        _exit(QREXEC_EXIT_PROBLEM);
+    char *shell_basename = basename (shell_dup);
+    /* this process is going to die shortly, so don't care about freeing */
+    size_t len = strlen(shell_basename) + 1;
+    char *arg0 = malloc(len + 1);
+    if (!arg0)
+        _exit(QREXEC_EXIT_PROBLEM);
+    arg0[0] = '-';
+    memcpy(arg0 + 1, shell_basename, len);
+    execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
+    _exit(QREXEC_EXIT_PROBLEM);
+}
+
+static void close_std(int null_fd)
+{
+    /* close std*, so when child process closes them, qrexec-agent will receive EOF */
+    /* this is the main purpose of this reimplementation of /bin/su... */
+    for (int i = 0; i < 3; ++i) {
+        int j;
+        do {
+            j = dup2(null_fd, i);
+        } while (j == -1 && (errno == EINTR || errno == EBUSY));
+        if (j != i)
+            abort();
+    }
+}
+
+static int really_wait(pid_t child)
+{
+    int status;
+    pid_t pid;
+    do {
+        pid = waitpid (child, &status, 0);
+    } while (pid == -1 && errno == EINTR);
+    if (pid != (pid_t)-1) {
+        if (WIFSIGNALED (status))
+            status = WTERMSIG (status) + 128;
+        else
+            status = WEXITSTATUS (status);
+    } else
+        status = QREXEC_EXIT_PROBLEM;
+    return status;
+}
+
 /* Start program requested by dom0 in already prepared process
  * (stdin/stdout/stderr already set, etc)
  * Called in two cases:
@@ -144,11 +210,9 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
     pam_handle_t *pamh=NULL;
     struct passwd *pw;
     struct passwd pw_copy;
-    pid_t child, pid;
+    pid_t child;
     char **env;
     char env_buf[64];
-    char *arg0;
-    char *shell_basename;
 #endif
     sigset_t sigmask;
 
@@ -158,10 +222,10 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
     signal(SIGPIPE, SIG_DFL);
 
 #ifdef HAVE_PAM
-    if (geteuid() != 0) {
+    if (myuid != 0) {
         /* We're not root, assume this is a testing environment. */
 
-        pw = getpwuid(geteuid());
+        pw = getpwuid(myuid);
         if (!pw) {
             PERROR("getpwuid");
             exit(QREXEC_EXIT_PROBLEM);
@@ -171,16 +235,26 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
                 user, pw->pw_name);
             exit(QREXEC_EXIT_PROBLEM);
         }
-        /* call QUBESRPC if requested */
-        if (prog) {
-            /* no point in creating a login shell for test environments */
-            exec_qubes_rpc2(prog, cmd, environ, false);
+
+        int null_fd = open("/dev/null", O_RDWR|O_CLOEXEC|O_NOCTTY);
+        if (null_fd == -1) {
+            LOG(ERROR, "cannot open /dev/null");
+            exit(QREXEC_EXIT_PROBLEM);
         }
 
-        /* otherwise exec shell */
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
-        PERROR("execl");
-        exit(QREXEC_EXIT_PROBLEM);
+        /* FORK HERE */
+        child = fork();
+
+        switch (child) {
+            case -1:
+                goto error;
+            case 0:
+                really_exec(prog, pw, environ, cmd);
+            default:
+                /* parent */
+                close_std(null_fd);
+                exit(really_wait(child));
+        }
     }
 
     pw = getpwnam(user);
@@ -196,23 +270,21 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
      */
     pw_copy = *pw;
     pw = &pw_copy;
-    pw->pw_name = strdup(pw->pw_name);
-    pw->pw_passwd = strdup(pw->pw_passwd);
-    pw->pw_dir = strdup(pw->pw_dir);
-    pw->pw_shell = strdup(pw->pw_shell);
+    if (!((pw->pw_name = strdup(pw->pw_name)) &&
+          (pw->pw_passwd = strdup(pw->pw_passwd)) &&
+          (pw->pw_dir = strdup(pw->pw_dir)) &&
+          (pw->pw_shell = strdup(pw->pw_shell)))) {
+        PERROR("strdup");
+        exit(QREXEC_EXIT_PROBLEM);
+    }
     endpwent();
 
-    shell_basename = basename (pw->pw_shell);
-    /* this process is going to die shortly, so don't care about freeing */
-    arg0 = malloc (strlen (shell_basename) + 2);
-    if (!arg0)
-        goto error;
-    arg0[0] = '-';
-    strcpy (arg0 + 1, shell_basename);
-
     retval = pam_start("qrexec", user, &conv, &pamh);
-    if (retval != PAM_SUCCESS)
+    if (retval != PAM_SUCCESS) {
+        LOG(ERROR, "PAM handle could not be acquired");
+        pamh = NULL;
         goto error;
+    }
 
     retval = pam_authenticate(pamh, 0);
     if (retval != PAM_SUCCESS)
@@ -233,31 +305,47 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
         goto error;
 
     /* provide this variable to child process */
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "QREXEC_AGENT_PID=%d", getppid()) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "QREXEC_AGENT_PID=%d", getppid()) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "HOME=%s", pw->pw_dir) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "HOME=%s", pw->pw_dir) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "SHELL=%s", pw->pw_shell) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "SHELL=%s", pw->pw_shell) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "USER=%s", pw->pw_name) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "USER=%s", pw->pw_name) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
-    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "LOGNAME=%s", pw->pw_name) >= sizeof(env_buf))
+    if ((unsigned)snprintf(env_buf, sizeof(env_buf), "LOGNAME=%s", pw->pw_name) >= sizeof(env_buf)) {
+        retval = PAM_ABORT;
         goto error;
+    }
     retval = pam_putenv(pamh, env_buf);
     if (retval != PAM_SUCCESS)
         goto error;
+
+    int null_fd = open("/dev/null", O_RDWR|O_CLOEXEC|O_NOCTTY);
+    if (null_fd == -1) {
+        LOG(ERROR, "cannot open /dev/null");
+        goto error;
+    }
 
     /* FORK HERE */
     child = fork();
@@ -272,42 +360,17 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
                 _exit(QREXEC_EXIT_PROBLEM);
             if (setuid (pw->pw_uid))
                 _exit(QREXEC_EXIT_PROBLEM);
-            setsid();
             /* This is a copy but don't care to free as we exec later anyway.  */
             env = pam_getenvlist (pamh);
 
-            /* try to enter home dir, but don't abort if it fails */
-            retval = chdir(pw->pw_dir);
-            if (retval == -1)
-                warn("chdir(%s)", pw->pw_dir);
-
-            /* call QUBESRPC if requested */
-            if (prog) {
-                /* Set up environment variables for a login shell. */
-                exec_qubes_rpc2(prog, cmd, env, true);
-            }
-            /* otherwise exec shell */
-            execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
-            _exit(QREXEC_EXIT_PROBLEM);
+            really_exec(prog, pw, env, cmd);
         default:
             /* parent */
-            /* close std*, so when child process closes them, qrexec-agent will receive EOF */
-            /* this is the main purpose of this reimplementation of /bin/su... */
-            close(0);
-            close(1);
-            close(2);
+            close_std(null_fd);
     }
 
     /* reachable only in parent */
-    pid = waitpid (child, &status, 0);
-    if (pid != (pid_t)-1) {
-        if (WIFSIGNALED (status))
-            status = WTERMSIG (status) + 128;
-        else
-            status = WEXITSTATUS (status);
-    } else
-        status = 1;
-
+    status = really_wait(child);
     retval = pam_close_session (pamh, 0);
 
     retval = pam_setcred (pamh, PAM_DELETE_CRED | PAM_SILENT);
@@ -386,6 +449,7 @@ static void init(void)
     if (handle_handshake(ctrl_vchan) < 0)
         exit(1);
     old_umask = umask(0);
+    myuid = geteuid();
     trigger_fd = get_server_socket(agent_trigger_path);
     umask(old_umask);
     register_exec_func(do_exec);
