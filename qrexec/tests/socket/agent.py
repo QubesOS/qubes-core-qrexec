@@ -340,22 +340,27 @@ exit 1
         data = client.recvall(8)
         self.assertEqual(data, b"")
 
-    def trigger_service(self, dom0, client, target_domain_name, service_name):
+    def trigger_service(
+        self, dom0, client, target_domain_name, service_name, source_domain=b""
+    ):
+        # source_domain[64] target_domain[64] ident[32] service_name
         source_params = (
-            struct.pack("<64s32s", target_domain_name, b"SOCKET")
+            struct.pack(
+                "<64s64s32s", source_domain, target_domain_name, b"SOCKET"
+            )
             + service_name
             + b"\0"
         )
 
         client.send_message(
-            qrexec.MSG_TRIGGER_SERVICE3,
+            qrexec.MSG_TRIGGER_SERVICE4,
             source_params,
         )
 
         message_type, target_params = dom0.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
 
-        ident = target_params[64:96]
+        ident = target_params[128:150]
         ident = ident[: ident.find(b"\0")]
         self.assertTrue(
             ident.startswith(b"SOCKET"), "wrong ident: {}".format(ident)
@@ -364,7 +369,7 @@ exit 1
         # The params should be the same except for ident.
         self.assertEqual(
             target_params,
-            source_params[:64] + ident + source_params[64 + len(ident) :],
+            source_params[:128] + ident + source_params[128 + len(ident) :],
         )
 
         return ident
@@ -1434,11 +1439,18 @@ class TestClientVm(unittest.TestCase):
         return target_client
 
     def run_service(
-        self, *, local_program=None, options=None, stdio=subprocess.PIPE
+        self,
+        *,
+        local_program=None,
+        source_qube_name=None,
+        options=None,
+        stdio=subprocess.PIPE,
     ):
         server = self.connect_server()
 
         args = options or []
+        if source_qube_name:
+            args += [f"--source-qube={source_qube_name}"]
         args.append(self.target_domain_name)
         args.append("qubes.ServiceName")
         if local_program:
@@ -1448,10 +1460,15 @@ class TestClientVm(unittest.TestCase):
         server.accept()
 
         message_type, data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
         self.assertEqual(
             data,
-            struct.pack("<64s32s", self.target_domain_name.encode(), b"SOCKET")
+            struct.pack(
+                "<64s64s32s",
+                (source_qube_name or "").encode(),
+                self.target_domain_name.encode(),
+                b"SOCKET",
+            )
             + b"qubes.ServiceName\0",
         )
 
@@ -1462,8 +1479,8 @@ class TestClientVm(unittest.TestCase):
 
         return target_client
 
-    def test_run_client(self):
-        target_client = self.run_service()
+    def _test_run_client_skeleton(self, *args, **kwargs):
+        target_client = self.run_service(*args, **kwargs)
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         self.assertEqual(self.client.stdout.read(), b"stdout data\n")
@@ -1472,6 +1489,12 @@ class TestClientVm(unittest.TestCase):
         )
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
+
+    def test_run_client(self):
+        self._test_run_client_skeleton()
+
+    def test_run_client_with_source_qube(self):
+        self._test_run_client_skeleton(source_qube_name="toto")
 
     def test_run_client_eof(self):
         remote, local = socket.socketpair()
@@ -1588,7 +1611,7 @@ class TestClientVm(unittest.TestCase):
         server.accept()
 
         message_type, __data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
 
         server.conn.close()
         self.client.wait()
@@ -1755,10 +1778,12 @@ read < "$1"
         server.accept()
 
         message_type, data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
         self.assertEqual(
             data,
-            struct.pack("<64s32s", self.target_domain_name.encode(), b"SOCKET")
+            struct.pack(
+                "<64s64s32s", b"", self.target_domain_name.encode(), b"SOCKET"
+            )
             + b"qubes.ServiceName\0",
         )
 

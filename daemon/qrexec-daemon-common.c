@@ -84,7 +84,7 @@ int handle_daemon_handshake(int fd)
         return -1;
     }
 
-    if (info.version != QREXEC_PROTOCOL_VERSION) {
+    if (info.version < QREXEC_PROTOCOL_V3) {
         LOG(ERROR, "Incompatible daemon protocol version "
             "(daemon %d, client %d)",
             info.version, QREXEC_PROTOCOL_VERSION);

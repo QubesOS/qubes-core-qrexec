@@ -52,7 +52,7 @@ class TestDaemon(unittest.TestCase):
     POLICY_PROGRAM = """\
 #!/bin/sh
 
-# -- remote_domain_name target_name service_name
+# -- remote_name target_name service_name
 echo "$@" > {tempdir}/qrexec-policy-params
 
 sleep $(cat {tempdir}/qrexec-policy-sleep || echo 0)
@@ -229,7 +229,7 @@ exit $exit_code
         message_type, data = agent.recv_message()
         self.assertEqual(message_type, qrexec.MSG_HELLO)
         (ver,) = struct.unpack("<L", data)
-        self.assertEqual(ver, 3)
+        self.assertEqual(ver, 4)
 
         target_domain_name = "target_domain"
         ident = b"ab"
@@ -283,8 +283,10 @@ exit $exit_code
 
         # missing NUL terminator
         agent.send_message(
-            qrexec.MSG_TRIGGER_SERVICE3,
-            struct.pack("<64s32s", target_domain_name.encode(), ident.encode())
+            qrexec.MSG_TRIGGER_SERVICE4,
+            struct.pack(
+                "<64s64s32s", b"", target_domain_name.encode(), ident.encode()
+            )
             + b"a",
         )
         recv_refused(agent)
@@ -305,7 +307,6 @@ exit $exit_code
         agent = self.start_daemon_with_agent()
         agent.handshake()
 
-        target_domain_name = "target_domain"
         ident = "ab"
 
         # check policy program output
@@ -353,8 +354,13 @@ requested_target=anotherdomain
 
         # check allowed request
         agent.send_message(
-            qrexec.MSG_TRIGGER_SERVICE3,
-            struct.pack("<64s32s", self.domain_name.encode(), ident.encode())
+            qrexec.MSG_TRIGGER_SERVICE4,
+            struct.pack(
+                "<64s64s32s",
+                self.domain_name.encode(),
+                self.domain_name.encode(),
+                ident.encode(),
+            )
             + b"a\0",
         )
         message_type, data = agent.recv_message()
@@ -376,7 +382,7 @@ requested_target=anotherdomain
         self.set_policy_params(1, 0)
 
         agent.send_message(
-            qrexec.MSG_TRIGGER_SERVICE3,
+            qrexec.MSG_TRIGGER_SERVICE4,
             struct.pack("<64s32s", target_domain_name.encode(), ident.encode()),
         )
         # qrexec-daemon will terminate
@@ -386,11 +392,21 @@ requested_target=anotherdomain
         )
 
     def send_trigger_service(
-        self, agent, target_domain_name: str, service_name: str, ident: str
+        self,
+        agent,
+        target_domain_name: str,
+        service_name: str,
+        ident: str,
+        source_domain_name: str = "",
     ):
         agent.send_message(
-            qrexec.MSG_TRIGGER_SERVICE3,
-            struct.pack("<64s32s", target_domain_name.encode(), ident.encode())
+            qrexec.MSG_TRIGGER_SERVICE4,
+            struct.pack(
+                "<64s64s32s",
+                source_domain_name.encode(),
+                target_domain_name.encode(),
+                ident.encode(),
+            )
             + service_name.encode()
             + b"\0",
         )
