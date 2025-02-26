@@ -37,7 +37,6 @@ BuildRequires:	pam-devel
 BuildRequires:	pandoc
 BuildRequires:	qubes-libvchan-devel
 BuildRequires:	qubes-core-qrexec-devel
-BuildRequires:	lsb-core-noarch
 BuildRequires:	systemd-devel
 
 Requires:   python%{python3_pkgversion}
