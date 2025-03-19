@@ -105,6 +105,23 @@ SYSTEM_INFO = {
             "power_state": "Halted",
             "uuid": "6d7a02b5-532b-467f-b9fb-6596bae03c33",
         },
+        "test-remotevm1": {
+            "tags": ["relayvm-test-local-relay"],
+            "relayvm": "test-local-relay",
+            "transport_rpc": "qubesair.SSHProxy",
+            "type": "RemoteVM",
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "3d225b39-88e9-4696-8978-b27c1360e041",
+        },
+        "test-local-relay": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "355304b8-bd5e-4699-9a2b-b6864fc26f6b",
+        },
     },
 }
 
@@ -229,19 +246,23 @@ class TC_00_VMToken(unittest.TestCase):
             ["@adminvm"],
         )
         self.assertEqual(
-            list(parser.Target("@anyvm").expand(system_info=SYSTEM_INFO)),
+            sorted(
+                set(parser.Target("@anyvm").expand(system_info=SYSTEM_INFO))
+            ),
             [
+                "@dispvm",
+                "@dispvm:default-dvm",
+                "@dispvm:test-vm3",
+                "default-dvm",
+                "test-invalid-dvm",
+                "test-local-relay",
+                "test-no-dvm",
+                "test-remotevm1",
+                "test-standalone",
+                "test-template",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
-                "@dispvm:test-vm3",
-                "default-dvm",
-                "@dispvm:default-dvm",
-                "test-invalid-dvm",
-                "test-no-dvm",
-                "test-template",
-                "test-standalone",
-                "@dispvm",
             ],
         )
         self.maxDiff = None
@@ -254,7 +275,9 @@ class TC_00_VMToken(unittest.TestCase):
                 "@dispvm:test-vm3",
                 "default-dvm",
                 "test-invalid-dvm",
+                "test-local-relay",
                 "test-no-dvm",
+                "test-remotevm1",
                 "test-standalone",
                 "test-template",
                 "test-vm1",
@@ -274,6 +297,7 @@ class TC_00_VMToken(unittest.TestCase):
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-local-relay",
             ],
         )
         self.assertCountEqual(
@@ -1291,7 +1315,9 @@ class TC_20_Policy(unittest.TestCase):
                 "@dispvm:test-vm3",
                 "default-dvm",
                 "test-invalid-dvm",
+                "test-local-relay",
                 "test-no-dvm",
+                "test-remotevm1",
                 "test-standalone",
                 "test-template",
                 "test-vm2",
@@ -1316,6 +1342,7 @@ class TC_20_Policy(unittest.TestCase):
                 "default-dvm",
                 "dom0",
                 "test-invalid-dvm",
+                "test-local-relay",
                 "test-no-dvm",
                 "test-vm1",
                 "test-vm2",
@@ -1545,15 +1572,17 @@ class TC_40_evaluate(unittest.TestCase):
             sorted(resolution.targets_for_ask),
             sorted(
                 [
+                    "@dispvm:default-dvm",
+                    "@dispvm:test-vm3",
+                    "default-dvm",
+                    "test-invalid-dvm",
+                    "test-local-relay",
+                    "test-no-dvm",
+                    "test-remotevm1",
+                    "test-template",
                     "test-vm1",
                     "test-vm2",
                     "test-vm3",
-                    "@dispvm:test-vm3",
-                    "default-dvm",
-                    "@dispvm:default-dvm",
-                    "test-invalid-dvm",
-                    "test-no-dvm",
-                    "test-template",
                 ]
             ),
         )
@@ -1575,7 +1604,9 @@ class TC_40_evaluate(unittest.TestCase):
                 "@dispvm:test-vm3",
                 "default-dvm",
                 "test-invalid-dvm",
+                "test-local-relay",
                 "test-no-dvm",
+                "test-remotevm1",
                 "test-template",
                 "test-vm1",
                 "test-vm2",
@@ -1600,17 +1631,19 @@ class TC_40_evaluate(unittest.TestCase):
         resolution = policy.evaluate(_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertCountEqual(
-            resolution.targets_for_ask,
+            sorted(resolution.targets_for_ask),
             [
-                "test-standalone",
-                "test-vm2",
-                "test-vm3",
+                "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
                 "default-dvm",
-                "@dispvm:default-dvm",
                 "test-invalid-dvm",
+                "test-local-relay",
                 "test-no-dvm",
+                "test-remotevm1",
+                "test-standalone",
                 "test-template",
+                "test-vm2",
+                "test-vm3",
             ],
         )
 
@@ -1620,7 +1653,10 @@ class TC_40_evaluate(unittest.TestCase):
         )
         resolution = policy.evaluate(_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
-        self.assertCountEqual(resolution.targets_for_ask, ["test-vm2"])
+        self.assertCountEqual(
+            sorted(resolution.targets_for_ask),
+            ["test-vm2", "test-local-relay", "test-remotevm1"],
+        )
 
     def test_050_eval_resolve_dispvm(self):
         policy = parser.StringPolicy(
@@ -2018,6 +2054,37 @@ target_uuid=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4
 autostart=True
 requested_target=test-vm2\
 """,
+        )
+
+    def test_124_execute(self):
+        asyncio.run(self._test_124_execute())
+
+    async def _test_124_execute(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath="filename",
+            lineno=12,
+        )
+        request = _req("test-vm1", "test-remotevm1")
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test-remotevm1",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test-local-relay
+target_uuid=uuid:355304b8-bd5e-4699-9a2b-b6864fc26f6b
+autostart=True
+requested_target=test-remotevm1
+service=qubesair.SSHProxy+test-remotevm1+test.Service+argument""",
         )
 
 
