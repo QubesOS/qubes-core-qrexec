@@ -165,10 +165,10 @@ enum {
 #define MEMINFO_WRITER_PIDFILE "/var/run/meminfo-writer.pid"
 #define QREXEC_DAEMON_SOCKET_DIR "/var/run/qubes"
 #define QREXEC_POLICY_PROGRAM "/usr/bin/qrexec-policy-exec"
-#define QREXEC_SERVICE_PATH "/usr/local/etc/qubes-rpc:/etc/qubes-rpc"
+#define QREXEC_SERVICE_PATH "/run/qubes-rpc:/usr/local/etc/qubes-rpc:/etc/qubes-rpc"
 
 // directory for services configuration (for example 'wait-for-session' flag)
-#define QUBES_RPC_CONFIG_PATH "/etc/qubes/rpc-config"
+#define QUBES_RPC_CONFIG_PATH "/run/qubes/rpc-config:/usr/local/etc/qubes/rpc-config:/etc/qubes/rpc-config"
 // support only very small configuration files,
 #define MAX_CONFIG_SIZE 4096
 

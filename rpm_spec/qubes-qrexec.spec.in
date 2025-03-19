@@ -44,6 +44,7 @@ BuildRequires:  python-rpm-macros
 %else
 BuildRequires:  python%{python3_pkgversion}-rpm-macros
 %endif
+BuildRequires:  systemd-rpm-macros
 
 Requires:   python%{python3_pkgversion}
 Requires:   python%{python3_pkgversion}-gbulb
@@ -142,6 +143,8 @@ rm -f %{name}-%{version}
 %{_sysconfdir}/qubes-rpc/policy.Notify
 
 %{_sysconfdir}/xdg/autostart/qrexec-policy-agent.desktop
+
+%{_tmpfilesdir}/qrexec-volatile-config.conf
 
 %dir %{python3_sitelib}/qrexec-*.egg-info
 %{python3_sitelib}/qrexec-*.egg-info/*

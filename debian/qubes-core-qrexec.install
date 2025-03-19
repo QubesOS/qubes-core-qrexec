@@ -22,4 +22,5 @@ usr/lib/qubes/qrexec-client-vm
 usr/lib/qubes/qrexec_client_vm
 usr/lib/qubes/qubes-rpc-multiplexer
 usr/lib/qubes/qrexec-policy-agent-autostart
+usr/lib/tmpfiles.d/qrexec-volatile-config.conf
 usr/share/man/man1/qrexec-client-vm.1.gz

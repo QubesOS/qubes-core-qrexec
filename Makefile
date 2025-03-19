@@ -38,6 +38,8 @@ install-base: all-base
 	install -d $(DESTDIR)/etc/xdg/autostart -m 755
 	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
 		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
+	install -m 755 -d $(DESTDIR)/usr/lib/tmpfiles.d
+	install -m 644 -t $(DESTDIR)/usr/lib/tmpfiles.d/ systemd/qrexec-volatile-config.conf
 .PHONY: install-base
 
 
