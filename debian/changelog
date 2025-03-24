@@ -1,3 +1,10 @@
+qubes-core-qrexec (4.3.5-1) unstable; urgency=medium
+
+  [ Aaron Rainbolt ]
+  * Define additional default RPC config paths
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 24 Mar 2025 04:29:46 +0100
+
 qubes-core-qrexec (4.3.4-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
