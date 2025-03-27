@@ -1499,7 +1499,8 @@ static int handle_agent_restart(int xid) {
         PERROR("cannot connect to qrexec agent");
         return -1;
     }
-    if (handle_agent_hello(vchan, remote_domain_name) < 0) {
+    protocol_version = handle_agent_hello(vchan, remote_domain_name);
+    if (protocol_version < 0) {
         libvchan_close(vchan);
         vchan = NULL;
         return -1;
