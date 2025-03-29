@@ -766,6 +766,7 @@ result=allow
 target=@adminvm
 autostart={self.autostart}
 requested_target={request.target}"""
+
         if target.startswith("@dispvm:"):
             target_info = request.system_info["domains"][target[8:]]
             return f"""\
@@ -775,7 +776,25 @@ target={self.target}
 target_uuid=@dispvm:uuid:{target_info['uuid']}
 autostart={self.autostart}
 requested_target={request.target}"""
+
         target_info = request.system_info["domains"][target]
+        if target_info.get("type", None) == "RemoteVM":
+            if not target_info.get("relayvm", None):
+                raise AccessDenied("relayvm is not provided")
+            if not target_info.get("transport_rpc", None):
+                raise AccessDenied("transport RPC is not provided")
+            relayvm_name = target_info["relayvm"]
+            relayvm_info = request.system_info["domains"][relayvm_name]
+            transport_rpc = target_info["transport_rpc"]
+            return f"""\
+user={self.user or 'DEFAULT'}
+result=allow
+target={relayvm_name}
+target_uuid=uuid:{relayvm_info['uuid']}
+autostart={self.autostart}
+requested_target={request.target}
+service={transport_rpc}+{request.target}+{request.service}{request.argument}"""
+
         return f"""\
 user={self.user or 'DEFAULT'}
 result=allow

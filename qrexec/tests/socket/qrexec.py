@@ -35,8 +35,11 @@ MSG_SERVICE_REFUSED = 0x203
 MSG_TRIGGER_SERVICE = 0x210
 MSG_CONNECTION_TERMINATED = 0x211
 MSG_TRIGGER_SERVICE3 = 0x212
+MSG_TRIGGER_SERVICE4 = 0x213
 MSG_HELLO = 0x300
-QREXEC_PROTOCOL_VERSION = 3
+QREXEC_PROTOCOL_V2 = 2
+QREXEC_PROTOCOL_V3 = 3
+QREXEC_PROTOCOL_VERSION = 4
 QREXEC_EXIT_PROBLEM = 125
 QREXEC_EXIT_REQUEST_REFUSED = 126
 QREXEC_EXIT_SERVICE_NOT_FOUND = 127
@@ -93,12 +96,12 @@ class QrexecClient:
             messages.append((message_type, data))
         return messages
 
-    def handshake(self):
-        self.send_message(MSG_HELLO, struct.pack("<L", QREXEC_PROTOCOL_VERSION))
+    def handshake(self, protocol_version=QREXEC_PROTOCOL_VERSION):
+        self.send_message(MSG_HELLO, struct.pack("<L", protocol_version))
         message_type, data = self.recv_message()
         assert message_type == MSG_HELLO
         (ver,) = struct.unpack("<L", data)
-        assert ver == QREXEC_PROTOCOL_VERSION
+        assert ver == protocol_version
 
 
 class QrexecServer(QrexecClient):

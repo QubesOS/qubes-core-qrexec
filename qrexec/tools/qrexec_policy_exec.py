@@ -353,6 +353,7 @@ async def handle_request(
     allow_resolution_type: Optional[type] = None,
     policy_cache: Optional[PolicyCache] = None,
     system_info: Optional[FullSystemInfo] = None,
+    remote_source: Optional[str] = None,
 ) -> str:
     # Add source domain information, required by qrexec-client for establishing
     # connection
