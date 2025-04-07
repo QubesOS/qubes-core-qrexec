@@ -161,7 +161,11 @@ void exec_qubes_rpc2(const char *program, const char *cmd, char *const envp[],
         assert(iterator <= env_amount);
         buf[iterator] = NULL;
         execve(program, (char *const *)argv, buf);
-        _exit(errno == ENOENT ? QREXEC_EXIT_SERVICE_NOT_FOUND : QREXEC_EXIT_PROBLEM);
+        if (errno != ENOENT) {
+            PERROR("execve");
+            _exit(QREXEC_EXIT_PROBLEM);
+        }
+        _exit(QREXEC_EXIT_SERVICE_NOT_FOUND);
     }
 
     // Generate a shell command and call it with the correct arguments.
@@ -208,6 +212,7 @@ void exec_qubes_rpc2(const char *program, const char *cmd, char *const envp[],
     argv[9] = NULL;
     execve("/bin/sh", (char *const *)argv, buf);
     /* /bin/sh should always exist */
+    PERROR("execve /bin/sh");
     _exit(QREXEC_EXIT_PROBLEM);
 bad_asprintf:
     PERROR("asprintf");

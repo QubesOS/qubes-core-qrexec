@@ -276,10 +276,14 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
         case 0:
             /* child */
 
-            if (setgid (pw->pw_gid))
+            if (setgid (pw->pw_gid)) {
+                PERROR("setgid");
                 _exit(QREXEC_EXIT_PROBLEM);
-            if (setuid (pw->pw_uid))
+            }
+            if (setuid (pw->pw_uid)) {
+                PERROR("setuid");
                 _exit(QREXEC_EXIT_PROBLEM);
+            }
             setsid();
             /* This is a copy but don't care to free as we exec later anyway.  */
             env = pam_getenvlist (pamh);
@@ -296,6 +300,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
             }
             /* otherwise exec shell */
             execle(pw->pw_shell, arg0, "-c", cmd, (char*)NULL, env);
+            LOGE(ERROR, "exec shell");
             _exit(QREXEC_EXIT_PROBLEM);
         default:
             /* parent */
@@ -322,6 +327,7 @@ _Noreturn void do_exec(const char *prog, const char *cmd, const char *user)
 
     if (pam_end(pamh, retval) != PAM_SUCCESS) {     /* close Linux-PAM */
         pamh = NULL;
+        LOG(ERROR, "pam_end (retval %d)", retval);
         exit(QREXEC_EXIT_PROBLEM);
     }
     exit(status);
