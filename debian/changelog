@@ -1,3 +1,11 @@
+qubes-core-qrexec (4.3.6-1) unstable; urgency=medium
+
+  * Fix protocol version negotiation on agent reconnect
+  * rpm: add BR: pkgconfig(systemd)
+  * Add error messages to few more QREXEC_EXIT_PROBLEM cases
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 14 Apr 2025 04:22:23 +0200
+
 qubes-core-qrexec (4.3.5-1) unstable; urgency=medium
 
   [ Aaron Rainbolt ]
