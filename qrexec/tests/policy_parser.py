@@ -2419,6 +2419,76 @@ policy_source=test-remotevm1""",
             "unknown requested source qube 'test-unexistent'",
         )
 
+    def test_131_execute_no_transport_rpc(self):
+        asyncio.run(self._test_131_execute_no_transport_rpc())
+
+    async def _test_131_execute_no_transport_rpc(self):
+        system_info = deepcopy(_SYSTEM_INFO)
+        del system_info["domains"]["test-remotevm1"]["transport_rpc"]
+
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "test.Service",
+            "+argument",
+            "test-vm1",
+            "test-remotevm1",
+            system_info=system_info,
+        )
+        with self.assertRaises(exc.AccessDenied) as exc_info:
+            resolution = parser.AllowResolution(
+                rule,
+                request,
+                user=None,
+                target="test-remotevm1",
+                autostart=True,
+            )
+            await resolution.execute()
+
+        self.assertEqual(
+            str(exc_info.exception),
+            "test-remotevm1: transport RPC is not set",
+        )
+
+    def test_132_execute_no_relayvm(self):
+        asyncio.run(self._test_132_execute_no_relayvm())
+
+    async def _test_132_execute_no_relayvm(self):
+        system_info = deepcopy(_SYSTEM_INFO)
+        del system_info["domains"]["test-remotevm1"]["relayvm"]
+
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "test.Service",
+            "+argument",
+            "test-vm1",
+            "test-remotevm1",
+            system_info=system_info,
+        )
+        with self.assertRaises(exc.AccessDenied) as exc_info:
+            resolution = parser.AllowResolution(
+                rule,
+                request,
+                user=None,
+                target="test-remotevm1",
+                autostart=True,
+            )
+            await resolution.execute()
+
+        self.assertEqual(
+            str(exc_info.exception),
+            "test-remotevm1: relayvm is not set",
+        )
+
 
 # class TC_30_Misc(qubes.tests.QubesTestCase):
 class TC_50_Misc(ParserTestCase):
