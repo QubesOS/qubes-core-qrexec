@@ -2489,6 +2489,38 @@ policy_source=test-remotevm1""",
             "test-remotevm1: relayvm is not set",
         )
 
+    def test_133_execute_loopback(self):
+        asyncio.run(self._test_133_execute_loopback())
+
+    async def _test_133_execute_loopback(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "test.Service",
+            "+argument",
+            "test-vm1",
+            "test-vm1",
+            system_info=self.system_info,
+        )
+        with self.assertRaises(exc.AccessDenied) as exc_info:
+            resolution = parser.AllowResolution(
+                rule,
+                request,
+                user=None,
+                target="test-vm1",
+                autostart=True,
+            )
+            await resolution.execute()
+
+        self.assertEqual(
+            str(exc_info.exception),
+            "loopback qrexec connection not supported",
+        )
+
 
 # class TC_30_Misc(qubes.tests.QubesTestCase):
 class TC_50_Misc(ParserTestCase):
