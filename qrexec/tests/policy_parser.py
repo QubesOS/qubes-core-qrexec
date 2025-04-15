@@ -25,9 +25,12 @@ import subprocess
 import unittest.mock
 import asyncio
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from types import MappingProxyType
+
+from qrexec.utils import FullSystemInfo
 
 from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
@@ -172,7 +175,7 @@ _SYSTEM_INFO = {
 }
 
 
-def patch_system_info(orig_system_info):
+def patch_system_info(orig_system_info) -> FullSystemInfo:
     """
     We *really* do not want any code to modify SYSTEM_INFO,
     so replace all of its contents with versions that do not
@@ -191,7 +194,7 @@ def patch_system_info(orig_system_info):
     patched_system_info["domains"] = MappingProxyType(system_info)
     for i in system_info.values():
         assert not i["name"].startswith("uuid:")
-    return MappingProxyType(patched_system_info)
+    return MappingProxyType(patched_system_info)  # type: ignore
 
 
 # async mock
@@ -682,7 +685,7 @@ class TC_10_Rule(ParserTestCase):
             "allow",
             (),
             policy=None,
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
 
@@ -698,10 +701,10 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @anyvm ask",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -715,10 +718,10 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @tag:tag1 @type:AppVM ask target=test-vm2 user=user",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@tag:tag1")
@@ -731,10 +734,10 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @default allow target=@dispvm:test-vm2",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.allow.value)
         self.assertEqual(line.source, "@anyvm")
@@ -748,10 +751,10 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @default ask default_target=test-vm1",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -764,10 +767,10 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @adminvm ask default_target=@adminvm",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -805,14 +808,14 @@ class TC_10_Rule(ParserTestCase):
             with self.subTest(line):
                 with self.assertRaises(exc.PolicySyntaxError):
                     parser.Rule.from_line(
-                        None, line, filepath="filename", lineno=12
+                        None, line, filepath=Path("filename"), lineno=12
                     )
 
     def test_050_match(self):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @anyvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -830,7 +833,7 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @anyvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -848,7 +851,7 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -866,7 +869,7 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertFalse(
@@ -884,7 +887,7 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm:default-dvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -902,7 +905,7 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm:default-dvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -920,7 +923,7 @@ class TC_10_Rule(ParserTestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm:@tag:tag3 allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -948,7 +951,7 @@ class TC_10_Rule(ParserTestCase):
 
         for line in lines:
             rule = parser.Rule.from_line(
-                None, line, filepath="filename", lineno=12
+                None, line, filepath=Path("filename"), lineno=12
             )
             assert str(rule) == line
 
@@ -1014,7 +1017,7 @@ def test_line_notify(action_name, action, default):
     line = parser.Rule.from_line(
         None,
         "test.Service +argument @anyvm @adminvm {}".format(action_name),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -1025,7 +1028,7 @@ def test_line_notify(action_name, action, default):
         "test.Service +argument @anyvm @adminvm {} notify=yes".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -1036,7 +1039,7 @@ def test_line_notify(action_name, action, default):
         "test.Service +argument @anyvm @adminvm {} notify=no".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -1054,7 +1057,7 @@ def test_line_autostart(action_name, action):
     line = parser.Rule.from_line(
         None,
         "test.Service +argument @anyvm @anyvm {}".format(action_name),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -1065,7 +1068,7 @@ def test_line_autostart(action_name, action):
         "test.Service +argument @anyvm @anyvm {} autostart=yes".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -1076,7 +1079,7 @@ def test_line_autostart(action_name, action):
         "test.Service +argument @anyvm @anyvm {} autostart=no".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -1090,10 +1093,10 @@ class TC_11_Rule_service(ParserTestCase):
             "test.Service",
             "+argument",
             "@anyvm @anyvm ask",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1110,10 +1113,10 @@ class TC_11_Rule_service(ParserTestCase):
             "test.Service",
             "+argument",
             "@tag:tag1 @type:AppVM ask target=test-vm2 user=user",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@tag:tag1")
@@ -1129,10 +1132,10 @@ class TC_11_Rule_service(ParserTestCase):
             "test.Service",
             "+argument",
             "@anyvm @default allow target=@dispvm:test-vm2",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.allow.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1148,10 +1151,10 @@ class TC_11_Rule_service(ParserTestCase):
             "test.Service",
             "+argument",
             "@anyvm @default ask default_target=test-vm1",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1166,10 +1169,10 @@ class TC_11_Rule_service(ParserTestCase):
             "test.Service",
             "+argument",
             "@anyvm @adminvm ask default_target=@adminvm",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1184,10 +1187,10 @@ class TC_11_Rule_service(ParserTestCase):
             "test.Service",
             "+argument",
             "@anyvm @default ask,default_target=test-vm1",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1226,7 +1229,7 @@ class TC_11_Rule_service(ParserTestCase):
                         "test.Service",
                         "+argument",
                         line,
-                        filepath="filename",
+                        filepath=Path("filename"),
                         lineno=12,
                     )
 
@@ -1479,7 +1482,10 @@ class TC_30_Resolution(ParserTestCase):
 
     def test_000_allow_init(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
+            None,
+            "* * @anyvm @anyvm allow",
+            filepath=Path("filename"),
+            lineno=12,
         )
         resolution = parser.AllowResolution(
             rule, self.request, user=None, target="test-vm2", autostart=True
@@ -1494,7 +1500,7 @@ class TC_30_Resolution(ParserTestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm allow notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         resolution = parser.AllowResolution(
@@ -1512,7 +1518,7 @@ class TC_30_Resolution(ParserTestCase):
 
     def test_100_ask_init(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         resolution = parser.AskResolution(
             rule,
@@ -1534,7 +1540,7 @@ class TC_30_Resolution(ParserTestCase):
 
     def test_101_ask_init(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         resolution = parser.AskResolution(
             rule,
@@ -1558,7 +1564,7 @@ class TC_30_Resolution(ParserTestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         resolution = parser.AskResolution(
@@ -1581,7 +1587,7 @@ class TC_30_Resolution(ParserTestCase):
 
     def test_103_ask_default_target_None(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         resolution = parser.AskResolution(
             rule,
@@ -1937,7 +1943,7 @@ class TC_40_evaluate(ParserTestCase):
 
     def test_110_handle_user_response_allow(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         request = parser.Request(
             "test.service",
@@ -1963,7 +1969,7 @@ class TC_40_evaluate(ParserTestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = parser.Request(
@@ -1988,7 +1994,7 @@ class TC_40_evaluate(ParserTestCase):
 
     def test_112_handle_user_response_deny_invalid(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         request = parser.Request(
             "test.service",
@@ -2011,7 +2017,7 @@ class TC_40_evaluate(ParserTestCase):
 
     def test_113_handle_user_response_deny_normal(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AskResolution(
@@ -2030,7 +2036,7 @@ class TC_40_evaluate(ParserTestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = self.gen_req("test-vm1", "test-vm2")
@@ -2050,7 +2056,7 @@ class TC_40_evaluate(ParserTestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask default_target=test-vm2",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = self.gen_req("test-vm1", "test-vm2")
@@ -2071,7 +2077,10 @@ class TC_40_evaluate(ParserTestCase):
 
     async def _test_120_execute(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
+            None,
+            "* * @anyvm @anyvm allow",
+            filepath=Path("filename"),
+            lineno=12,
         )
         request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
@@ -2099,7 +2108,7 @@ requested_target=test-vm2\
 
     async def _test_121_execute_dom0(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm dom0 allow", filepath="filename", lineno=12
+            None, "* * @anyvm dom0 allow", filepath=Path("filename"), lineno=12
         )
         request = self.gen_req("test-vm1", "dom0")
         resolution = parser.AllowResolution(
@@ -2122,7 +2131,7 @@ requested_target=@adminvm\
 
     async def _test_121_execute_dom0_keyword(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm dom0 allow", filepath="filename", lineno=12
+            None, "* * @anyvm dom0 allow", filepath=Path("filename"), lineno=12
         )
         request = self.gen_req("test-vm1", "@adminvm")
         resolution = parser.AllowResolution(
@@ -2151,7 +2160,7 @@ requested_target=@adminvm\
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @dispvm:default-dvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = self.gen_req("test-vm1", "@dispvm:default-dvm")
@@ -2180,7 +2189,10 @@ requested_target=@dispvm:default-dvm\
 
     async def _test_123_execute_already_running(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
+            None,
+            "* * @anyvm @anyvm allow",
+            filepath=Path("filename"),
+            lineno=12,
         )
         request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
@@ -2211,7 +2223,7 @@ requested_target=test-vm2\
         rule = parser.Rule.from_line(
             None,
             "* * test-vm1 test-remotevm1 allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = self.gen_req("test-vm1", "test-remotevm1")
@@ -2243,7 +2255,7 @@ service=qubesair.SSHProxy+test-remotevm1+test.Service+argument""",
         rule = parser.Rule.from_line(
             None,
             "* * test2-remotevm1 test2-vm1 allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = parser.Request(
@@ -2319,7 +2331,7 @@ policy_source=test2-remotevm1""",
         rule = parser.Rule.from_line(
             None,
             "* * test2-remotevm1 test2-remotevm2 allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = parser.Request(
@@ -2358,7 +2370,7 @@ policy_source=test2-remotevm1""",
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @dispvm:default-dvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = parser.Request(
@@ -2378,8 +2390,8 @@ policy_source=test2-remotevm1""",
         )
         result = await resolution.execute()
         self.assertEqual(
-                result,
-                """\
+            result,
+            """\
 user=DEFAULT
 result=allow
 target=@dispvm:default-dvm
@@ -2387,7 +2399,7 @@ target_uuid=@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21
 autostart=True
 requested_target=@dispvm:default-dvm
 policy_source=test-remotevm1""",
-            )
+        )
 
     def test_130_execute_unexistent_source(self):
         asyncio.run(self._test_130_execute_unexistent_source())
