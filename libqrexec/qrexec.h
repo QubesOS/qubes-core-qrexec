@@ -29,7 +29,8 @@
 
 #include <stdint.h>
 
-#define QREXEC_PROTOCOL_VERSION 3
+#define QREXEC_PROTOCOL_VERSION 4
+#define QREXEC_CLIENT_PROTOCOL_VERSION 3
 #define MAX_FDS 256
 /* protocol version 2 */
 #define MAX_DATA_CHUNK_V2 4096
@@ -64,9 +65,16 @@ enum {
     /* Changes:
      *  - MAX_DATA_CHUNK increased to 64k
      *  - MSG_TRIGGER_SERVICE3
-     * Qubes >= R4.1
+     * Qubes R4.1 - R4.2
      */
     QREXEC_PROTOCOL_V3 = 3,
+
+    /* Changes:
+     *  - MSG_TRIGGER_SERVICE4
+     *  - FIXME
+     * Qubes >= R4.3
+     */
+    QREXEC_PROTOCOL_V4 = 4,
 };
 
 /* Messages sent over control vchan between daemon(dom0) and agent(vm).
@@ -97,20 +105,25 @@ enum {
      * struct trigger_service_params passed as data */
     MSG_TRIGGER_SERVICE = 0x210,
 
-
     /* connection was terminated, struct exec_params passed as data (with empty
      * cmdline field) informs about released vchan port */
     MSG_CONNECTION_TERMINATED,
 
     /* agent->daemon messages */
-    /* call Qubes RPC service (protocol 3+)
+    /* call Qubes RPC service (protocol 3)
      * struct trigger_service_params3 passed as data */
     MSG_TRIGGER_SERVICE3,
+
+    /* agent->daemon messages */
+    /* call Qubes RPC service (protocol 4+)
+     * struct trigger_service_params4 passed as data */
+    MSG_TRIGGER_SERVICE4,
 
     /* common messages */
     /* initialize connection, struct peer_info passed as data
      * should be sent as the first message (server first, then client) */
     MSG_HELLO = 0x300,
+
 };
 
 /* uniform for all peers, data type depends on message type */
@@ -140,6 +153,13 @@ struct trigger_service_params3 {
     char target_domain[64];           /* null terminated ASCII string */
     struct service_params request_id; /* service request id */
     char service_name[];              /* null terminated ASCII string, size = msg_header.len - sizeof(struct trigger_service_params3) */
+};
+
+struct trigger_service_params4 {
+    char source_domain[64];           /* null terminated ASCII string */
+    char target_domain[64];           /* null terminated ASCII string */
+    struct service_params request_id; /* service request id */
+    char service_name[];              /* null terminated ASCII string, size = msg_header.len - sizeof(struct trigger_service_params4) */
 };
 
 struct peer_info {

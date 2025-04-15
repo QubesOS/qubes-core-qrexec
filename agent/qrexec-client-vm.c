@@ -107,6 +107,7 @@ static struct option longopts[] = {
     { "agent-socket", required_argument, 0, 'a'},
     { "prefix-data", required_argument, 0, 'p' },
     { "use-stdin-socket", no_argument, 0, opt_use_stdin_socket },
+    { "source-qube", required_argument, 0, 's' },
     { "help", no_argument, 0, 'h' },
     { NULL, 0, 0, 0},
 };
@@ -127,6 +128,7 @@ _Noreturn static void usage(const char *argv0, int status) {
             QREXEC_AGENT_TRIGGER_PATH);
     fprintf(stream, "  -p PREFIX-DATA, --prefix-data=PREFIX-DATA - send the given data before the provided stdin (can only be used once)\n");
     fprintf(stream, "  --use-stdin-socket - use fd 0 (which must be socket) for both stdin and stdout\n");
+    fprintf(stderr, "  -s SOURCE-QUBE, --source-qube=SOURCE-QUBE - Specify the source qube. This option provides extra information for relayed connection that may be used during policy evaluation.\n");
     exit(status);
 }
 
@@ -134,7 +136,7 @@ int main(int argc, char **argv)
 {
     int trigger_fd;
     struct msg_header hdr;
-    struct trigger_service_params3 params;
+    struct trigger_service_params4 params;
     struct exec_params exec_params;
     size_t service_name_len;
     char *service_name, *endptr;
@@ -148,6 +150,7 @@ int main(int argc, char **argv)
     int opt;
     int stdout_fd = 1;
     const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH, *prefix_data = NULL;
+    const char *source_qube = NULL;
 
     setup_logging("qrexec-client-vm");
 
@@ -155,7 +158,7 @@ int main(int argc, char **argv)
     signal(SIGPIPE, SIG_IGN);
 
     while (1) {
-        opt = getopt_long(argc, argv, "+tTa:hp:", longopts, NULL);
+        opt = getopt_long(argc, argv, "+tTa:p:s:h", longopts, NULL);
         if (opt == -1)
             break;
         switch (opt) {
@@ -191,6 +194,11 @@ int main(int argc, char **argv)
                 if (prefix_data)
                     usage(argv[0], 2);
                 prefix_data = optarg;
+                break;
+            case 's':
+                if (source_qube)
+                    usage(argv[0], 2);
+                source_qube = optarg;
                 break;
             case opt_no_filter_stdout:
                 replace_chars_stdout = 0;
@@ -250,14 +258,16 @@ int main(int argc, char **argv)
 
     trigger_fd = connect_unix_socket(agent_trigger_path);
 
-    hdr.type = MSG_TRIGGER_SERVICE3;
+    hdr.type = MSG_TRIGGER_SERVICE4;
     hdr.len = sizeof(params) + service_name_len;
 
     memset(&params, 0, sizeof(params));
 
+    if (source_qube!=NULL)
+        strncpy(params.source_domain, source_qube, sizeof(params.source_domain) - 1);
+
     convert_target_name_keyword(argv[optind]);
-    strncpy(params.target_domain, argv[optind],
-            sizeof(params.target_domain) - 1);
+    strncpy(params.target_domain, argv[optind], sizeof(params.target_domain) - 1);
 
     memcpy(params.request_id.ident, "SOCKET", sizeof("SOCKET"));
 

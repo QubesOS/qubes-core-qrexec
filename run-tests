@@ -1,8 +1,8 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
 case $0 in (/*) cd "${0%/*}/";; (*/*) cd "./${0%/*}";; esac
 if command -v dnf >/dev/null; then
-    sudo dnf install python3dist\({coverage,pytest,gbulb,pyinotify,pytest-asyncio}\) || :
+    sudo dnf install python3dist\({coverage,pytest,gbulb,pyinotify,pytest-asyncio}\) qubes-libvchan-xen-devel pam-devel || :
 fi
 if pkg-config vchan-socket; then
     if [[ -n "${USE_ASAN-}" ]]; then

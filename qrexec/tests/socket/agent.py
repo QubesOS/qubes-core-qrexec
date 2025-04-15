@@ -16,26 +16,23 @@
 #
 # You should have received a copy of the GNU Lesser General Public License along
 # with this program; if not, see <http://www.gnu.org/licenses/>.
-import sys
-import unittest
-import subprocess
-import os.path
-import os
-import tempfile
-import socket
-import shutil
-import struct
 import getpass
 import itertools
-import asyncio
+import os
+import os.path
 import shlex
+import shutil
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import unittest
 
 import psutil
-import pytest
 
 from . import qrexec
 from . import util
-
 
 ROOT_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..")
@@ -48,6 +45,7 @@ class TestAgentBase(unittest.TestCase):
     domain = 42
     target_domain = 43
     target_port = 1024
+    protocol_version = 4
 
     def check_dom0(self, dom0):
         self.assertEqual(
@@ -162,7 +160,7 @@ class TestAgentBase(unittest.TestCase):
             self.tempdir, self.domain, 0, 512
         )
         self.addCleanup(dom0.close)
-        dom0.handshake()
+        dom0.handshake(self.protocol_version)
         return dom0
 
     def connect_target(self):
@@ -171,6 +169,7 @@ class TestAgentBase(unittest.TestCase):
         )
         self.addCleanup(target.close)
         target.accept()
+        target.handshake(self.protocol_version)
         return target
 
     def connect_client(self):
@@ -181,10 +180,10 @@ class TestAgentBase(unittest.TestCase):
 
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
 class TestAgent(TestAgentBase):
+
     def test_handshake(self):
         self.start_agent()
-
-        dom0 = self.connect_dom0()
+        self.connect_dom0()
 
     def _test_just_exec(self, cmd):
         self.start_agent()
@@ -203,7 +202,6 @@ class TestAgent(TestAgentBase):
         )
 
         target = self.connect_target()
-        target.handshake()
         return target, dom0
 
     def test_001_just_exec_socket(self):
@@ -288,8 +286,6 @@ exit 1
         )
 
         target = self.connect_target()
-        target.handshake()
-
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
 
         self.assertExpectedStdout(target, b"Hello world\n")
@@ -340,22 +336,27 @@ exit 1
         data = client.recvall(8)
         self.assertEqual(data, b"")
 
-    def trigger_service(self, dom0, client, target_domain_name, service_name):
+    def trigger_service(
+        self, dom0, client, target_domain_name, service_name, source_domain=b""
+    ):
+        # source_domain[64] target_domain[64] ident[32] service_name
         source_params = (
-            struct.pack("<64s32s", target_domain_name, b"SOCKET")
+            struct.pack(
+                "<64s64s32s", source_domain, target_domain_name, b"SOCKET"
+            )
             + service_name
             + b"\0"
         )
 
         client.send_message(
-            qrexec.MSG_TRIGGER_SERVICE3,
+            qrexec.MSG_TRIGGER_SERVICE4,
             source_params,
         )
 
         message_type, target_params = dom0.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
 
-        ident = target_params[64:96]
+        ident = target_params[128:150]
         ident = ident[: ident.find(b"\0")]
         self.assertTrue(
             ident.startswith(b"SOCKET"), "wrong ident: {}".format(ident)
@@ -364,7 +365,7 @@ exit 1
         # The params should be the same except for ident.
         self.assertEqual(
             target_params,
-            source_params[:64] + ident + source_params[64 + len(ident) :],
+            source_params[:128] + ident + source_params[128 + len(ident) :],
         )
 
         return ident
@@ -388,7 +389,6 @@ class TestAgentExecQubesRpc(TestAgentBase):
         )
 
         target = self.connect_target()
-        target.handshake()
         return target, dom0
 
     def test_exec_symlink(self):
@@ -1185,7 +1185,6 @@ class TestAgentStreams(TestAgentBase):
         )
 
         target = self.connect_target()
-        target.handshake()
         return target, dom0
 
     def test_stdin_stderr(self):
@@ -1370,6 +1369,7 @@ class TestClientVm(unittest.TestCase):
     target_domain_name = "target_domain"
     target_domain = 43
     target_port = 1024
+    protocol_version = 4
 
     def assertStdoutMessages(
         self, target, expected_stdout: bytes, ty=qrexec.MSG_DATA_STDOUT
@@ -1431,14 +1431,22 @@ class TestClientVm(unittest.TestCase):
             self.tempdir, self.domain, self.target_domain, self.target_port
         )
         self.addCleanup(target_client.close)
+        target_client.handshake(self.protocol_version)
         return target_client
 
     def run_service(
-        self, *, local_program=None, options=None, stdio=subprocess.PIPE
+        self,
+        *,
+        local_program=None,
+        source_qube_name=None,
+        options=None,
+        stdio=subprocess.PIPE,
     ):
         server = self.connect_server()
 
         args = options or []
+        if source_qube_name:
+            args += [f"--source-qube={source_qube_name}"]
         args.append(self.target_domain_name)
         args.append("qubes.ServiceName")
         if local_program:
@@ -1448,22 +1456,26 @@ class TestClientVm(unittest.TestCase):
         server.accept()
 
         message_type, data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
         self.assertEqual(
             data,
-            struct.pack("<64s32s", self.target_domain_name.encode(), b"SOCKET")
+            struct.pack(
+                "<64s64s32s",
+                (source_qube_name or "").encode(),
+                self.target_domain_name.encode(),
+                b"SOCKET",
+            )
             + b"qubes.ServiceName\0",
         )
 
         server.sendall(struct.pack("<LL", self.target_domain, self.target_port))
 
         target_client = self.connect_target_client()
-        target_client.handshake()
 
         return target_client
 
-    def test_run_client(self):
-        target_client = self.run_service()
+    def _test_run_client_skeleton(self, *args, **kwargs):
+        target_client = self.run_service(*args, **kwargs)
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         self.assertEqual(self.client.stdout.read(), b"stdout data\n")
@@ -1472,6 +1484,12 @@ class TestClientVm(unittest.TestCase):
         )
         self.client.wait()
         self.assertEqual(self.client.returncode, 42)
+
+    def test_run_client(self):
+        self._test_run_client_skeleton()
+
+    def test_run_client_with_source_qube(self):
+        self._test_run_client_skeleton(source_qube_name="toto")
 
     def test_run_client_eof(self):
         remote, local = socket.socketpair()
@@ -1588,7 +1606,7 @@ class TestClientVm(unittest.TestCase):
         server.accept()
 
         message_type, __data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
 
         server.conn.close()
         self.client.wait()
@@ -1755,10 +1773,12 @@ read < "$1"
         server.accept()
 
         message_type, data = server.recv_message()
-        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE3)
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
         self.assertEqual(
             data,
-            struct.pack("<64s32s", self.target_domain_name.encode(), b"SOCKET")
+            struct.pack(
+                "<64s64s32s", b"", self.target_domain_name.encode(), b"SOCKET"
+            )
             + b"qubes.ServiceName\0",
         )
 

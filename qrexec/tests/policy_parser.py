@@ -31,6 +31,7 @@ from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
 from ..policy import parser, parser_compat
 
+
 SYSTEM_INFO = {
     "domains": {
         "dom0": {
@@ -104,6 +105,66 @@ SYSTEM_INFO = {
             "template_for_dispvms": False,
             "power_state": "Halted",
             "uuid": "6d7a02b5-532b-467f-b9fb-6596bae03c33",
+        },
+        "test-remotevm1": {
+            "tags": ["relayvm-test-relayvm1"],
+            "relayvm": "test-relayvm1",
+            "transport_rpc": "qubesair.SSHProxy",
+            "type": "RemoteVM",
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "3d225b39-88e9-4696-8978-b27c1360e041",
+        },
+        "test-relayvm1": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "355304b8-bd5e-4699-9a2b-b6864fc26f6b",
+        },
+        # qubes on a second (remote) Qubes OS
+        "test2-remotevm1": {
+            "tags": ["relayvm-test2-relayvm1"],
+            "type": "RemoteVM",
+            "relayvm": "test2-relayvm1",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "c7825251-1bb2-4070-aec9-3a8dd13befbf",
+        },
+        "test2-remotevm2": {
+            "tags": ["relayvm-test2-relayvm2"],
+            "type": "RemoteVM",
+            "relayvm": "test2-relayvm2",
+            "transport_rpc": "qubesair.SSHProxy",
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "6cd84a95-4336-445f-b125-6ecca1a40353",
+        },
+        "test2-vm1": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "c798d6db-360f-473a-b902-1cc58ffd3ab0",
+        },
+        "test2-relayvm1": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "41435947-21f8-41d9-9079-26df31f03d97",
+        },
+        "test2-relayvm2": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "044767bb-081e-4260-b7be-35e77c36d510",
         },
     },
 }
@@ -229,19 +290,28 @@ class TC_00_VMToken(unittest.TestCase):
             ["@adminvm"],
         )
         self.assertEqual(
-            list(parser.Target("@anyvm").expand(system_info=SYSTEM_INFO)),
+            sorted(
+                set(parser.Target("@anyvm").expand(system_info=SYSTEM_INFO))
+            ),
             [
+                "@dispvm",
+                "@dispvm:default-dvm",
+                "@dispvm:test-vm3",
+                "default-dvm",
+                "test-invalid-dvm",
+                "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
+                "test-standalone",
+                "test-template",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
-                "@dispvm:test-vm3",
-                "default-dvm",
-                "@dispvm:default-dvm",
-                "test-invalid-dvm",
-                "test-no-dvm",
-                "test-template",
-                "test-standalone",
-                "@dispvm",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
         self.maxDiff = None
@@ -255,11 +325,18 @@ class TC_00_VMToken(unittest.TestCase):
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
                 "test-standalone",
                 "test-template",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
         self.assertCountEqual(
@@ -272,8 +349,12 @@ class TC_00_VMToken(unittest.TestCase):
                 "test-vm2",
                 "test-vm3",
                 "default-dvm",
+                "test2-vm1",
+                "test2-relayvm1",
+                "test2-relayvm2",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
             ],
         )
         self.assertCountEqual(
@@ -1292,10 +1373,17 @@ class TC_20_Policy(unittest.TestCase):
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
                 "test-standalone",
                 "test-template",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
         self.assertEqual(
@@ -1317,9 +1405,13 @@ class TC_20_Policy(unittest.TestCase):
                 "dom0",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-vm1",
             ],
         )
         self.assertCountEqual(
@@ -1545,15 +1637,22 @@ class TC_40_evaluate(unittest.TestCase):
             sorted(resolution.targets_for_ask),
             sorted(
                 [
+                    "@dispvm:default-dvm",
+                    "@dispvm:test-vm3",
+                    "default-dvm",
+                    "test-invalid-dvm",
+                    "test-no-dvm",
+                    "test-relayvm1",
+                    "test-remotevm1",
+                    "test-template",
                     "test-vm1",
                     "test-vm2",
                     "test-vm3",
-                    "@dispvm:test-vm3",
-                    "default-dvm",
-                    "@dispvm:default-dvm",
-                    "test-invalid-dvm",
-                    "test-no-dvm",
-                    "test-template",
+                    "test2-relayvm1",
+                    "test2-relayvm2",
+                    "test2-remotevm1",
+                    "test2-remotevm2",
+                    "test2-vm1",
                 ]
             ),
         )
@@ -1576,10 +1675,17 @@ class TC_40_evaluate(unittest.TestCase):
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
                 "test-template",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
             sorted(resolution.targets_for_ask),
         )
@@ -1600,17 +1706,24 @@ class TC_40_evaluate(unittest.TestCase):
         resolution = policy.evaluate(_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertCountEqual(
-            resolution.targets_for_ask,
+            sorted(resolution.targets_for_ask),
             [
-                "test-standalone",
-                "test-vm2",
-                "test-vm3",
+                "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
                 "default-dvm",
-                "@dispvm:default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
+                "test-standalone",
                 "test-template",
+                "test-vm2",
+                "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
 
@@ -1620,7 +1733,19 @@ class TC_40_evaluate(unittest.TestCase):
         )
         resolution = policy.evaluate(_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
-        self.assertCountEqual(resolution.targets_for_ask, ["test-vm2"])
+        self.assertCountEqual(
+            sorted(resolution.targets_for_ask),
+            [
+                "test-relayvm1",
+                "test-remotevm1",
+                "test-vm2",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
+            ],
+        )
 
     def test_050_eval_resolve_dispvm(self):
         policy = parser.StringPolicy(
@@ -2018,6 +2143,209 @@ target_uuid=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4
 autostart=True
 requested_target=test-vm2\
 """,
+        )
+
+    def test_124_execute_local_to_remotevm_simple(self):
+        asyncio.run(self._test_124_execute_local_to_remotevm_simple())
+
+    async def _test_124_execute_local_to_remotevm_simple(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath="filename",
+            lineno=12,
+        )
+        request = _req("test-vm1", "test-remotevm1")
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test-remotevm1",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test-relayvm1
+target_uuid=uuid:355304b8-bd5e-4699-9a2b-b6864fc26f6b
+autostart=True
+requested_target=test-remotevm1
+service=qubesair.SSHProxy+test-remotevm1+test.Service+argument""",
+        )
+
+    # Verify that the policy program returns the requested source as policy_source.
+    def test_125_valid_remote_to_local_allow_resolution(self):
+        asyncio.run(self._test_125_valid_remote_to_local_allow_resolution())
+
+    async def _test_125_valid_remote_to_local_allow_resolution(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test2-remotevm1 test2-vm1 allow",
+            filepath="filename",
+            lineno=12,
+        )
+        request = parser.Request(
+            "qubes.SomeService",
+            "+arg",
+            "test2-relayvm1",
+            "test2-vm1",
+            system_info=SYSTEM_INFO,
+            requested_source="test2-remotevm1",
+        )
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test2-vm1",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test2-vm1
+target_uuid=uuid:c798d6db-360f-473a-b902-1cc58ffd3ab0
+autostart=True
+requested_target=test2-vm1
+policy_source=test2-remotevm1""",
+        )
+
+    # Verify that a relay attempting to impersonate another relay raises an error.
+    def test_126_relay_impersonating_another_relay_error(self):
+        asyncio.run(self._test_126_relay_impersonating_another_relay_error())
+
+    async def _test_126_relay_impersonating_another_relay_error(self):
+        with self.assertRaises(exc.RequestError) as exc_info:
+            parser.Request(
+                "qubes.SomeService",
+                "+arg",
+                "test2-relayvm2",
+                "test2-vm1",
+                system_info=SYSTEM_INFO,
+                requested_source="test2-remotevm1",
+            )
+        self.assertEqual(
+            str(exc_info.exception),
+            "test2-relayvm2 is not a relay for test2-remotevm1",
+        )
+
+    # Verify that a relay attempting to impersonate a local VM raises an error.
+    def test_127_relay_impersonating_localvm_error(self):
+        asyncio.run(self._test_127_relay_impersonating_localvm_error())
+
+    async def _test_127_relay_impersonating_localvm_error(self):
+        with self.assertRaises(exc.RequestError) as exc_info:
+            parser.Request(
+                "qubes.SomeService",
+                "+arg",
+                "test2-relayvm1",
+                "test2-vm1",
+                system_info=SYSTEM_INFO,
+                requested_source="test-vm3",
+            )
+        self.assertEqual(
+            str(exc_info.exception),
+            "test-vm3: requested source is only authorized for RemoteVM",
+        )
+
+    def test_128_execute_remotevm_to_remotevm(self):
+        asyncio.run(self._test_128_execute_remotevm_to_remotevm())
+
+    async def _test_128_execute_remotevm_to_remotevm(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test2-remotevm1 test2-remotevm2 allow",
+            filepath="filename",
+            lineno=12,
+        )
+        request = parser.Request(
+            "qubes.SomeService",
+            "+arg",
+            "test2-relayvm1",
+            "test2-remotevm2",
+            system_info=SYSTEM_INFO,
+            requested_source="test2-remotevm1",
+        )
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test2-remotevm2",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test2-relayvm2
+target_uuid=uuid:044767bb-081e-4260-b7be-35e77c36d510
+autostart=True
+requested_target=test2-remotevm2
+service=qubesair.SSHProxy+test2-remotevm2+qubes.SomeService+arg
+policy_source=test2-remotevm1""",
+        )
+
+    def test_129_execute_remote_to_dispvm(self):
+        asyncio.run(self._test_129_execute_remote_to_dispvm())
+
+    async def _test_129_execute_remote_to_dispvm(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * @anyvm @dispvm:default-dvm allow",
+            filepath="filename",
+            lineno=12,
+        )
+        request = parser.Request(
+            "qubes.SomeService",
+            "+arg",
+            "test-relayvm1",
+            "@dispvm:default-dvm",
+            system_info=SYSTEM_INFO,
+            requested_source="test-remotevm1",
+        )
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target=parser.DispVMTemplate("@dispvm:default-dvm"),
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=@dispvm:default-dvm
+target_uuid=@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21
+autostart=True
+requested_target=@dispvm:default-dvm
+policy_source=test-remotevm1""",
+        )
+
+    def test_130_execute_unexistent_source(self):
+        asyncio.run(self._test_130_execute_unexistent_source())
+
+    async def _test_130_execute_unexistent_source(self):
+        with self.assertRaises(exc.RequestError) as exc_info:
+            parser.Request(
+                "qubes.SomeService",
+                "+arg",
+                "test-relayvm1",
+                "test-remotevm1",
+                system_info=SYSTEM_INFO,
+                requested_source="test-unexistent",
+            )
+        self.assertEqual(
+            str(exc_info.exception),
+            "unknown requested source qube 'test-unexistent'",
         )
 
 

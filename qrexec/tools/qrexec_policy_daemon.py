@@ -70,7 +70,11 @@ REQUIRED_REQUEST_ARGUMENTS = (
     "service_and_arg",
 )
 
-OPTIONAL_REQUEST_ARGUMENTS = ("assume_yes_for_ask", "just_evaluate")
+OPTIONAL_REQUEST_ARGUMENTS = (
+    "assume_yes_for_ask",
+    "just_evaluate",
+    "requested_source",
+)
 
 ALLOWED_REQUEST_ARGUMENTS = (
     REQUIRED_REQUEST_ARGUMENTS + OPTIONAL_REQUEST_ARGUMENTS
