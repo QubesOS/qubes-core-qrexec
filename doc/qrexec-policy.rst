@@ -1,5 +1,5 @@
-:py:mod:`qubes.policy` -- Qubes RPC policy
-==========================================
+:py:mod:`qrexec.policy` -- Qubes RPC policy
+===========================================
 
 Every Qubes domain can trigger various RPC services, but if such call would be
 allowed depends on Qubes RPC policy (qrexec policy in short).
@@ -82,7 +82,7 @@ target domains (for a given source domain) would result in `ask` or `allow`
 action. If any of them have `target=` option set, that value is used instead of
 the one specified in "target" column (for this particular line). Then the user
 is presented with a confirmation dialog and an option to choose from those
-domains. 
+domains.
 
 3. If `default_target=` option is set, it is used as
 suggested value, otherwise no suggestion is made (regardless of calling domain
@@ -93,7 +93,7 @@ specified any target or not).
 Module contents
 ---------------
 
-.. automodule:: qubes.policy
+.. automodule:: qrexec.policy
    :members:
    :show-inheritance:
 
