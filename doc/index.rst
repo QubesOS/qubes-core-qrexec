@@ -14,8 +14,7 @@ Welcome to qubes-core-qrexec's documentation!
    qrexec-utils
    execution
    qrexec-policy-daemon
-   qubes-policy
-
+   qrexec-remotevm
 
 Indices and tables
 ==================

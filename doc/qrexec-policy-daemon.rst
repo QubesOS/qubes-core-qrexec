@@ -19,6 +19,7 @@ Optional arguments:
 
 - assume_yes_for_ask=yes
 - just_evaluate=yes
+- requested_source=
 
 End of request is always an empty line.
 
@@ -36,7 +37,9 @@ Response is always terminated by EOF.
 
 Extensions include:
 
-- target=: The name of the target domain. If prefixed with @dispvm:, it indicates a disposable VM template, and a new disposable VM will be created automatically.
-- target_uuid=: The UUID of the target domain.
+- target=: The name of the target qube. If prefixed with @dispvm:, it indicates a disposable VM template, and a new disposable VM will be created automatically.
+- target_uuid=: The UUID of the target qube.
 - autostart=: True to automatically start the VM, False to not start it. Anything else is invalid.
-- requested_target=: Normalized version of the target domain.
+- requested_target=: Normalized version of the target qube.
+- service=: Service and argument to be used.
+- policy_source=: The name of the source qube. This is the processed `SOURCE_QUBE` argument from `qrexec-client-vm` by policies.
