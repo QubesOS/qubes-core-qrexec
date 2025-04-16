@@ -55,6 +55,10 @@ class PolicyNotFound(AccessDenied):
         super().__init__("Policy not found for service {}".format(service_name))
 
 
+class RequestError(AccessDenied):
+    """Raised if Request instantiation fails validation."""
+
+
 class QubesMgmtException(Exception):
     """Exception returned by qubesd"""
 

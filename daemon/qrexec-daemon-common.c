@@ -84,16 +84,16 @@ int handle_daemon_handshake(int fd)
         return -1;
     }
 
-    if (info.version != QREXEC_PROTOCOL_VERSION) {
+    if (info.version < QREXEC_CLIENT_PROTOCOL_VERSION) {
         LOG(ERROR, "Incompatible daemon protocol version "
             "(daemon %d, client %d)",
-            info.version, QREXEC_PROTOCOL_VERSION);
+            info.version, QREXEC_CLIENT_PROTOCOL_VERSION);
         return -1;
     }
 
     hdr.type = MSG_HELLO;
     hdr.len = sizeof(info);
-    info.version = QREXEC_PROTOCOL_VERSION;
+    info.version = QREXEC_CLIENT_PROTOCOL_VERSION;
 
     if (!write_all(fd, &hdr, sizeof(hdr))) {
         LOG(ERROR, "Failed to send MSG_HELLO hdr to daemon");

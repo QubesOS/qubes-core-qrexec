@@ -1,0 +1,14 @@
+sequenceDiagram
+    participant LocalQube as Local-Qube
+    participant LocalQubesOS as Local-QubesOS
+    participant LocalRelay as Local-Relay
+    participant RemoteQube as Remote-Qube
+
+    LocalQube-->>RemoteQube: 1. Initial RPC request
+    LocalQubesOS->>LocalQubesOS: 2. Check RPC Policy
+    Note over LocalQubesOS: Remote-Qube is a RemoteVM<br>relayed by Local-Relay
+    LocalQube->>LocalRelay: 3. Forwarding to a qrexec call from Local-Qube to Local-Relay
+    LocalRelay->>RemoteQube: 4. Forward RPC Request to Remote-Qube from Local-Relay
+    RemoteQube->>RemoteQube: 5. Check RPC Policy
+    Note over RemoteQube: Local-Qube is a RemoteVM<br>relayed from Local-Relay
+    RemoteQube-->>LocalQube: 6. Deliver Response to Local-Qube

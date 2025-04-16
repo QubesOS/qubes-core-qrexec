@@ -24,14 +24,20 @@ import socket
 import subprocess
 import unittest.mock
 import asyncio
+from copy import deepcopy
+from pathlib import Path
+
 import pytest
 from types import MappingProxyType
+
+from qrexec.utils import FullSystemInfo
 
 from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
 from .. import exc, utils
 from ..policy import parser, parser_compat
 
-SYSTEM_INFO = {
+
+_SYSTEM_INFO = {
     "domains": {
         "dom0": {
             "tags": ["dom0-tag"],
@@ -105,11 +111,71 @@ SYSTEM_INFO = {
             "power_state": "Halted",
             "uuid": "6d7a02b5-532b-467f-b9fb-6596bae03c33",
         },
+        "test-remotevm1": {
+            "tags": ["relayvm-test-relayvm1"],
+            "relayvm": "test-relayvm1",
+            "transport_rpc": "qubesair.SSHProxy",
+            "type": "RemoteVM",
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "3d225b39-88e9-4696-8978-b27c1360e041",
+        },
+        "test-relayvm1": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "355304b8-bd5e-4699-9a2b-b6864fc26f6b",
+        },
+        # qubes on a second (remote) Qubes OS
+        "test2-remotevm1": {
+            "tags": ["relayvm-test2-relayvm1"],
+            "type": "RemoteVM",
+            "relayvm": "test2-relayvm1",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "c7825251-1bb2-4070-aec9-3a8dd13befbf",
+        },
+        "test2-remotevm2": {
+            "tags": ["relayvm-test2-relayvm2"],
+            "type": "RemoteVM",
+            "relayvm": "test2-relayvm2",
+            "transport_rpc": "qubesair.SSHProxy",
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "6cd84a95-4336-445f-b125-6ecca1a40353",
+        },
+        "test2-vm1": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "c798d6db-360f-473a-b902-1cc58ffd3ab0",
+        },
+        "test2-relayvm1": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "41435947-21f8-41d9-9079-26df31f03d97",
+        },
+        "test2-relayvm2": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": None,
+            "template_for_dispvms": False,
+            "power_state": "Running",
+            "uuid": "044767bb-081e-4260-b7be-35e77c36d510",
+        },
     },
 }
 
 
-def patch_system_info():
+def patch_system_info(orig_system_info) -> FullSystemInfo:
     """
     We *really* do not want any code to modify SYSTEM_INFO,
     so replace all of its contents with versions that do not
@@ -118,25 +184,17 @@ def patch_system_info():
     This also adds keys for uuid:UUID and adds "name"
     fields to all dictionaries that need it.
     """
-    global SYSTEM_INFO
-    system_info = SYSTEM_INFO["domains"]
+    patched_system_info = {}
+    system_info = deepcopy(orig_system_info["domains"])
     for i, j in list(system_info.items()):
         assert not i.startswith("uuid:")
         j["name"] = i
         j["tags"] = tuple(j["tags"])
         system_info["uuid:" + j["uuid"]] = system_info[i] = MappingProxyType(j)
-    SYSTEM_INFO["domains"] = MappingProxyType(system_info)
+    patched_system_info["domains"] = MappingProxyType(system_info)
     for i in system_info.values():
         assert not i["name"].startswith("uuid:")
-    SYSTEM_INFO = MappingProxyType(SYSTEM_INFO)
-
-
-patch_system_info()
-
-# a generic request helper
-_req = functools.partial(
-    parser.Request, "test.Service", "+argument", system_info=SYSTEM_INFO
-)
+    return MappingProxyType(patched_system_info)  # type: ignore
 
 
 # async mock
@@ -145,10 +203,21 @@ class AsyncMock(unittest.mock.MagicMock):
         return super(AsyncMock, self).__call__(*args, **kwargs)
 
 
-class TC_00_VMToken(unittest.TestCase):
-    def __init__(self, *args, **kwargs) -> None:
+class ParserTestCase(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.system_info = patch_system_info(_SYSTEM_INFO)
 
+        # a generic request helper
+        self.gen_req = functools.partial(
+            parser.Request,
+            "test.Service",
+            "+argument",
+            system_info=self.system_info,
+        )
+
+
+class TC_00_VMToken(ParserTestCase):
     def test_010_Source(self):
         #       with self.assertRaises(exc.PolicySyntaxError):
         #           parser.Source(None)
@@ -209,44 +278,61 @@ class TC_00_VMToken(unittest.TestCase):
 
     def test_021_Target_expand(self):
         self.assertEqual(
-            list(parser.Target("test-vm1").expand(system_info=SYSTEM_INFO)),
+            list(
+                parser.Target("test-vm1").expand(system_info=self.system_info)
+            ),
             ["test-vm1"],
         )
         self.assertEqual(
-            list(parser.Target("@adminvm").expand(system_info=SYSTEM_INFO)),
+            list(
+                parser.Target("@adminvm").expand(system_info=self.system_info)
+            ),
             ["@adminvm"],
         )
         self.assertEqual(
-            list(parser.Target("dom0").expand(system_info=SYSTEM_INFO)),
+            list(parser.Target("dom0").expand(system_info=self.system_info)),
             ["@adminvm"],
         )
         self.assertEqual(
             list(
                 parser.Target(
                     "uuid:00000000-0000-0000-0000-000000000000"
-                ).expand(system_info=SYSTEM_INFO)
+                ).expand(system_info=self.system_info)
             ),
             ["@adminvm"],
         )
         self.assertEqual(
-            list(parser.Target("@anyvm").expand(system_info=SYSTEM_INFO)),
+            sorted(
+                set(
+                    parser.Target("@anyvm").expand(system_info=self.system_info)
+                )
+            ),
             [
+                "@dispvm",
+                "@dispvm:default-dvm",
+                "@dispvm:test-vm3",
+                "default-dvm",
+                "test-invalid-dvm",
+                "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
+                "test-standalone",
+                "test-template",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
-                "@dispvm:test-vm3",
-                "default-dvm",
-                "@dispvm:default-dvm",
-                "test-invalid-dvm",
-                "test-no-dvm",
-                "test-template",
-                "test-standalone",
-                "@dispvm",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
         self.maxDiff = None
         self.assertEqual(
-            sorted(set(parser.Target("*").expand(system_info=SYSTEM_INFO))),
+            sorted(
+                set(parser.Target("*").expand(system_info=self.system_info))
+            ),
             [
                 "@adminvm",
                 "@dispvm",
@@ -255,33 +341,46 @@ class TC_00_VMToken(unittest.TestCase):
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
                 "test-standalone",
                 "test-template",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
         self.assertCountEqual(
-            parser.Target("@default").expand(system_info=SYSTEM_INFO), []
+            parser.Target("@default").expand(system_info=self.system_info), []
         )
         self.assertCountEqual(
-            parser.Target("@type:AppVM").expand(system_info=SYSTEM_INFO),
+            parser.Target("@type:AppVM").expand(system_info=self.system_info),
             [
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
                 "default-dvm",
+                "test2-vm1",
+                "test2-relayvm1",
+                "test2-relayvm2",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
             ],
         )
         self.assertCountEqual(
-            parser.Target("@type:TemplateVM").expand(system_info=SYSTEM_INFO),
+            parser.Target("@type:TemplateVM").expand(
+                system_info=self.system_info
+            ),
             ["test-template"],
         )
         self.assertCountEqual(
-            parser.Target("@tag:tag1").expand(system_info=SYSTEM_INFO),
+            parser.Target("@tag:tag1").expand(system_info=self.system_info),
             [
                 "test-vm1",
                 "test-invalid-dvm",
@@ -291,7 +390,7 @@ class TC_00_VMToken(unittest.TestCase):
             ],
         )
         self.assertCountEqual(
-            parser.Target("@tag:tag2").expand(system_info=SYSTEM_INFO),
+            parser.Target("@tag:tag2").expand(system_info=self.system_info),
             [
                 "test-vm1",
                 "test-vm2",
@@ -302,36 +401,46 @@ class TC_00_VMToken(unittest.TestCase):
             ],
         )
         self.assertCountEqual(
-            parser.Target("@tag:no-such-tag").expand(system_info=SYSTEM_INFO),
+            parser.Target("@tag:no-such-tag").expand(
+                system_info=self.system_info
+            ),
             [],
         )
         self.assertCountEqual(
-            parser.Target("@dispvm").expand(system_info=SYSTEM_INFO),
+            parser.Target("@dispvm").expand(system_info=self.system_info),
             ["@dispvm"],
         )
         self.assertCountEqual(
             parser.Target("@dispvm:default-dvm").expand(
-                system_info=SYSTEM_INFO
+                system_info=self.system_info
             ),
             ["@dispvm:default-dvm"],
         )
 
         # no DispVM from test-vm1 allowed
         self.assertCountEqual(
-            parser.Target("@dispvm:test-vm1").expand(system_info=SYSTEM_INFO),
+            parser.Target("@dispvm:test-vm1").expand(
+                system_info=self.system_info
+            ),
             [],
         )
 
         self.assertCountEqual(
-            parser.Target("@dispvm:test-vm3").expand(system_info=SYSTEM_INFO),
+            parser.Target("@dispvm:test-vm3").expand(
+                system_info=self.system_info
+            ),
             ["@dispvm:test-vm3"],
         )
         self.assertCountEqual(
-            parser.Target("@dispvm:@tag:tag1").expand(system_info=SYSTEM_INFO),
+            parser.Target("@dispvm:@tag:tag1").expand(
+                system_info=self.system_info
+            ),
             [],
         )
         self.assertCountEqual(
-            parser.Target("@dispvm:@tag:tag3").expand(system_info=SYSTEM_INFO),
+            parser.Target("@dispvm:@tag:tag3").expand(
+                system_info=self.system_info
+            ),
             ["@dispvm:test-vm3"],
         )
 
@@ -477,8 +586,10 @@ class TC_00_VMToken(unittest.TestCase):
 
         for token, target, expected_result in cases:
             match_result = parser.VMToken(token).match(
-                parser.IntendedTarget(target).verify(system_info=SYSTEM_INFO),
-                system_info=SYSTEM_INFO,
+                parser.IntendedTarget(target).verify(
+                    system_info=self.system_info
+                ),
+                system_info=self.system_info,
             )
             assert (
                 match_result == expected_result
@@ -498,23 +609,25 @@ class TC_00_VMToken(unittest.TestCase):
                 exc.AccessDenied,
                 msg="{} should raise AccessDenied".format(target),
             ):
-                parser.IntendedTarget(target).verify(system_info=SYSTEM_INFO)
+                parser.IntendedTarget(target).verify(
+                    system_info=self.system_info
+                )
 
 
-class TC_01_Request(unittest.TestCase):
+class TC_01_Request(ParserTestCase):
     def test_000_init(self):
         request = parser.Request(
             "qrexec.Service",
             "+argument",
             "test-vm1",
             "test-vm2",
-            system_info=SYSTEM_INFO,
+            system_info=self.system_info,
         )
         self.assertEqual(request.service, "qrexec.Service")
         self.assertEqual(request.argument, "+argument")
         self.assertEqual(request.source, "test-vm1")
         self.assertEqual(request.target, "test-vm2")
-        self.assertEqual(request.system_info, SYSTEM_INFO)
+        self.assertEqual(request.system_info, self.system_info)
 
     def test_001_invalid_argument(self):
         with self.assertRaises(AssertionError):
@@ -523,7 +636,7 @@ class TC_01_Request(unittest.TestCase):
                 "argument",
                 "test-vm1",
                 "@type:AppVM",
-                system_info=SYSTEM_INFO,
+                system_info=self.system_info,
             )
 
     def test_002_invalid_target(self):
@@ -543,7 +656,7 @@ class TC_01_Request(unittest.TestCase):
                         "+argument",
                         "test-vm1",
                         invalid_target,
-                        system_info=SYSTEM_INFO,
+                        system_info=self.system_info,
                     )
 
     def test_003_non_existing_target(self):
@@ -552,17 +665,17 @@ class TC_01_Request(unittest.TestCase):
             "+argument",
             "test-vm1",
             "no-such-vm",
-            system_info=SYSTEM_INFO,
+            system_info=self.system_info,
         )
         self.assertEqual(request.service, "qrexec.Service")
         self.assertEqual(request.argument, "+argument")
         self.assertEqual(request.source, "test-vm1")
         self.assertEqual(request.target, "@default")
-        self.assertEqual(request.system_info, SYSTEM_INFO)
+        self.assertEqual(request.system_info, self.system_info)
 
 
 # class TC_00_Rule(qubes.tests.QubesTestCase):
-class TC_10_Rule(unittest.TestCase):
+class TC_10_Rule(ParserTestCase):
     def test_000_init(self):
         line = parser.Rule(
             "test.Service",
@@ -572,7 +685,7 @@ class TC_10_Rule(unittest.TestCase):
             "allow",
             (),
             policy=None,
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
 
@@ -588,10 +701,10 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @anyvm ask",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -605,10 +718,10 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @tag:tag1 @type:AppVM ask target=test-vm2 user=user",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@tag:tag1")
@@ -621,10 +734,10 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @default allow target=@dispvm:test-vm2",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.allow.value)
         self.assertEqual(line.source, "@anyvm")
@@ -638,10 +751,10 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @default ask default_target=test-vm1",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -654,10 +767,10 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @adminvm ask default_target=@adminvm",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -695,14 +808,14 @@ class TC_10_Rule(unittest.TestCase):
             with self.subTest(line):
                 with self.assertRaises(exc.PolicySyntaxError):
                     parser.Rule.from_line(
-                        None, line, filepath="filename", lineno=12
+                        None, line, filepath=Path("filename"), lineno=12
                     )
 
     def test_050_match(self):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @anyvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -712,7 +825,7 @@ class TC_10_Rule(unittest.TestCase):
                     "+argument",
                     "test-vm1",
                     "test-vm2",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )
         )
@@ -720,7 +833,7 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @anyvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -730,7 +843,7 @@ class TC_10_Rule(unittest.TestCase):
                     "+argument",
                     "no-such-vm",
                     "test-vm2",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )
         )
@@ -738,7 +851,7 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -748,7 +861,7 @@ class TC_10_Rule(unittest.TestCase):
                     "+argument",
                     "test-vm1",
                     "@dispvm",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )
         )
@@ -756,7 +869,7 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertFalse(
@@ -766,7 +879,7 @@ class TC_10_Rule(unittest.TestCase):
                     "+argument",
                     "test-vm1",
                     "@dispvm:default-dvm",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )
         )
@@ -774,7 +887,7 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm:default-dvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -784,7 +897,7 @@ class TC_10_Rule(unittest.TestCase):
                     "+argument",
                     "test-vm1",
                     "@dispvm",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )
         )
@@ -792,7 +905,7 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm:default-dvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -802,7 +915,7 @@ class TC_10_Rule(unittest.TestCase):
                     "+argument",
                     "test-vm1",
                     "@dispvm:default-dvm",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )
         )
@@ -810,7 +923,7 @@ class TC_10_Rule(unittest.TestCase):
         line = parser.Rule.from_line(
             None,
             "test.Service +argument @anyvm @dispvm:@tag:tag3 allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         self.assertTrue(
@@ -820,7 +933,7 @@ class TC_10_Rule(unittest.TestCase):
                     "+argument",
                     "test-vm1",
                     "@dispvm:test-vm3",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )
         )
@@ -838,7 +951,7 @@ class TC_10_Rule(unittest.TestCase):
 
         for line in lines:
             rule = parser.Rule.from_line(
-                None, line, filepath="filename", lineno=12
+                None, line, filepath=Path("filename"), lineno=12
             )
             assert str(rule) == line
 
@@ -904,7 +1017,7 @@ def test_line_notify(action_name, action, default):
     line = parser.Rule.from_line(
         None,
         "test.Service +argument @anyvm @adminvm {}".format(action_name),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -915,7 +1028,7 @@ def test_line_notify(action_name, action, default):
         "test.Service +argument @anyvm @adminvm {} notify=yes".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -926,7 +1039,7 @@ def test_line_notify(action_name, action, default):
         "test.Service +argument @anyvm @adminvm {} notify=no".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -944,7 +1057,7 @@ def test_line_autostart(action_name, action):
     line = parser.Rule.from_line(
         None,
         "test.Service +argument @anyvm @anyvm {}".format(action_name),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -955,7 +1068,7 @@ def test_line_autostart(action_name, action):
         "test.Service +argument @anyvm @anyvm {} autostart=yes".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
@@ -966,24 +1079,24 @@ def test_line_autostart(action_name, action):
         "test.Service +argument @anyvm @anyvm {} autostart=no".format(
             action_name
         ),
-        filepath="filename",
+        filepath=Path("filename"),
         lineno=12,
     )
     assert isinstance(line.action, action)
     assert line.action.autostart is False
 
 
-class TC_11_Rule_service(unittest.TestCase):
+class TC_11_Rule_service(ParserTestCase):
     def test_020_line_simple(self):
         line = parser.Rule.from_line_service(
             None,
             "test.Service",
             "+argument",
             "@anyvm @anyvm ask",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1000,10 +1113,10 @@ class TC_11_Rule_service(unittest.TestCase):
             "test.Service",
             "+argument",
             "@tag:tag1 @type:AppVM ask target=test-vm2 user=user",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@tag:tag1")
@@ -1019,10 +1132,10 @@ class TC_11_Rule_service(unittest.TestCase):
             "test.Service",
             "+argument",
             "@anyvm @default allow target=@dispvm:test-vm2",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.allow.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1038,10 +1151,10 @@ class TC_11_Rule_service(unittest.TestCase):
             "test.Service",
             "+argument",
             "@anyvm @default ask default_target=test-vm1",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1056,10 +1169,10 @@ class TC_11_Rule_service(unittest.TestCase):
             "test.Service",
             "+argument",
             "@anyvm @adminvm ask default_target=@adminvm",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1074,10 +1187,10 @@ class TC_11_Rule_service(unittest.TestCase):
             "test.Service",
             "+argument",
             "@anyvm @default ask,default_target=test-vm1",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        self.assertEqual(line.filepath, "filename")
+        self.assertEqual(str(line.filepath), "filename")
         self.assertEqual(line.lineno, 12)
         self.assertIsInstance(line.action, parser.Action.ask.value)
         self.assertEqual(line.source, "@anyvm")
@@ -1116,13 +1229,12 @@ class TC_11_Rule_service(unittest.TestCase):
                         "test.Service",
                         "+argument",
                         line,
-                        filepath="filename",
+                        filepath=Path("filename"),
                         lineno=12,
                     )
 
 
-# class TC_20_Policy(qubes.tests.QubesTestCase):
-class TC_20_Policy(unittest.TestCase):
+class TC_20_Policy(ParserTestCase):
     def test_000_load(self):
         policy = parser.StringPolicy(
             policy="""\
@@ -1222,48 +1334,54 @@ class TC_20_Policy(unittest.TestCase):
         )
         self.assertEqual(
             policy.rules[0],
-            policy.find_matching_rule(_req("test-vm1", "test-vm2")),
+            policy.find_matching_rule(self.gen_req("test-vm1", "test-vm2")),
         )
         self.assertEqual(
             policy.rules[1],
-            policy.find_matching_rule(_req("test-vm1", "test-vm3")),
+            policy.find_matching_rule(self.gen_req("test-vm1", "test-vm3")),
         )
         self.assertEqual(
             policy.rules[3],
-            policy.find_matching_rule(_req("test-vm2", "test-vm2")),
+            policy.find_matching_rule(self.gen_req("test-vm2", "test-vm2")),
         )
         self.assertEqual(
             policy.rules[2],
-            policy.find_matching_rule(_req("test-vm2", "test-no-dvm")),
+            policy.find_matching_rule(self.gen_req("test-vm2", "test-no-dvm")),
         )
         # @anyvm matches @default too
         self.assertEqual(
             policy.rules[1],
-            policy.find_matching_rule(_req("test-vm1", "@default")),
+            policy.find_matching_rule(self.gen_req("test-vm1", "@default")),
         )
         self.assertEqual(
             policy.rules[7],
-            policy.find_matching_rule(_req("test-vm2", "@default")),
+            policy.find_matching_rule(self.gen_req("test-vm2", "@default")),
         )
         self.assertEqual(
             policy.rules[8],
-            policy.find_matching_rule(_req("test-no-dvm", "test-vm3")),
+            policy.find_matching_rule(self.gen_req("test-no-dvm", "test-vm3")),
         )
         self.assertEqual(
             policy.rules[4],
-            policy.find_matching_rule(_req("test-vm2", "@dispvm:test-vm3")),
+            policy.find_matching_rule(
+                self.gen_req("test-vm2", "@dispvm:test-vm3")
+            ),
         )
         self.assertEqual(
             policy.rules[6],
-            policy.find_matching_rule(_req("test-vm2", "@dispvm")),
+            policy.find_matching_rule(self.gen_req("test-vm2", "@dispvm")),
         )
 
         with self.assertRaises(exc.AccessDenied):
-            policy.find_matching_rule(_req("test-no-dvm", "test-standalone"))
+            policy.find_matching_rule(
+                self.gen_req("test-no-dvm", "test-standalone")
+            )
         with self.assertRaises(exc.AccessDenied):
-            policy.find_matching_rule(_req("test-no-dvm", "@dispvm"))
+            policy.find_matching_rule(self.gen_req("test-no-dvm", "@dispvm"))
         with self.assertRaises(exc.AccessDenied):
-            policy.find_matching_rule(_req("test-standalone", "@default"))
+            policy.find_matching_rule(
+                self.gen_req("test-standalone", "@default")
+            )
 
     def test_020_collect_targets_for_ask(self):
         policy = parser.StringPolicy(
@@ -1284,7 +1402,9 @@ class TC_20_Policy(unittest.TestCase):
 
         self.assertCountEqual(
             sorted(
-                policy.collect_targets_for_ask(_req("test-vm1", "@default"))
+                policy.collect_targets_for_ask(
+                    self.gen_req("test-vm1", "@default")
+                )
             ),
             [
                 "@dispvm:default-dvm",
@@ -1292,23 +1412,35 @@ class TC_20_Policy(unittest.TestCase):
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
                 "test-standalone",
                 "test-template",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
         self.assertEqual(
-            policy.collect_targets_for_ask(_req("test-vm2", "@default")),
+            policy.collect_targets_for_ask(
+                self.gen_req("test-vm2", "@default")
+            ),
             {"test-vm3"},
         )
         self.assertCountEqual(
-            policy.collect_targets_for_ask(_req("test-vm3", "@default")), []
+            policy.collect_targets_for_ask(
+                self.gen_req("test-vm3", "@default")
+            ),
+            [],
         )
         self.assertEqual(
             sorted(
                 policy.collect_targets_for_ask(
-                    _req("test-standalone", "@default")
+                    self.gen_req("test-standalone", "@default")
                 )
             ),
             [
@@ -1317,25 +1449,31 @@ class TC_20_Policy(unittest.TestCase):
                 "dom0",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-vm1",
             ],
         )
         self.assertCountEqual(
-            policy.collect_targets_for_ask(_req("test-no-dvm", "@default")), []
+            policy.collect_targets_for_ask(
+                self.gen_req("test-no-dvm", "@default")
+            ),
+            [],
         )
 
 
-# class TC_10_PolicyAction(qubes.tests.QubesTestCase):
-class TC_30_Resolution(unittest.TestCase):
+class TC_30_Resolution(ParserTestCase):
     def setUp(self):
         self.request = parser.Request(
             "test.Service",
             "+argument",
             "test-vm1",
             "test-vm2",
-            system_info=SYSTEM_INFO,
+            system_info=self.system_info,
         )
 
     #
@@ -1344,7 +1482,10 @@ class TC_30_Resolution(unittest.TestCase):
 
     def test_000_allow_init(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
+            None,
+            "* * @anyvm @anyvm allow",
+            filepath=Path("filename"),
+            lineno=12,
         )
         resolution = parser.AllowResolution(
             rule, self.request, user=None, target="test-vm2", autostart=True
@@ -1359,7 +1500,7 @@ class TC_30_Resolution(unittest.TestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm allow notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         resolution = parser.AllowResolution(
@@ -1377,7 +1518,7 @@ class TC_30_Resolution(unittest.TestCase):
 
     def test_100_ask_init(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         resolution = parser.AskResolution(
             rule,
@@ -1399,7 +1540,7 @@ class TC_30_Resolution(unittest.TestCase):
 
     def test_101_ask_init(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         resolution = parser.AskResolution(
             rule,
@@ -1423,7 +1564,7 @@ class TC_30_Resolution(unittest.TestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         resolution = parser.AskResolution(
@@ -1446,7 +1587,7 @@ class TC_30_Resolution(unittest.TestCase):
 
     def test_103_ask_default_target_None(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         resolution = parser.AskResolution(
             rule,
@@ -1460,7 +1601,7 @@ class TC_30_Resolution(unittest.TestCase):
         self.assertIsNone(resolution.default_target)
 
 
-class TC_40_evaluate(unittest.TestCase):
+class TC_40_evaluate(ParserTestCase):
     def setUp(self):
         self.policy = parser.StringPolicy(
             policy="""\
@@ -1478,7 +1619,7 @@ class TC_40_evaluate(unittest.TestCase):
             * * @anyvm @anyvm deny"""
         )
         with self.assertRaises(exc.AccessDenied) as e:
-            policy.evaluate(_req("test-vm1", "test-vm2"))
+            policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertTrue(e.exception.notify)
 
     def test_001_deny_no_notify(self):
@@ -1487,7 +1628,7 @@ class TC_40_evaluate(unittest.TestCase):
             * * @anyvm @anyvm deny notify=no"""
         )
         with self.assertRaises(exc.AccessDenied) as e:
-            policy.evaluate(_req("test-vm1", "test-vm2"))
+            policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertFalse(e.exception.notify)
 
     def test_030_eval_simple(self):
@@ -1496,7 +1637,7 @@ class TC_40_evaluate(unittest.TestCase):
             * * test-vm1 test-vm2 allow"""
         )
 
-        request = _req("test-vm1", "test-vm2")
+        request = self.gen_req("test-vm1", "test-vm2")
         resolution = policy.evaluate(request)
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1505,10 +1646,10 @@ class TC_40_evaluate(unittest.TestCase):
         self.assertEqual(resolution.target, "test-vm2")
 
         with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(_req("test-vm2", "@default"))
+            policy.evaluate(self.gen_req("test-vm2", "@default"))
 
     def test_031_eval_default(self):
-        resolution = self.policy.evaluate(_req("test-vm1", "@default"))
+        resolution = self.policy.evaluate(self.gen_req("test-vm1", "@default"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, self.policy.rules[1])
@@ -1518,7 +1659,7 @@ class TC_40_evaluate(unittest.TestCase):
         with self.assertRaises(exc.AccessDenied):
             # action allow should hit, but no target specified (either by
             # caller or policy)
-            self.policy.evaluate(_req("test-standalone", "@default"))
+            self.policy.evaluate(self.gen_req("test-standalone", "@default"))
 
     def test_032_eval_no_autostart(self):
         # test-vm2 is running, test-vm3 is halted
@@ -1528,15 +1669,17 @@ class TC_40_evaluate(unittest.TestCase):
             * * test-vm1 test-vm3 allow autostart=no"""
         )
 
-        request = _req("test-vm1", "test-vm2")
+        request = self.gen_req("test-vm1", "test-vm2")
         resolution = policy.evaluate(request)
         self.assertIsInstance(resolution, parser.AllowResolution)
 
         with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(_req("test-vm1", "test-vm3"))
+            policy.evaluate(self.gen_req("test-vm1", "test-vm3"))
 
     def test_040_eval_ask(self):
-        resolution = self.policy.evaluate(_req("test-standalone", "test-vm2"))
+        resolution = self.policy.evaluate(
+            self.gen_req("test-standalone", "test-vm2")
+        )
 
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, self.policy.rules[2])
@@ -1545,24 +1688,33 @@ class TC_40_evaluate(unittest.TestCase):
             sorted(resolution.targets_for_ask),
             sorted(
                 [
+                    "@dispvm:default-dvm",
+                    "@dispvm:test-vm3",
+                    "default-dvm",
+                    "test-invalid-dvm",
+                    "test-no-dvm",
+                    "test-relayvm1",
+                    "test-remotevm1",
+                    "test-template",
                     "test-vm1",
                     "test-vm2",
                     "test-vm3",
-                    "@dispvm:test-vm3",
-                    "default-dvm",
-                    "@dispvm:default-dvm",
-                    "test-invalid-dvm",
-                    "test-no-dvm",
-                    "test-template",
+                    "test2-relayvm1",
+                    "test2-relayvm2",
+                    "test2-remotevm1",
+                    "test2-remotevm2",
+                    "test2-vm1",
                 ]
             ),
         )
 
     def test_041_eval_ask(self):
-        for i in SYSTEM_INFO["domains"].values():
+        for i in self.system_info["domains"].values():
             assert not i["name"].startswith("uuid:")
         resolution = self.policy.evaluate(
-            _req("uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33", "test-vm3")
+            self.gen_req(
+                "uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33", "test-vm3"
+            )
         )
 
         self.assertIsInstance(resolution, parser.AskResolution)
@@ -1576,10 +1728,17 @@ class TC_40_evaluate(unittest.TestCase):
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
                 "test-template",
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
             sorted(resolution.targets_for_ask),
         )
@@ -1590,27 +1749,34 @@ class TC_40_evaluate(unittest.TestCase):
             * * test-vm3 @default ask"""
         )
         with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(_req("test-vm3", "@default"))
+            policy.evaluate(self.gen_req("test-vm3", "@default"))
 
     def test_043_eval_ask_no_autostart(self):
         policy = parser.StringPolicy(
             policy="""\
             * * test-vm1 @anyvm ask"""
         )
-        resolution = policy.evaluate(_req("test-vm1", "test-vm2"))
+        resolution = policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertCountEqual(
-            resolution.targets_for_ask,
+            sorted(resolution.targets_for_ask),
             [
-                "test-standalone",
-                "test-vm2",
-                "test-vm3",
+                "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
                 "default-dvm",
-                "@dispvm:default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
+                "test-relayvm1",
+                "test-remotevm1",
+                "test-standalone",
                 "test-template",
+                "test-vm2",
+                "test-vm3",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
             ],
         )
 
@@ -1618,16 +1784,28 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * test-vm1 @anyvm ask autostart=no"""
         )
-        resolution = policy.evaluate(_req("test-vm1", "test-vm2"))
+        resolution = policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
-        self.assertCountEqual(resolution.targets_for_ask, ["test-vm2"])
+        self.assertCountEqual(
+            sorted(resolution.targets_for_ask),
+            [
+                "test-relayvm1",
+                "test-remotevm1",
+                "test-vm2",
+                "test2-relayvm1",
+                "test2-relayvm2",
+                "test2-remotevm1",
+                "test2-remotevm2",
+                "test2-vm1",
+            ],
+        )
 
     def test_050_eval_resolve_dispvm(self):
         policy = parser.StringPolicy(
             policy="""\
             * * test-vm3 @dispvm allow"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "@dispvm"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "@dispvm"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1640,7 +1818,7 @@ class TC_40_evaluate(unittest.TestCase):
             * * test-no-dvm @dispvm allow"""
         )
         with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(_req("test-no-dvm", "@dispvm"))
+            policy.evaluate(self.gen_req("test-no-dvm", "@dispvm"))
 
     def test_052_eval_invalid_override_target(self):
         policy = parser.StringPolicy(
@@ -1648,14 +1826,14 @@ class TC_40_evaluate(unittest.TestCase):
             * * test-vm3 @anyvm allow target=no-such-vm"""
         )
         with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(_req("test-vm3", "@default"))
+            policy.evaluate(self.gen_req("test-vm3", "@default"))
 
     def test_053_eval_resolve_dispvm_from_any(self):
         policy = parser.StringPolicy(
             policy="""\
             * * @anyvm @dispvm allow"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "@dispvm"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "@dispvm"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1667,7 +1845,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * @anyvm @anyvm allow target=@dispvm"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "test-vm1"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1680,7 +1858,7 @@ class TC_40_evaluate(unittest.TestCase):
             * * @anyvm @anyvm ask default_target=@dispvm
             * * @anyvm @dispvm ask"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "test-vm1"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1692,7 +1870,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * test-vm3 @adminvm allow"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "dom0"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1704,7 +1882,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * test-vm3 @adminvm allow"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "@adminvm"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "@adminvm"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1716,7 +1894,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * test-vm3 dom0 ask default_target=dom0"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "dom0"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1729,7 +1907,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * test-vm3 dom0 ask default_target=@adminvm"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "dom0"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1742,7 +1920,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * test-vm3 @adminvm ask default_target=dom0"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "dom0"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1755,7 +1933,7 @@ class TC_40_evaluate(unittest.TestCase):
             policy="""\
             * * test-vm3 @adminvm ask default_target=@adminvm"""
         )
-        resolution = policy.evaluate(_req("test-vm3", "dom0"))
+        resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
@@ -1765,10 +1943,14 @@ class TC_40_evaluate(unittest.TestCase):
 
     def test_110_handle_user_response_allow(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         request = parser.Request(
-            "test.service", "+", "test-vm1", "test-vm2", system_info=SYSTEM_INFO
+            "test.service",
+            "+",
+            "test-vm1",
+            "test-vm2",
+            system_info=self.system_info,
         )
         resolution = parser.AskResolution(
             rule,
@@ -1787,11 +1969,15 @@ class TC_40_evaluate(unittest.TestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
         request = parser.Request(
-            "test.service", "+", "test-vm1", "test-vm2", system_info=SYSTEM_INFO
+            "test.service",
+            "+",
+            "test-vm1",
+            "test-vm2",
+            system_info=self.system_info,
         )
         resolution = parser.AskResolution(
             rule,
@@ -1808,10 +1994,14 @@ class TC_40_evaluate(unittest.TestCase):
 
     def test_112_handle_user_response_deny_invalid(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
         request = parser.Request(
-            "test.service", "+", "test-vm1", "test-vm2", system_info=SYSTEM_INFO
+            "test.service",
+            "+",
+            "test-vm1",
+            "test-vm2",
+            system_info=self.system_info,
         )
         resolution = parser.AskResolution(
             rule,
@@ -1827,9 +2017,9 @@ class TC_40_evaluate(unittest.TestCase):
 
     def test_113_handle_user_response_deny_normal(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm ask", filepath="filename", lineno=12
+            None, "* * @anyvm @anyvm ask", filepath=Path("filename"), lineno=12
         )
-        request = _req("test-vm1", "test-vm2")
+        request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AskResolution(
             rule,
             request,
@@ -1846,10 +2036,10 @@ class TC_40_evaluate(unittest.TestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask notify=yes",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        request = _req("test-vm1", "test-vm2")
+        request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AskResolution(
             rule,
             request,
@@ -1866,10 +2056,10 @@ class TC_40_evaluate(unittest.TestCase):
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @anyvm ask default_target=test-vm2",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        request = _req("test-vm1", "test-vm2")
+        request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AskResolution(
             rule,
             request,
@@ -1887,9 +2077,12 @@ class TC_40_evaluate(unittest.TestCase):
 
     async def _test_120_execute(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
+            None,
+            "* * @anyvm @anyvm allow",
+            filepath=Path("filename"),
+            lineno=12,
         )
-        request = _req("test-vm1", "test-vm2")
+        request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
             rule,
             request,
@@ -1915,9 +2108,9 @@ requested_target=test-vm2\
 
     async def _test_121_execute_dom0(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm dom0 allow", filepath="filename", lineno=12
+            None, "* * @anyvm dom0 allow", filepath=Path("filename"), lineno=12
         )
-        request = _req("test-vm1", "dom0")
+        request = self.gen_req("test-vm1", "dom0")
         resolution = parser.AllowResolution(
             rule, request, user=None, target="dom0", autostart=True
         )
@@ -1938,9 +2131,9 @@ requested_target=@adminvm\
 
     async def _test_121_execute_dom0_keyword(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm dom0 allow", filepath="filename", lineno=12
+            None, "* * @anyvm dom0 allow", filepath=Path("filename"), lineno=12
         )
-        request = _req("test-vm1", "@adminvm")
+        request = self.gen_req("test-vm1", "@adminvm")
         resolution = parser.AllowResolution(
             rule,
             request,
@@ -1967,10 +2160,10 @@ requested_target=@adminvm\
         rule = parser.Rule.from_line(
             None,
             "* * @anyvm @dispvm:default-dvm allow",
-            filepath="filename",
+            filepath=Path("filename"),
             lineno=12,
         )
-        request = _req("test-vm1", "@dispvm:default-dvm")
+        request = self.gen_req("test-vm1", "@dispvm:default-dvm")
         resolution = parser.AllowResolution(
             rule,
             request,
@@ -1996,9 +2189,12 @@ requested_target=@dispvm:default-dvm\
 
     async def _test_123_execute_already_running(self):
         rule = parser.Rule.from_line(
-            None, "* * @anyvm @anyvm allow", filepath="filename", lineno=12
+            None,
+            "* * @anyvm @anyvm allow",
+            filepath=Path("filename"),
+            lineno=12,
         )
-        request = _req("test-vm1", "test-vm2")
+        request = self.gen_req("test-vm1", "test-vm2")
         resolution = parser.AllowResolution(
             rule,
             request,
@@ -2020,9 +2216,314 @@ requested_target=test-vm2\
 """,
         )
 
+    def test_124_execute_local_to_remotevm_simple(self):
+        asyncio.run(self._test_124_execute_local_to_remotevm_simple())
+
+    async def _test_124_execute_local_to_remotevm_simple(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = self.gen_req("test-vm1", "test-remotevm1")
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test-remotevm1",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test-relayvm1
+target_uuid=uuid:355304b8-bd5e-4699-9a2b-b6864fc26f6b
+autostart=True
+requested_target=test-remotevm1
+service=qubesair.SSHProxy+test-remotevm1+test.Service+argument""",
+        )
+
+    # Verify that the policy program returns the requested source as policy_source.
+    def test_125_valid_remote_to_local_allow_resolution(self):
+        asyncio.run(self._test_125_valid_remote_to_local_allow_resolution())
+
+    async def _test_125_valid_remote_to_local_allow_resolution(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test2-remotevm1 test2-vm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "qubes.SomeService",
+            "+arg",
+            "test2-relayvm1",
+            "test2-vm1",
+            system_info=self.system_info,
+            requested_source="test2-remotevm1",
+        )
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test2-vm1",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test2-vm1
+target_uuid=uuid:c798d6db-360f-473a-b902-1cc58ffd3ab0
+autostart=True
+requested_target=test2-vm1
+policy_source=test2-remotevm1""",
+        )
+
+    # Verify that a relay attempting to impersonate another relay raises an error.
+    def test_126_relay_impersonating_another_relay_error(self):
+        asyncio.run(self._test_126_relay_impersonating_another_relay_error())
+
+    async def _test_126_relay_impersonating_another_relay_error(self):
+        with self.assertRaises(exc.RequestError) as exc_info:
+            parser.Request(
+                "qubes.SomeService",
+                "+arg",
+                "test2-relayvm2",
+                "test2-vm1",
+                system_info=self.system_info,
+                requested_source="test2-remotevm1",
+            )
+        self.assertEqual(
+            str(exc_info.exception),
+            "test2-relayvm2 is not a relay for test2-remotevm1",
+        )
+
+    # Verify that a relay attempting to impersonate a local VM raises an error.
+    def test_127_relay_impersonating_localvm_error(self):
+        asyncio.run(self._test_127_relay_impersonating_localvm_error())
+
+    async def _test_127_relay_impersonating_localvm_error(self):
+        with self.assertRaises(exc.RequestError) as exc_info:
+            parser.Request(
+                "qubes.SomeService",
+                "+arg",
+                "test2-relayvm1",
+                "test2-vm1",
+                system_info=self.system_info,
+                requested_source="test-vm3",
+            )
+        self.assertEqual(
+            str(exc_info.exception),
+            "test-vm3: requested source is only authorized for RemoteVM",
+        )
+
+    def test_128_execute_remotevm_to_remotevm(self):
+        asyncio.run(self._test_128_execute_remotevm_to_remotevm())
+
+    async def _test_128_execute_remotevm_to_remotevm(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test2-remotevm1 test2-remotevm2 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "qubes.SomeService",
+            "+arg",
+            "test2-relayvm1",
+            "test2-remotevm2",
+            system_info=self.system_info,
+            requested_source="test2-remotevm1",
+        )
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target="test2-remotevm2",
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test2-relayvm2
+target_uuid=uuid:044767bb-081e-4260-b7be-35e77c36d510
+autostart=True
+requested_target=test2-remotevm2
+service=qubesair.SSHProxy+test2-remotevm2+qubes.SomeService+arg
+policy_source=test2-remotevm1""",
+        )
+
+    def test_129_execute_remote_to_dispvm(self):
+        asyncio.run(self._test_129_execute_remote_to_dispvm())
+
+    async def _test_129_execute_remote_to_dispvm(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * @anyvm @dispvm:default-dvm allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "qubes.SomeService",
+            "+arg",
+            "test-relayvm1",
+            "@dispvm:default-dvm",
+            system_info=self.system_info,
+            requested_source="test-remotevm1",
+        )
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user=None,
+            target=parser.DispVMTemplate("@dispvm:default-dvm"),
+            autostart=True,
+        )
+        result = await resolution.execute()
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=@dispvm:default-dvm
+target_uuid=@dispvm:uuid:f3e538bd-4427-4697-bed7-45ef3270df21
+autostart=True
+requested_target=@dispvm:default-dvm
+policy_source=test-remotevm1""",
+        )
+
+    def test_130_execute_unexistent_source(self):
+        asyncio.run(self._test_130_execute_unexistent_source())
+
+    async def _test_130_execute_unexistent_source(self):
+        with self.assertRaises(exc.RequestError) as exc_info:
+            parser.Request(
+                "qubes.SomeService",
+                "+arg",
+                "test-relayvm1",
+                "test-remotevm1",
+                system_info=self.system_info,
+                requested_source="test-unexistent",
+            )
+        self.assertEqual(
+            str(exc_info.exception),
+            "unknown requested source qube 'test-unexistent'",
+        )
+
+    def test_131_execute_no_transport_rpc(self):
+        asyncio.run(self._test_131_execute_no_transport_rpc())
+
+    async def _test_131_execute_no_transport_rpc(self):
+        system_info = deepcopy(_SYSTEM_INFO)
+        del system_info["domains"]["test-remotevm1"]["transport_rpc"]
+
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "test.Service",
+            "+argument",
+            "test-vm1",
+            "test-remotevm1",
+            system_info=system_info,
+        )
+        with self.assertRaises(exc.AccessDenied) as exc_info:
+            resolution = parser.AllowResolution(
+                rule,
+                request,
+                user=None,
+                target="test-remotevm1",
+                autostart=True,
+            )
+            await resolution.execute()
+
+        self.assertEqual(
+            str(exc_info.exception),
+            "test-remotevm1: transport RPC is not set",
+        )
+
+    def test_132_execute_no_relayvm(self):
+        asyncio.run(self._test_132_execute_no_relayvm())
+
+    async def _test_132_execute_no_relayvm(self):
+        system_info = deepcopy(_SYSTEM_INFO)
+        del system_info["domains"]["test-remotevm1"]["relayvm"]
+
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "test.Service",
+            "+argument",
+            "test-vm1",
+            "test-remotevm1",
+            system_info=system_info,
+        )
+        with self.assertRaises(exc.AccessDenied) as exc_info:
+            resolution = parser.AllowResolution(
+                rule,
+                request,
+                user=None,
+                target="test-remotevm1",
+                autostart=True,
+            )
+            await resolution.execute()
+
+        self.assertEqual(
+            str(exc_info.exception),
+            "test-remotevm1: relayvm is not set",
+        )
+
+    def test_133_execute_loopback(self):
+        asyncio.run(self._test_133_execute_loopback())
+
+    async def _test_133_execute_loopback(self):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = parser.Request(
+            "test.Service",
+            "+argument",
+            "test-vm1",
+            "test-vm1",
+            system_info=self.system_info,
+        )
+        with self.assertRaises(exc.AccessDenied) as exc_info:
+            resolution = parser.AllowResolution(
+                rule,
+                request,
+                user=None,
+                target="test-vm1",
+                autostart=True,
+            )
+            await resolution.execute()
+
+        self.assertEqual(
+            str(exc_info.exception),
+            "loopback qrexec connection not supported",
+        )
+
 
 # class TC_30_Misc(qubes.tests.QubesTestCase):
-class TC_50_Misc(unittest.TestCase):
+class TC_50_Misc(ParserTestCase):
     @unittest.mock.patch("socket.socket")
     def test_000_qubesd_call(self, mock_socket):
         mock_config = {
@@ -2092,7 +2593,7 @@ class TC_50_Misc(unittest.TestCase):
         )
 
 
-class TC_90_Compat40(unittest.TestCase):
+class TC_90_Compat40(ParserTestCase):
     def test_001_loader(self):
         policy = parser.StringPolicy(
             policy={"__main__": "!compat-4.0"},
@@ -2104,7 +2605,7 @@ class TC_90_Compat40(unittest.TestCase):
                 "+",
                 "test-vm1",
                 "test-vm2",
-                system_info=SYSTEM_INFO,
+                system_info=self.system_info,
             )
         )
 
@@ -2134,7 +2635,7 @@ class TC_90_Compat40(unittest.TestCase):
                 "+",
                 "test-vm1",
                 "test-vm2",
-                system_info=SYSTEM_INFO,
+                system_info=self.system_info,
             )
         )
         policy.evaluate(
@@ -2143,7 +2644,7 @@ class TC_90_Compat40(unittest.TestCase):
                 "+",
                 "test-vm1",
                 "test-vm3",
-                system_info=SYSTEM_INFO,
+                system_info=self.system_info,
             )
         )
 
@@ -2154,6 +2655,6 @@ class TC_90_Compat40(unittest.TestCase):
                     "+arg",
                     "test-vm1",
                     "test-vm3",
-                    system_info=SYSTEM_INFO,
+                    system_info=self.system_info,
                 )
             )

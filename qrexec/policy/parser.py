@@ -58,6 +58,7 @@ from .. import exc
 from ..exc import (
     AccessDenied,
     PolicySyntaxError,
+    RequestError,
 )
 
 FILENAME_ALLOWED_CHARSET = set(string.digits + string.ascii_lowercase + "_.-")
@@ -755,34 +756,66 @@ class AllowResolution(AbstractResolution):
         if request.source == target:
             raise AccessDenied("loopback qrexec connection not supported")
 
+        # Start with the common header lines
+        lines = [
+            f"user={self.user or 'DEFAULT'}",
+            "result=allow",
+        ]
+
+        # Adminvm/dom0 special case
         if target in (
             "@adminvm",
             "dom0",
             "uuid:00000000-0000-0000-0000-000000000000",
         ):
-            return f"""\
-user={self.user or 'DEFAULT'}
-result=allow
-target=@adminvm
-autostart={self.autostart}
-requested_target={request.target}"""
+            lines.append("target=@adminvm")
+            lines.append(f"autostart={self.autostart}")
+            lines.append(f"requested_target={request.target}")
+            return "\n".join(lines)
+
+        # DispVM case
         if target.startswith("@dispvm:"):
             target_info = request.system_info["domains"][target[8:]]
-            return f"""\
-user={self.user or 'DEFAULT'}
-result=allow
-target={self.target}
-target_uuid=@dispvm:uuid:{target_info['uuid']}
-autostart={self.autostart}
-requested_target={request.target}"""
+            lines.append(f"target={self.target}")
+            lines.append(f"target_uuid=@dispvm:uuid:{target_info['uuid']}")
+            lines.append(f"autostart={self.autostart}")
+            lines.append(f"requested_target={request.target}")
+            if request.requested_source:
+                lines.append(f"policy_source={request.source}")
+            return "\n".join(lines)
+
+        # Lookup target information for the remaining cases
         target_info = request.system_info["domains"][target]
-        return f"""\
-user={self.user or 'DEFAULT'}
-result=allow
-target={self.target}
-target_uuid=uuid:{target_info['uuid']}
-autostart={self.autostart}
-requested_target={request.target}"""
+
+        # RemoteVM case
+        if target_info.get("type") == "RemoteVM":
+            if not target_info.get("relayvm"):
+                raise AccessDenied(f"{self.target}: relayvm is not set")
+            if not target_info.get("transport_rpc"):
+                raise AccessDenied(f"{self.target}: transport RPC is not set")
+            relayvm_name = target_info["relayvm"]
+            relayvm_info = request.system_info["domains"][relayvm_name]
+            transport_rpc = target_info["transport_rpc"]
+
+            lines.append(f"target={relayvm_name}")
+            lines.append(f"target_uuid=uuid:{relayvm_info['uuid']}")
+            lines.append(f"autostart={self.autostart}")
+            lines.append(f"requested_target={request.target}")
+            lines.append(
+                f"service={transport_rpc}+{request.target}+{request.service}{request.argument}"
+            )
+            if request.requested_source:
+                lines.append(f"policy_source={request.source}")
+            return "\n".join(lines)
+
+        # Default case
+        lines.append(f"target={self.target}")
+        lines.append(f"target_uuid=uuid:{target_info['uuid']}")
+        lines.append(f"autostart={self.autostart}")
+        lines.append(f"requested_target={request.target}")
+        if request.requested_source:
+            lines.append(f"policy_source={request.source}")
+        return "\n".join(lines)
 
 
 class AskResolution(AbstractResolution):
@@ -906,6 +939,7 @@ class Request:
         system_info: FullSystemInfo,
         allow_resolution_type: Type[AllowResolution] = AllowResolution,
         ask_resolution_type: Type[AskResolution] = AskResolution,
+        requested_source: Optional[str] = "",
     ):
 
         if target == "":
@@ -918,6 +952,11 @@ class Request:
         self.argument = argument
         #: source qube name
         self.source = source
+        #: requested source qube name (from qrexec-client-vm)
+        self.requested_source = requested_source
+        #: relay source qube name (the original source initiating the
+        # qrexec-client-vm call with source qube provided
+        self.relayvm = None
         #: target (qube or token) as requested by source qube
         self.target = IntendedTarget(target).verify(system_info=system_info)
 
@@ -927,6 +966,25 @@ class Request:
         self.allow_resolution_type = allow_resolution_type
         #: factory for ask resolution
         self.ask_resolution_type = ask_resolution_type
+
+        if self.requested_source:
+            requested_source_info = self.system_info["domains"].get(
+                self.requested_source, {}
+            )
+            if not requested_source_info:
+                raise RequestError(
+                    f"unknown requested source qube '{self.requested_source}'"
+                )
+            if requested_source_info.get("type") != "RemoteVM":
+                raise RequestError(
+                    f"{self.requested_source}: requested source is only authorized for RemoteVM"
+                )
+            if requested_source_info.get("relayvm", None) != self.source:
+                raise RequestError(
+                    f"{self.source} is not a relay for {self.requested_source}"
+                )
+            self.relayvm = self.source
+            self.source = self.requested_source
 
 
 #

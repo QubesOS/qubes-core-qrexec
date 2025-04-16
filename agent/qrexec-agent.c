@@ -820,7 +820,7 @@ static void reap_children(void)
 static void handle_trigger_io(void)
 {
     struct msg_header hdr;
-    struct trigger_service_params3 *params = NULL;
+    struct trigger_service_params4 *params = NULL;
     int client_fd;
 
     client_fd = do_accept(trigger_fd);
@@ -828,9 +828,11 @@ static void handle_trigger_io(void)
         return;
     if (!read_all(client_fd, &hdr, sizeof(hdr)))
         goto error;
-    if (hdr.type != MSG_TRIGGER_SERVICE3 ||
-            hdr.len <= sizeof(*params) ||
-            hdr.len > sizeof(*params) + MAX_SERVICE_NAME_LEN) {
+    if (
+        hdr.type != MSG_TRIGGER_SERVICE4 ||
+        hdr.len <= sizeof(*params) ||
+        hdr.len > sizeof(*params) + MAX_SERVICE_NAME_LEN
+    ) {
         LOG(ERROR, "Invalid request received from qrexec-client-vm, is it outdated?");
         goto error;
     }

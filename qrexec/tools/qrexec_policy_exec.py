@@ -353,6 +353,7 @@ async def handle_request(
     allow_resolution_type: Optional[type] = None,
     policy_cache: Optional[PolicyCache] = None,
     system_info: Optional[FullSystemInfo] = None,
+    requested_source: Optional[str] = None,
 ) -> str:
     # Add source domain information, required by qrexec-client for establishing
     # connection
@@ -390,6 +391,7 @@ async def handle_request(
                 assume_yes_for_ask=assume_yes_for_ask,
                 allow_resolution_type=allow_resolution_class,
             ),
+            requested_source=requested_source,
         )
         resolution = policy.evaluate(request)
         return await resolution.execute()
