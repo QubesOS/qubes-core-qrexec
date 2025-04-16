@@ -111,8 +111,7 @@ syntax.
 The file referenced by FILENAME is in old syntax:
 - there is no service and argument on the line
 - `$` is accepted as part of tokens
-- `@include` includes files with the same syntax;
-  also valid with colon syntax (`$include:/file/path`).
+- `@include` includes files with the same syntax; also valid with colon syntax (`$include:/file/path`).
 
 The file is included only for this particular service. Argument field is
 mandatory, but may be empty (single `+`) or catch-all `*`. FILENAME is included
@@ -164,8 +163,7 @@ Administrators deploying their company policies may use
 Vendors providing packaged rules should use:
 - `/etc/qubes/policy.d/60-<pkgname>.policy` for explicit deny rules
 - `/etc/qubes/policy.d/70-<pkgname>.policy` for explicit allow rules
-- `/etc/qubes/policy.d/80-<pkgname>.policy` for generic rules, possibly with `*`
-  in the service name.
+- `/etc/qubes/policy.d/80-<pkgname>.policy` for generic rules, possibly with `*` in the service name.
 
 This is expected of vendors to avoid conflicts between different packages.
 
