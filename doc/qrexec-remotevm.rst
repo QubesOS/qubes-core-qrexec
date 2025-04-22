@@ -48,13 +48,6 @@ General case: From one Qubes OS to another Qubes OS
       which is then made available in the ``Local-Relay`` QubesDB to establish a mapping between the local qube name
       and the original name. During TRANSPORT_RPC execution, QubesDB can be used to retrieve the correct name.
 
-   .. note::
-
-      In the case of SSH, you must first set up key sharing by copying the public keys across all jump relays.
-      Additionally, you might consider leveraging the guidelines provided in
-      `Proxies and Jump Hosts <https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Proxies_and_Jump_Hosts>`_
-      for further configuration options.
-
 5. Remote-Relay forwards the RPC request to Remote-Qube on Remote-QubesOS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -104,3 +97,79 @@ In this particular case, assume that there is a LocalVM named ``Local-Relay`` an
 RemoteVM with the name ``Remote-Qube``, resulting in the following sequence diagram:
 
 .. image:: _static/particular.png
+
+SSH-based communication between Local‑Relay and Remote‑Relay
+------------------------------------------------------------
+
+Prerequisites
+^^^^^^^^^^^^^
+
+- SSH key-based authentication is configured between all involved hosts (Local‑Relay, Remote‑Relay, and any intermediate jump hosts).
+- (Optional) Configure any necessary proxies or jump hosts by following the OpenSSH Cookbook guidelines: Proxies and Jump Hosts <https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Proxies_and_Jump_Hosts>.
+
+Workflow Overview
+^^^^^^^^^^^^^^^^^
+
+1. **Local-Qube to Local-Relay**: The `transport_rpc` property of `Remote‑Qube` is used to refer to RPC call to be made from Local-Qube to Local-Relay with arguments of the form:
+
+   ``Remote-Qube+<service>``
+
+    where `<service>` contains the original service with argument that has been processed by policies.
+
+2. **Destination lookup**: The RPC script extracts `Remote-Qube` and queries QubesDB `/remotes/Remote-Qube` on Local‑Relay to verify and translate it into the actual qube name in `Remote-QubesOS` (in this example it is assumed to be the same).
+    The QubesDB path is set based on `Remote-Qube` property `remote_name`.
+
+3. **RPC**: The RPC connects to Remote‑Relay and runs ``qrexec-client-vm`` on that host.
+
+4. **Remote-QubesOS policy evaluation**: `Remote‑QubesOS` applies its policy rules for a request from `Local‑Relay` to `Remote‑Qube` with information that source qube is `Local-Qube`.
+    The information about source qube has to be resolved to a registered RemoteVM into `Remote-QubesOS` referencing `Local-Qube`.
+
+Below is an example Bash script implementing the ``qubesair.SSHProxy`` transport RPC. It parses a destination and service, looks up the remote Qube name, and invokes ``qrexec-client-vm`` over SSH.
+
+.. code-block:: bash
+
+   #!/bin/bash
+
+   set -euo pipefail
+
+   if [[ -z "${1:-}" ]]; then
+       echo "Usage: $0 <target+service>"
+       exit 1
+   fi
+
+   # Extract target and service
+   IFS='+' read -r target service <<< "$1"
+
+   # Validate extracted values
+   if [[ -z "$target" || -z "$service" ]]; then
+       echo "Error: Invalid input format. Expected 'target+service'."
+       exit 1
+   fi
+
+   # Retrieve the remote Qube identifier
+   remote_qube="$(qubesdb-read "/remote/$target" 2>/dev/null || true)"
+
+   if [[ -z "$remote_qube" ]]; then
+       echo "Error: Could not read remote qube for target '$target'."
+       exit 1
+   fi
+
+   # Forward the qrexec call via SSH
+   ssh "$remote_qube" qrexec-client-vm --source-qube="$QREXEC_REMOTE_DOMAIN" "$remote_qube" "$service"
+
+.. note::
+    Using QREXEC_REMOTE_DOMAIN directly here assumes that a RemoteVM called `Local-Qube` exists in `Remote-QubesOS`.
+
+SSH client configuration hint
++++++++++++++++++++++++++++++
+
+To ensure that any SSH connection to a given host actually lands on the corresponding `Remote‑Relay`, add an entry like the following to your ``~/.ssh/config``:
+
+.. code-block:: ini
+
+   Host *
+       HostName <Remote-Relay_ip>
+
+Adjust the pattern, hostname, and jump host settings to match your environment.
+This guarantees that SSH connections intended for a RemoteVM are transparently proxied through Remote‑Relay.
+
