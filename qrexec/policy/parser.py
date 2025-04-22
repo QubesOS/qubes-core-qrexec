@@ -757,10 +757,7 @@ class AllowResolution(AbstractResolution):
             raise AccessDenied("loopback qrexec connection not supported")
 
         # Start with the common header lines
-        lines = [
-            f"user={self.user or 'DEFAULT'}",
-            "result=allow",
-        ]
+        lines = []
 
         # Adminvm/dom0 special case
         if target in (
@@ -768,6 +765,8 @@ class AllowResolution(AbstractResolution):
             "dom0",
             "uuid:00000000-0000-0000-0000-000000000000",
         ):
+            lines.append(f"user={self.user or 'DEFAULT'}")
+            lines.append("result=allow")
             lines.append("target=@adminvm")
             lines.append(f"autostart={self.autostart}")
             lines.append(f"requested_target={request.target}")
@@ -776,6 +775,8 @@ class AllowResolution(AbstractResolution):
         # DispVM case
         if target.startswith("@dispvm:"):
             target_info = request.system_info["domains"][target[8:]]
+            lines.append(f"user={self.user or 'DEFAULT'}")
+            lines.append("result=allow")
             lines.append(f"target={self.target}")
             lines.append(f"target_uuid=@dispvm:uuid:{target_info['uuid']}")
             lines.append(f"autostart={self.autostart}")
@@ -786,6 +787,17 @@ class AllowResolution(AbstractResolution):
 
         # Lookup target information for the remaining cases
         target_info = request.system_info["domains"][target]
+
+        if target_info.get("type") == "RemoteVM" and self.user is not None:
+            logging.warning(
+                "Ignoring user directive in policy. This is not supported in the case of RemoveVM."
+            )
+            user_line = "user=DEFAULT"
+        else:
+            user_line = f"user={self.user or 'DEFAULT'}"
+
+        lines.append(user_line)
+        lines.append("result=allow")
 
         # RemoteVM case
         if target_info.get("type") == "RemoteVM":

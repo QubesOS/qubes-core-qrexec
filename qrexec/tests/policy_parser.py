@@ -2521,6 +2521,50 @@ policy_source=test-remotevm1""",
             "loopback qrexec connection not supported",
         )
 
+    @unittest.mock.patch("qrexec.policy.parser.logging")
+    def test_134_execute_localvm_to_remotevm_with_user(self, mock_logger):
+        asyncio.run(
+            self._test_134_execute_localvm_to_remotevm_with_user(mock_logger)
+        )
+
+    async def _test_134_execute_localvm_to_remotevm_with_user(
+        self, mock_logger
+    ):
+        rule = parser.Rule.from_line(
+            None,
+            "* * test-vm1 test-remotevm1 allow user=toto",
+            filepath=Path("filename"),
+            lineno=12,
+        )
+        request = self.gen_req("test-vm1", "test-remotevm1")
+        # specify "toto" user
+        resolution = parser.AllowResolution(
+            rule,
+            request,
+            user="toto",
+            target="test-remotevm1",
+            autostart=True,
+        )
+        result = await resolution.execute()
+
+        # check that we get a warning
+        mock_logger.warning.assert_called_once_with(
+            "Ignoring user directive in policy. This is not supported in the case of RemoveVM."
+        )
+
+        # check that user remains DEFAULT
+        self.assertEqual(
+            result,
+            """\
+user=DEFAULT
+result=allow
+target=test-relayvm1
+target_uuid=uuid:355304b8-bd5e-4699-9a2b-b6864fc26f6b
+autostart=True
+requested_target=test-remotevm1
+service=qubesair.SSHProxy+test-remotevm1+test.Service+argument""",
+        )
+
 
 # class TC_30_Misc(qubes.tests.QubesTestCase):
 class TC_50_Misc(ParserTestCase):
