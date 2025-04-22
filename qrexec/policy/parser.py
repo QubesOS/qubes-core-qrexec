@@ -765,22 +765,30 @@ class AllowResolution(AbstractResolution):
             "dom0",
             "uuid:00000000-0000-0000-0000-000000000000",
         ):
-            lines.append(f"user={self.user or 'DEFAULT'}")
-            lines.append("result=allow")
-            lines.append("target=@adminvm")
-            lines.append(f"autostart={self.autostart}")
-            lines.append(f"requested_target={request.target}")
+            lines.extend(
+                [
+                    f"user={self.user or 'DEFAULT'}",
+                    "result=allow",
+                    "target=@adminvm",
+                    f"autostart={self.autostart}",
+                    f"requested_target={request.target}",
+                ]
+            )
             return "\n".join(lines)
 
         # DispVM case
         if target.startswith("@dispvm:"):
             target_info = request.system_info["domains"][target[8:]]
-            lines.append(f"user={self.user or 'DEFAULT'}")
-            lines.append("result=allow")
-            lines.append(f"target={self.target}")
-            lines.append(f"target_uuid=@dispvm:uuid:{target_info['uuid']}")
-            lines.append(f"autostart={self.autostart}")
-            lines.append(f"requested_target={request.target}")
+            lines.extend(
+                [
+                    f"user={self.user or 'DEFAULT'}",
+                    "result=allow",
+                    f"target={self.target}",
+                    f"target_uuid=@dispvm:uuid:{target_info['uuid']}",
+                    f"autostart={self.autostart}",
+                    f"requested_target={request.target}",
+                ]
+            )
             if request.requested_source:
                 lines.append(f"policy_source={request.source}")
             return "\n".join(lines)
@@ -809,22 +817,28 @@ class AllowResolution(AbstractResolution):
             relayvm_info = request.system_info["domains"][relayvm_name]
             transport_rpc = target_info["transport_rpc"]
 
-            lines.append(f"target={relayvm_name}")
-            lines.append(f"target_uuid=uuid:{relayvm_info['uuid']}")
-            lines.append(f"autostart={self.autostart}")
-            lines.append(f"requested_target={request.target}")
-            lines.append(
-                f"service={transport_rpc}+{request.target}+{request.service}{request.argument}"
+            lines.extend(
+                [
+                    f"target={relayvm_name}",
+                    f"target_uuid=uuid:{relayvm_info['uuid']}",
+                    f"autostart={self.autostart}",
+                    f"requested_target={request.target}",
+                    f"service={transport_rpc}+{request.target}+{request.service}{request.argument}",
+                ]
             )
             if request.requested_source:
                 lines.append(f"policy_source={request.source}")
             return "\n".join(lines)
 
         # Default case
-        lines.append(f"target={self.target}")
-        lines.append(f"target_uuid=uuid:{target_info['uuid']}")
-        lines.append(f"autostart={self.autostart}")
-        lines.append(f"requested_target={request.target}")
+        lines.extend(
+            [
+                f"target={self.target}",
+                f"target_uuid=uuid:{target_info['uuid']}",
+                f"autostart={self.autostart}",
+                f"requested_target={request.target}",
+            ]
+        )
         if request.requested_source:
             lines.append(f"policy_source={request.source}")
         return "\n".join(lines)
