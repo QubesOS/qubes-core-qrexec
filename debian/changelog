@@ -1,3 +1,22 @@
+qubes-core-qrexec (4.3.7-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Add RTD config file
+
+  [ Frédéric Pierret (fepitre) ]
+  * Support for source domain in RPC service
+  * Introduce ParserTestCase to allow specifying SYSTEM_INFO to us
+  * Use path for filepath and ignore and expected FullSystemInfo
+  * tests: add more tests for policy parser and RemoteVM
+  * tests: add loopback detection
+  * Several fixes for doc inclusion
+  * Add documentation about using RemoteVM
+  * doc: add SSHProxy example for qrexec-remotevm
+  * Ignore user directive in policy for RemoteVM
+  * Improve parser lines handling
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 23 Apr 2025 18:24:13 +0200
+
 qubes-core-qrexec (4.3.6-1) unstable; urgency=medium
 
   * Fix protocol version negotiation on agent reconnect
