@@ -478,6 +478,22 @@ class TestPolicyDaemon:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("server_type", server_types)
+    async def test_qrexec_request_empty_eval_service(
+        self, mock_request, qrexec_server, tmp_path, server_type
+    ):
+
+        data = b"policy.Eval%s++a b c d\0e\0f" % server_type
+        assert (
+            await self.send_data(
+                qrexec_server[server_type], tmp_path, data, server_type
+            )
+            == b""
+        )
+
+        mock_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("server_type", server_types)
     async def test_qrexec_request_no_argument(
         self, mock_request, qrexec_server, tmp_path, server_type
     ):
