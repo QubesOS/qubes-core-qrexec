@@ -436,7 +436,7 @@ class TestPolicyDaemon:
     async def test_qrexec_request_too_long_destination_qube_name(
         self, mock_request, qrexec_server, tmp_path, server_type
     ):
-        data = b"policy.Eval%s+a b c d\0d\0%s" % (server_type, b"c" * 32)
+        data = b"policy.Eval%s+a b c d\0d\0%s" % (server_type, b"c" * 64)
         assert (
             await self.send_data(
                 qrexec_server[server_type], tmp_path, data, server_type
