@@ -45,7 +45,7 @@ except AttributeError:
 
 class TestPolicyDaemon:
     @pytest.fixture
-    def mock_request(self, monkeypatch):
+    def mock_request(self, monkeypatch, mock_system):
         mock_request = AsyncMock()
         mock_request.return_value = "result=deny"
         monkeypatch.setattr(
