@@ -175,7 +175,15 @@ async def qrexec_policy_eval(
     remote_domain,
     service_queried,
 ):
-    if service_queried is None:
+    # service_queried is already restricted by qrexec since it's passed as
+    # argument to the policy.Eval service. So we just check that when it's
+    # split by '+' in handler_request to get the service name to evaluate it
+    # that name won't be empty.
+    if (
+        service_queried is None
+        or len(service_queried) == 0
+        or service_queried[0:1] == b"+"
+    ):
         log.warning(
             "%s requires an argument (the service to query), but"
             "%s did not provide one",
