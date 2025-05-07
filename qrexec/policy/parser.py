@@ -1875,6 +1875,14 @@ class AbstractPolicy(AbstractParser):
         if source_uuid in targets:
             targets.remove(source_uuid)
 
+        for unwanted_target in targets.copy():
+            if unwanted_target.startswith("@dispvm:"):
+                unwanted_target_name = unwanted_target[len("@dispvm:") :]
+            else:
+                unwanted_target_name = unwanted_target
+            if info[unwanted_target_name].get("internal", False):
+                targets.remove(unwanted_target)
+
         return targets
 
 
