@@ -1318,9 +1318,9 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
 
         def callback(source, server):
             server.sendall(b"stdout data")
-            server.close()
             source.send_message(qrexec.MSG_DATA_STDIN, b"stdin data")
             source.send_message(qrexec.MSG_DATA_STDIN, b"")
+            server.close()
 
         self._test_run_dom0_service_socket_meta(callback)
 
