@@ -71,6 +71,14 @@ _SYSTEM_INFO = {
             "power_state": "Halted",
             "uuid": "fa6d56e8-a89d-4106-aa62-22e172a43c8b",
         },
+        "test-vm4": {
+            "tags": [],
+            "type": "AppVM",
+            "default_dispvm": "default-dvm",
+            "template_for_dispvms": True,
+            "power_state": "Halted",
+            "uuid": "91e4fe8d-083b-4ddf-ad7b-fb4ebac537b9",
+        },
         "default-dvm": {
             "tags": [],
             "type": "AppVM",
@@ -302,6 +310,14 @@ class TC_00_VMToken(ParserTestCase):
             ["@adminvm"],
         )
         self.assertEqual(
+            list(
+                parser.Target(
+                    "uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4"
+                ).expand(system_info=self.system_info)
+            ),
+            ["test-vm2"],
+        )
+        self.assertEqual(
             sorted(
                 set(
                     parser.Target("@anyvm").expand(system_info=self.system_info)
@@ -311,6 +327,7 @@ class TC_00_VMToken(ParserTestCase):
                 "@dispvm",
                 "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
+                "@dispvm:test-vm4",
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
@@ -321,6 +338,7 @@ class TC_00_VMToken(ParserTestCase):
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test-vm4",
                 "test2-relayvm1",
                 "test2-relayvm2",
                 "test2-remotevm1",
@@ -338,6 +356,7 @@ class TC_00_VMToken(ParserTestCase):
                 "@dispvm",
                 "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
+                "@dispvm:test-vm4",
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
@@ -348,6 +367,7 @@ class TC_00_VMToken(ParserTestCase):
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test-vm4",
                 "test2-relayvm1",
                 "test2-relayvm2",
                 "test2-remotevm1",
@@ -364,6 +384,7 @@ class TC_00_VMToken(ParserTestCase):
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test-vm4",
                 "default-dvm",
                 "test2-vm1",
                 "test2-relayvm1",
@@ -441,6 +462,12 @@ class TC_00_VMToken(ParserTestCase):
             parser.Target("@dispvm:@tag:tag3").expand(
                 system_info=self.system_info
             ),
+            ["@dispvm:test-vm3"],
+        )
+        self.assertCountEqual(
+            parser.Target(
+                "@dispvm:uuid:fa6d56e8-a89d-4106-aa62-22e172a43c8b"
+            ).expand(system_info=self.system_info),
             ["@dispvm:test-vm3"],
         )
 
@@ -1397,6 +1424,8 @@ class TC_20_Policy(ParserTestCase):
             * * test-standalone @dispvm allow
             * * test-standalone @adminvm allow
             * * uuid:c9024a97-9b15-46cc-8341-38d75d5d421b bogus2 deny
+            * * uuid:c798d6db-360f-473a-b902-1cc58ffd3ab0 uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33 ask
+            * * test2-vm1 @dispvm:uuid:91e4fe8d-083b-4ddf-ad7b-fb4ebac537b9 ask
         """
         )
 
@@ -1409,6 +1438,7 @@ class TC_20_Policy(ParserTestCase):
             [
                 "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
+                "@dispvm:test-vm4",
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
@@ -1418,6 +1448,7 @@ class TC_20_Policy(ParserTestCase):
                 "test-template",
                 "test-vm2",
                 "test-vm3",
+                "test-vm4",
                 "test2-relayvm1",
                 "test2-relayvm2",
                 "test2-remotevm1",
@@ -1453,6 +1484,7 @@ class TC_20_Policy(ParserTestCase):
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test-vm4",
                 "test2-relayvm1",
                 "test2-relayvm2",
                 "test2-vm1",
@@ -1463,6 +1495,12 @@ class TC_20_Policy(ParserTestCase):
                 self.gen_req("test-no-dvm", "@default")
             ),
             [],
+        )
+        self.assertCountEqual(
+            policy.collect_targets_for_ask(
+                self.gen_req("test2-vm1", "@default")
+            ),
+            ["test-standalone", "@dispvm:test-vm4", "test-vm3"],
         )
 
 
@@ -1690,6 +1728,7 @@ class TC_40_evaluate(ParserTestCase):
                 [
                     "@dispvm:default-dvm",
                     "@dispvm:test-vm3",
+                    "@dispvm:test-vm4",
                     "default-dvm",
                     "test-invalid-dvm",
                     "test-no-dvm",
@@ -1699,6 +1738,7 @@ class TC_40_evaluate(ParserTestCase):
                     "test-vm1",
                     "test-vm2",
                     "test-vm3",
+                    "test-vm4",
                     "test2-relayvm1",
                     "test2-relayvm2",
                     "test2-remotevm1",
@@ -1725,6 +1765,7 @@ class TC_40_evaluate(ParserTestCase):
             [
                 "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
+                "@dispvm:test-vm4",
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
@@ -1734,6 +1775,7 @@ class TC_40_evaluate(ParserTestCase):
                 "test-vm1",
                 "test-vm2",
                 "test-vm3",
+                "test-vm4",
                 "test2-relayvm1",
                 "test2-relayvm2",
                 "test2-remotevm1",
@@ -1763,6 +1805,7 @@ class TC_40_evaluate(ParserTestCase):
             [
                 "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
+                "@dispvm:test-vm4",
                 "default-dvm",
                 "test-invalid-dvm",
                 "test-no-dvm",
@@ -1772,6 +1815,7 @@ class TC_40_evaluate(ParserTestCase):
                 "test-template",
                 "test-vm2",
                 "test-vm3",
+                "test-vm4",
                 "test2-relayvm1",
                 "test2-relayvm2",
                 "test2-remotevm1",

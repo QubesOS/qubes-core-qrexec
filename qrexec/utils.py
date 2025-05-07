@@ -141,9 +141,9 @@ class FullSystemInfo(TypedDict):
 
 def uuid_to_name(info: SystemInfo, uuid_or_name: str) -> str:
     if uuid_or_name.startswith("uuid:"):
-        return info[uuid_or_name[5:]]["name"]
+        return info[uuid_or_name]["name"]
     if uuid_or_name.startswith("@dispvm:uuid:"):
-        return "@dispvm:" + info[uuid_or_name[13:]]["name"]
+        return "@dispvm:" + info[uuid_or_name[8:]]["name"]
     return uuid_or_name
 
 
