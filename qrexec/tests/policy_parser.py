@@ -983,55 +983,6 @@ class TC_10_Rule(ParserTestCase):
             assert str(rule) == line
 
 
-#   def test_070_expand_override_target(self):
-#       line = parser.Rule.from_line(None,
-#           'test.Service +argument @anyvm @anyvm allow target=test-vm2',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.resolve(SYSTEM_INFO, 'test-vm1'),
-#           'test-vm2')
-
-#   def test_071_expand_override_target_dispvm(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@dispvm',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-vm1'),
-#           '@dispvm:default-dvm')
-
-#   def test_072_expand_override_target_dispvm_specific(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@dispvm:test-vm3',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-vm1'),
-#           '@dispvm:test-vm3')
-
-#   def test_073_expand_override_target_dispvm_none(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@dispvm',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
-#           None)
-
-#   def test_074_expand_override_target_dom0(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=dom0',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
-#           '@adminvm')
-
-#   def test_075_expand_override_target_dom0(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@adminvm',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
-#           '@adminvm')
-
-
 @pytest.mark.parametrize(
     "action_name,action,default",
     [
@@ -1864,14 +1815,6 @@ class TC_40_evaluate(ParserTestCase):
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(self.gen_req("test-no-dvm", "@dispvm"))
 
-    def test_052_eval_invalid_override_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @anyvm allow target=no-such-vm"""
-        )
-        with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(self.gen_req("test-vm3", "@default"))
-
     def test_053_eval_resolve_dispvm_from_any(self):
         policy = parser.StringPolicy(
             policy="""\
@@ -1984,6 +1927,123 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.default_target, "dom0")
         self.assertEqual(resolution.request.target, "@adminvm")
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
+
+    def test_080_eval_override_target(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=test-vm2"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "test-vm2")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_081_eval_override_target_dispvm(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=@dispvm"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "@dispvm:default-dvm")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_082_eval_override_target_dispvm_specific(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm:test-vm3"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "@dispvm:test-vm3")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_083_eval_override_target_dispvm_none(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm"""
+        )
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(self.gen_req("test-no-dvm", "test-vm1"))
+
+    def test_084_eval_override_target_dom0(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=dom0"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_085_eval_override_target_adminvm(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@adminvm"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_086_eval_override_target_invalid(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * test-vm3 @anyvm allow target=no-such-vm"""
+        )
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(self.gen_req("test-vm3", "@default"))
+
+    def test_087_eval_override_target_uuid(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(
+            resolution.target, "uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4"
+        )
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_088_eval_override_target_uuid_dom0(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=uuid:00000000-0000-0000-0000-000000000000"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_089_eval_override_target_dispvm_uuid(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm:uuid:fa6d56e8-a89d-4106-aa62-22e172a43c8b"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(
+            resolution.target,
+            "@dispvm:uuid:fa6d56e8-a89d-4106-aa62-22e172a43c8b",
+        )
+        self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_110_handle_user_response_allow(self):
         rule = parser.Rule.from_line(
