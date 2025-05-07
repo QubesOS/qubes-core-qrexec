@@ -266,6 +266,13 @@ class VMToken(str, metaclass=VMTokenMeta):
     ) -> "VMToken":
         orig_token = token
 
+        if len(token) == 0:
+            raise PolicySyntaxError(
+                filepath,
+                lineno or 0,
+                "invalid empty {} token".format(cls.__name__.lower()),
+            )
+
         # first, adjust some aliases
         if token in {"dom0", "uuid:00000000-0000-0000-0000-000000000000"}:
             # TODO: log a warning in Qubes 4.3
