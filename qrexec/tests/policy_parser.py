@@ -25,7 +25,7 @@ import subprocess
 import unittest.mock
 import asyncio
 from copy import deepcopy
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 from types import MappingProxyType
@@ -227,8 +227,8 @@ class ParserTestCase(unittest.TestCase):
 
 class TC_00_VMToken(ParserTestCase):
     def test_010_Source(self):
-        #       with self.assertRaises(exc.PolicySyntaxError):
-        #           parser.Source(None)
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source("")
         parser.Source("test-vm1")
         parser.Source("@adminvm")
         parser.Source("dom0")
@@ -273,6 +273,8 @@ class TC_00_VMToken(ParserTestCase):
         parser.Target("@dispvm:@tag:tag3")
         parser.Target("uuid:d8a249f1-b02b-4944-a9e5-437def2fbe2c")
 
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Target("")
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Target("@invalid")
         with self.assertRaises(exc.PolicySyntaxError):
@@ -494,6 +496,8 @@ class TC_00_VMToken(ParserTestCase):
             parser.Redirect("@dispvm:@tag:tag3")
 
         with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect("")
+        with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect("@invalid")
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect("@dispvm:")
@@ -523,6 +527,8 @@ class TC_00_VMToken(ParserTestCase):
         with self.assertRaises(exc.PolicySyntaxError):
             parser.IntendedTarget("@dispvm:@tag:tag3")
 
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget("")
         with self.assertRaises(exc.PolicySyntaxError):
             parser.IntendedTarget("@invalid")
         with self.assertRaises(exc.PolicySyntaxError):
@@ -983,55 +989,6 @@ class TC_10_Rule(ParserTestCase):
             assert str(rule) == line
 
 
-#   def test_070_expand_override_target(self):
-#       line = parser.Rule.from_line(None,
-#           'test.Service +argument @anyvm @anyvm allow target=test-vm2',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.resolve(SYSTEM_INFO, 'test-vm1'),
-#           'test-vm2')
-
-#   def test_071_expand_override_target_dispvm(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@dispvm',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-vm1'),
-#           '@dispvm:default-dvm')
-
-#   def test_072_expand_override_target_dispvm_specific(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@dispvm:test-vm3',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-vm1'),
-#           '@dispvm:test-vm3')
-
-#   def test_073_expand_override_target_dispvm_none(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@dispvm',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
-#           None)
-
-#   def test_074_expand_override_target_dom0(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=dom0',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
-#           '@adminvm')
-
-#   def test_075_expand_override_target_dom0(self):
-#       line = parser.Rule.from_line(
-#           'test.Service +argument @anyvm @anyvm allow target=@adminvm',
-#           filepath='filename', lineno=12)
-#       self.assertEqual(
-#           line.action.target.redirect(SYSTEM_INFO, 'test-no-dvm'),
-#           '@adminvm')
-
-
 @pytest.mark.parametrize(
     "action_name,action,default",
     [
@@ -1130,8 +1087,7 @@ class TC_11_Rule_service(ParserTestCase):
         self.assertEqual(line.target, "@anyvm")
         self.assertIsNone(line.action.target)
         self.assertIsNone(line.action.user)
-
-    #       self.assertIsNone(line.default_target)
+        self.assertIsNone(line.action.default_target)
 
     def test_021_line_simple(self):
         # also check spaces in action field
@@ -1150,8 +1106,7 @@ class TC_11_Rule_service(ParserTestCase):
         self.assertEqual(line.target, "@type:AppVM")
         self.assertEqual(line.action.target, "test-vm2")
         self.assertEqual(line.action.user, "user")
-
-    #       self.assertIsNone(line.default_target)
+        self.assertIsNone(line.action.default_target)
 
     def test_022_line_simple(self):
         line = parser.Rule.from_line_service(
@@ -1169,8 +1124,8 @@ class TC_11_Rule_service(ParserTestCase):
         self.assertEqual(line.target, "@default")
         self.assertEqual(line.action.target, "@dispvm:test-vm2")
         self.assertIsNone(line.action.user)
-
-    #       self.assertIsNone(line.action.default)
+        with self.assertRaises(AttributeError):
+            line.action.default_target
 
     def test_023_line_simple(self):
         line = parser.Rule.from_line_service(
@@ -1298,20 +1253,23 @@ class TC_20_Policy(ParserTestCase):
         self.assertEqual(policy.rules[0].source, "test-vm1")
         self.assertEqual(policy.rules[0].target, "test-vm2")
         self.assertIsInstance(policy.rules[0].action, parser.Action.allow.value)
-        #       self.assertEqual(policy.rules[0].filename,
-        #           TMP_POLICY_DIR + '/test.service')
+        self.assertEqual(
+            policy.rules[0].filepath, PurePosixPath("__main__[in-memory]")
+        )
         self.assertEqual(policy.rules[0].lineno, 1)
         self.assertEqual(policy.rules[1].source, "test-vm3")
         self.assertEqual(policy.rules[1].target, "@default")
         self.assertIsInstance(policy.rules[1].action, parser.Action.allow.value)
-        #       self.assertEqual(policy.rules[1].filename,
-        #           TMP_POLICY_DIR + '/test.service2')
+        self.assertEqual(
+            policy.rules[1].filepath, PurePosixPath("file2[in-memory]")
+        )
         self.assertEqual(policy.rules[1].lineno, 1)
         self.assertEqual(policy.rules[2].source, "@anyvm")
         self.assertEqual(policy.rules[2].target, "@anyvm")
         self.assertIsInstance(policy.rules[2].action, parser.Action.deny.value)
-        #       self.assertEqual(policy.rules[2].filename,
-        #           TMP_POLICY_DIR + '/test.service')
+        self.assertEqual(
+            policy.rules[2].filepath, PurePosixPath("__main__[in-memory]")
+        )
         self.assertEqual(policy.rules[2].lineno, 3)
 
     def test_003_include_service(self):
@@ -1864,14 +1822,6 @@ class TC_40_evaluate(ParserTestCase):
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(self.gen_req("test-no-dvm", "@dispvm"))
 
-    def test_052_eval_invalid_override_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @anyvm allow target=no-such-vm"""
-        )
-        with self.assertRaises(exc.AccessDenied):
-            policy.evaluate(self.gen_req("test-vm3", "@default"))
-
     def test_053_eval_resolve_dispvm_from_any(self):
         policy = parser.StringPolicy(
             policy="""\
@@ -1984,6 +1934,123 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.default_target, "dom0")
         self.assertEqual(resolution.request.target, "@adminvm")
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
+
+    def test_080_eval_override_target(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=test-vm2"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "test-vm2")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_081_eval_override_target_dispvm(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=@dispvm"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "@dispvm:default-dvm")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_082_eval_override_target_dispvm_specific(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm:test-vm3"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "@dispvm:test-vm3")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_083_eval_override_target_dispvm_none(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm"""
+        )
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(self.gen_req("test-no-dvm", "test-vm1"))
+
+    def test_084_eval_override_target_dom0(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=dom0"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_085_eval_override_target_adminvm(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@adminvm"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_086_eval_override_target_invalid(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * test-vm3 @anyvm allow target=no-such-vm"""
+        )
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(self.gen_req("test-vm3", "@default"))
+
+    def test_087_eval_override_target_uuid(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(
+            resolution.target, "uuid:b3eb69d0-f9d9-4c3c-ad5c-454500303ea4"
+        )
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_088_eval_override_target_uuid_dom0(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * @anyvm @anyvm allow target=uuid:00000000-0000-0000-0000-000000000000"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(resolution.request.target, "test-vm1")
+
+    def test_089_eval_override_target_dispvm_uuid(self):
+        policy = parser.StringPolicy(
+            policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm:uuid:fa6d56e8-a89d-4106-aa62-22e172a43c8b"""
+        )
+        resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
+
+        self.assertIsInstance(resolution, parser.AllowResolution)
+        self.assertEqual(resolution.rule, policy.rules[0])
+        self.assertEqual(
+            resolution.target,
+            "@dispvm:uuid:fa6d56e8-a89d-4106-aa62-22e172a43c8b",
+        )
+        self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_110_handle_user_response_allow(self):
         rule = parser.Rule.from_line(
