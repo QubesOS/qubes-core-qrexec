@@ -301,7 +301,7 @@ class TC_00_VMToken(ParserTestCase):
         )
         self.assertEqual(
             list(parser.Target("dom0").expand(system_info=self.system_info)),
-            ["@adminvm"],
+            ["dom0"],
         )
         self.assertEqual(
             list(
@@ -309,7 +309,7 @@ class TC_00_VMToken(ParserTestCase):
                     "uuid:00000000-0000-0000-0000-000000000000"
                 ).expand(system_info=self.system_info)
             ),
-            ["@adminvm"],
+            ["dom0"],
         )
         self.assertEqual(
             list(
@@ -354,12 +354,12 @@ class TC_00_VMToken(ParserTestCase):
                 set(parser.Target("*").expand(system_info=self.system_info))
             ),
             [
-                "@adminvm",
                 "@dispvm",
                 "@dispvm:default-dvm",
                 "@dispvm:test-vm3",
                 "@dispvm:test-vm4",
                 "default-dvm",
+                "dom0",
                 "test-invalid-dvm",
                 "test-no-dvm",
                 "test-relayvm1",
@@ -543,7 +543,7 @@ class TC_00_VMToken(ParserTestCase):
     def test_100_match_single(self):
         # pytest: disable=no-self-use
         cases = [
-            ("uuid:00000000-0000-0000-0000-000000000000", "@adminvm", True),
+            ("uuid:00000000-0000-0000-0000-000000000000", "@adminvm", False),
             ("uuid:00000000-0000-0000-0000-000000000000", "dom0", True),
             (
                 "uuid:00000000-0000-0000-0000-000000000000",
@@ -563,7 +563,7 @@ class TC_00_VMToken(ParserTestCase):
             ("@dispvm:@tag:tag3", "@dispvm:test-vm3", True),
             ("@adminvm", "@adminvm", True),
             ("@adminvm", "dom0", True),
-            ("dom0", "@adminvm", True),
+            ("@adminvm", "uuid:00000000-0000-0000-0000-000000000000", True),
             ("dom0", "dom0", True),
             ("@dispvm:default-dvm", "@dispvm:default-dvm", True),
             ("@anyvm", "@dispvm", True),
@@ -583,8 +583,8 @@ class TC_00_VMToken(ParserTestCase):
             ("@anyvm", "@adminvm", False),
             ("@tag:dom0-tag", "@adminvm", False),
             ("@type:AdminVM", "@adminvm", False),
-            ("@tag:dom0-tag", "dom0", False),
-            ("@type:AdminVM", "dom0", False),
+            ("@tag:dom0-tag", "dom0", True),
+            ("@type:AdminVM", "dom0", True),
             ("@tag:tag1", "dom0", False),
             ("@dispvm", "test-vm1", False),
             ("@dispvm", "default-dvm", False),
@@ -1869,7 +1869,7 @@ class TC_40_evaluate(ParserTestCase):
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
         self.assertEqual(resolution.target, "dom0")
-        self.assertEqual(resolution.request.target, "@adminvm")
+        self.assertEqual(resolution.request.target, "dom0")
 
     def test_061_eval_to_dom0_keyword(self):
         policy = parser.StringPolicy(
@@ -1893,7 +1893,7 @@ class TC_40_evaluate(ParserTestCase):
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
         self.assertEqual(resolution.default_target, "dom0")
-        self.assertEqual(resolution.request.target, "@adminvm")
+        self.assertEqual(resolution.request.target, "dom0")
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_071_eval_to_dom0_ask_default_target(self):
@@ -1906,7 +1906,7 @@ class TC_40_evaluate(ParserTestCase):
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
         self.assertEqual(resolution.default_target, "dom0")
-        self.assertEqual(resolution.request.target, "@adminvm")
+        self.assertEqual(resolution.request.target, "dom0")
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_072_eval_to_dom0_ask_default_target(self):
@@ -1919,7 +1919,7 @@ class TC_40_evaluate(ParserTestCase):
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
         self.assertEqual(resolution.default_target, "dom0")
-        self.assertEqual(resolution.request.target, "@adminvm")
+        self.assertEqual(resolution.request.target, "dom0")
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_073_eval_to_dom0_ask_default_target(self):
@@ -1932,8 +1932,25 @@ class TC_40_evaluate(ParserTestCase):
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
         self.assertEqual(resolution.default_target, "dom0")
-        self.assertEqual(resolution.request.target, "@adminvm")
+        self.assertEqual(resolution.request.target, "dom0")
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
+
+    def test_074_eval_to_default_dom0(self):
+        names = ("dom0", "@adminvm")
+        for target in names:
+            for default_target in names:
+                policy = parser.StringPolicy(
+                    policy=f"* * test-vm3 @default ask target={target} default_target={default_target}"
+                )
+                resolution = policy.evaluate(
+                    self.gen_req("test-vm3", "@default")
+                )
+
+                self.assertIsInstance(resolution, parser.AskResolution)
+                self.assertEqual(resolution.rule, policy.rules[0])
+                self.assertEqual(resolution.default_target, "dom0")
+                self.assertEqual(resolution.request.target, "@default")
+                self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_080_eval_override_target(self):
         policy = parser.StringPolicy(
@@ -2034,7 +2051,9 @@ class TC_40_evaluate(ParserTestCase):
 
         self.assertIsInstance(resolution, parser.AllowResolution)
         self.assertEqual(resolution.rule, policy.rules[0])
-        self.assertEqual(resolution.target, "dom0")
+        self.assertEqual(
+            resolution.target, "uuid:00000000-0000-0000-0000-000000000000"
+        )
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_089_eval_override_target_dispvm_uuid(self):
@@ -2231,9 +2250,9 @@ requested_target=test-vm2\
             """\
 user=DEFAULT
 result=allow
-target=@adminvm
+target=dom0
 autostart=True
-requested_target=@adminvm\
+requested_target=dom0\
 """,
         )
 
@@ -2258,7 +2277,7 @@ requested_target=@adminvm\
             """\
 user=DEFAULT
 result=allow
-target=@adminvm
+target=dom0
 autostart=True
 requested_target=@adminvm\
 """,

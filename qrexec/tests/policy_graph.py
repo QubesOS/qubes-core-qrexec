@@ -277,7 +277,7 @@ def test_simple_redirect():
             )
             content = output.read().decode()
             expected = """digraph g {
-  "work" -> "@adminvm" [label="test.Service" color=red];
+  "work" -> "dom0" [label="test.Service" color=red];
 }
 """
             assert content == expected

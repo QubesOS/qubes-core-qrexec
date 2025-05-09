@@ -147,7 +147,7 @@ personal @anyvm deny"""
     assert (
         result.read_text()
         == qrexec_legacy_convert.TOOL_DISCLAIMER
-        + """qubes.Filecopy\t*\t@adminvm\t@anyvm\task
+        + """qubes.Filecopy\t*\tdom0\t@anyvm\task
 qubes.Filecopy\t*\twork\t@anyvm\task
 qubes.Filecopy\t*\tpersonal\t@anyvm\tdeny
 """
@@ -273,9 +273,9 @@ sys-usb dom0 deny"""
     assert set(input_result.read_text().split("\n")) == set(
         (
             qrexec_legacy_convert.TOOL_DISCLAIMER
-            + """qubes.InputKeyboard\t*\tsys-usb\t@adminvm\task
-qubes.InputMouse\t*\tsys-usb\t@adminvm\tallow
-qubes.InputTablet\t*\tsys-usb\t@adminvm\tdeny
+            + """qubes.InputKeyboard\t*\tsys-usb\tdom0\task
+qubes.InputMouse\t*\tsys-usb\tdom0\tallow
+qubes.InputTablet\t*\tsys-usb\tdom0\tdeny
 """
         ).split("\n")
     )
@@ -293,7 +293,7 @@ def test_input_multiple_rules(
     # the deny @anyvm should be move to 30-user file
     (old_policy_dir / "qubes.InputKeyboard").write_text(
         """
-sys-usb dom0 ask default_target=@adminvm
+sys-usb dom0 ask default_target=dom0
 sys-usb @anyvm deny
 """
     )
@@ -321,9 +321,9 @@ sys-usb dom0 deny"""
     assert set(input_result.read_text().split("\n")) == set(
         (
             qrexec_legacy_convert.TOOL_DISCLAIMER
-            + """qubes.InputKeyboard\t*\tsys-usb\t@adminvm\task default_target=@adminvm
-qubes.InputMouse\t*\tsys-usb\t@adminvm\tallow
-qubes.InputTablet\t*\tsys-usb\t@adminvm\tdeny
+            + """qubes.InputKeyboard\t*\tsys-usb\tdom0\task default_target=dom0
+qubes.InputMouse\t*\tsys-usb\tdom0\tallow
+qubes.InputTablet\t*\tsys-usb\tdom0\tdeny
 """
         ).split("\n")
     )
@@ -355,9 +355,9 @@ sys-usb-2 dom0 deny
     # the sys-usb-2 @anyvm rule should go to 30-user
     (old_policy_dir / "qubes.InputMouse").write_text(
         """
-sys-usb dom0 allow
+sys-usb @adminvm allow
 sys-usb-2 @anyvm deny
-sys-usb-2 dom0 allow
+sys-usb-2 @adminvm allow
 """
     )
     # first rule goes to 50-config
@@ -379,11 +379,11 @@ sys-usb dom0 deny"""
     assert set(input_result.read_text().split("\n")) == set(
         (
             qrexec_legacy_convert.TOOL_DISCLAIMER
-            + """qubes.InputKeyboard\t*\tsys-usb\t@adminvm\task
-qubes.InputKeyboard\t*\tsys-usb-2\t@adminvm\tdeny
+            + """qubes.InputKeyboard\t*\tsys-usb\tdom0\task
+qubes.InputKeyboard\t*\tsys-usb-2\tdom0\tdeny
 qubes.InputMouse\t*\tsys-usb\t@adminvm\tallow
 qubes.InputMouse\t*\tsys-usb-2\t@adminvm\tallow
-qubes.InputTablet\t*\tsys-usb\t@adminvm\task
+qubes.InputTablet\t*\tsys-usb\tdom0\task
 """
         ).split("\n")
     )
