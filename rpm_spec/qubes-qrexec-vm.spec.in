@@ -97,6 +97,9 @@ rm -f %{name}-%{version}
 %preun
 %systemd_preun qubes-qrexec-agent.service
 
+%postun
+%systemd_postun_with_restart qubes-qrexec-agent.service
+
 %pre selinux
 %selinux_relabel_pre
 
