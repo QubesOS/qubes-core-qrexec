@@ -658,26 +658,37 @@ static int handle_cmdline_body_from_client(int fd, struct msg_header *hdr)
         }
     }
 
-    if ((hdr->type != MSG_SERVICE_CONNECT) &&
-        (strncmp(buf, default_user_keyword, default_user_keyword_len_without_colon+1) == 0))
-    {
-        use_default_user = 1;
-        hdr->len -= default_user_keyword_len_without_colon;
-        hdr->len += strlen(default_user);
-    }
-    if (libvchan_send(vchan, hdr, sizeof(*hdr)) != sizeof(*hdr))
-        handle_vchan_error("send");
-    if (use_default_user) {
-        int send_len = strlen(default_user);
-        if (libvchan_send(vchan, params, sizeof(*params)) != sizeof(*params))
-            handle_vchan_error("send params");
-        if (libvchan_send(vchan, default_user, send_len) != send_len)
-            handle_vchan_error("send default_user");
-        send_len = len-default_user_keyword_len_without_colon;
-        if (libvchan_send(vchan, buf+default_user_keyword_len_without_colon,
-                    send_len) != send_len)
-            handle_vchan_error("send buf");
+    if (protocol_version < QREXEC_PROTOCOL_V4) {
+        /* In V3 and earlier, the daemon decides the default username if
+         * needed. */
+        if ((hdr->type != MSG_SERVICE_CONNECT) &&
+            (strncmp(buf, default_user_keyword, default_user_keyword_len_without_colon+1) == 0))
+        {
+            use_default_user = 1;
+            hdr->len -= default_user_keyword_len_without_colon;
+            hdr->len += strlen(default_user);
+        }
+        if (libvchan_send(vchan, hdr, sizeof(*hdr)) != sizeof(*hdr))
+            handle_vchan_error("send");
+        if (use_default_user) {
+            int send_len = strlen(default_user);
+            if (libvchan_send(vchan, params, sizeof(*params)) != sizeof(*params))
+                handle_vchan_error("send params");
+            if (libvchan_send(vchan, default_user, send_len) != send_len)
+                handle_vchan_error("send default_user");
+            send_len = len-default_user_keyword_len_without_colon;
+            if (libvchan_send(vchan, buf+default_user_keyword_len_without_colon,
+                        send_len) != send_len)
+                handle_vchan_error("send buf");
+        } else {
+            if (libvchan_send(vchan, params, hdr->len) != (int)hdr->len)
+                handle_vchan_error("send buf");
+        }
     } else {
+        /* In V4 and later, the agent inside the VM decides the default
+         * username if needed. */
+        if (libvchan_send(vchan, hdr, sizeof(*hdr)) != sizeof(*hdr))
+            handle_vchan_error("send");
         if (libvchan_send(vchan, params, hdr->len) != (int)hdr->len)
             handle_vchan_error("send buf");
     }

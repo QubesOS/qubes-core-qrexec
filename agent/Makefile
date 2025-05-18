@@ -12,7 +12,7 @@ CFLAGS += -I. -I../libqrexec -g -O2 -Wall -Wextra -Werror \
 	-D_GNU_SOURCE $(if $(HAVE_PAM_APPL),-DHAVE_PAM,-UHAVE_PAM) \
 	-Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Werror=vla
 LDFLAGS += -pie -Wl,-z,relro,-z,now -L../libqrexec
-LDLIBS += -lqrexec-utils $(shell pkg-config --libs $(VCHAN_PKG)) $(if $(HAVE_PAM_APPL),-lpam,)
+LDLIBS += -lqrexec-utils -lqubesdb $(shell pkg-config --libs $(VCHAN_PKG)) $(if $(HAVE_PAM_APPL),-lpam,)
 
 .PHONY: all clean install
 

@@ -71,6 +71,8 @@ enum {
 
     /* Changes:
      *  - MSG_TRIGGER_SERVICE4
+     *  - DEFAULT can be used as a username to allow a VM to choose the user
+     *    to run a command or service as
      *  - FIXME
      * Qubes >= R4.3
      */

@@ -43,6 +43,8 @@
 #endif
 #include <qrexec.h>
 #include <libvchan.h>
+#include <qubesdb.h>
+#include <qubesdb-client.h>
 #include "libqrexec-utils.h"
 #include "qrexec-agent.h"
 
@@ -598,6 +600,28 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
         if (cmd == NULL) {
             LOG(ERROR, "Could not parse command line: %s", params->cmdline);
             goto doit;
+        }
+
+        /* Username may be DEFAULT, if this is the case replace it with the
+         * qubesdb default-user value */
+        if (strcmp(cmd->username, "DEFAULT") == 0) {
+            qdb_handle_t qdb_handle = qdb_open(NULL);
+            if (qdb_handle == NULL) {
+                LOG(ERROR, "Default user requested, but could not open qubesdb!");
+                destroy_qrexec_parsed_command(cmd);
+                cmd = NULL;
+                goto doit;
+            }
+            char *default_username = qdb_read(qdb_handle, "/default-user", NULL);
+            qdb_close(qdb_handle);
+            if (default_username == NULL) {
+                LOG(ERROR, "Default user requested, but no default user found!");
+                destroy_qrexec_parsed_command(cmd);
+                cmd = NULL;
+                goto doit;
+            }
+            free(cmd->username);
+            cmd->username = default_username;
         }
 
         /* load service config only for service requests */
