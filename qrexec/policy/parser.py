@@ -236,6 +236,14 @@ def match_strings(info: SystemInfo, self: str, other: str) -> bool:
     return self == other
 
 
+def is_dom0(token) -> bool:
+    return token in (
+        "@adminvm",
+        "dom0",
+        "uuid:00000000-0000-0000-0000-000000000000",
+    )
+
+
 class VMToken(str, metaclass=VMTokenMeta):
     """A domain specification
 
@@ -272,11 +280,6 @@ class VMToken(str, metaclass=VMTokenMeta):
                 lineno or 0,
                 "invalid empty {} token".format(cls.__name__.lower()),
             )
-
-        # first, adjust some aliases
-        if token in {"dom0", "uuid:00000000-0000-0000-0000-000000000000"}:
-            # TODO: log a warning in Qubes 4.3
-            token = "@adminvm"
 
         # if user specified just qube name or UUID, use it directly
         if not (token.startswith("@") or token == "*"):
@@ -351,9 +354,10 @@ class VMToken(str, metaclass=VMTokenMeta):
         source: Optional["VMToken"] = None,
     ) -> bool:
         """Check if this token matches opposite token"""
-        # pylint: disable=unused-argument,too-many-return-statements
-        if self == "@adminvm":
-            return other == "@adminvm"
+        # pylint: disable=unused-argument
+        if is_dom0(self):
+            # see note in AdminVM.match
+            return is_dom0(other)
         return match_strings(system_info["domains"], self, other)
 
     def is_special_value(self) -> bool:
@@ -486,6 +490,20 @@ class AdminVM(Source, Target, Redirect, IntendedTarget):
     def verify(self, *, system_info: FullSystemInfo) -> "AdminVM":
         return self
 
+    # Currently there's only one valid AdminVM nameley "@adminvm". It refers to
+    # (the local) dom0. We match dom0 and @adminvm commutatively for backward
+    # compatibility. If you are going to change that, you need to check all
+    # code that tests for dom0, uuid:0, @adminvm or AdminVM and adapt it, if
+    # necessary.
+    def match(
+        self,
+        other: Optional[str],
+        *,
+        system_info: FullSystemInfo,
+        source: Optional[VMToken] = None,
+    ) -> bool:
+        return is_dom0(other)
+
 
 class AnyVM(Source, Target):
     # pylint: disable=missing-docstring,unused-argument
@@ -498,13 +516,13 @@ class AnyVM(Source, Target):
         system_info: FullSystemInfo,
         source: Optional[VMToken] = None,
     ) -> bool:
-        return other != "@adminvm"
+        return not is_dom0(other)
 
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[VMToken]:
         for name, domain in system_info["domains"].items():
             if name.startswith("uuid:"):
                 continue
-            if domain["type"] != "AdminVM":
+            if not is_dom0(name):
                 yield IntendedTarget(name)
             if domain["template_for_dispvms"]:
                 yield DispVMTemplate("@dispvm:" + name)
@@ -767,16 +785,12 @@ class AllowResolution(AbstractResolution):
         lines = []
 
         # Adminvm/dom0 special case
-        if target in (
-            "@adminvm",
-            "dom0",
-            "uuid:00000000-0000-0000-0000-000000000000",
-        ):
+        if is_dom0(target):
             lines.extend(
                 [
                     f"user={self.user or 'DEFAULT'}",
                     "result=allow",
-                    "target=@adminvm",
+                    "target=dom0",
                     f"autostart={self.autostart}",
                     f"requested_target={request.target}",
                 ]
@@ -1079,7 +1093,7 @@ class ActionType(metaclass=abc.ABCMeta):
         """
         Should we allow this target when autostart is disabled
         """
-        if target == "@adminvm":
+        if is_dom0(target):
             return True
         if target.startswith("@dispvm"):
             return False
@@ -1189,7 +1203,7 @@ class Allow(ActionType):
                 )
             target = target_
             del target_
-        # expand default AdminVM
+        # expand @adminvm but keep uuid:0
         elif target == "@adminvm":
             target = "dom0"
 
@@ -1262,7 +1276,10 @@ class Ask(ActionType):
 
         targets_for_ask: Iterable[str]
         if self.target is not None:
-            targets_for_ask = [self.target]
+            if is_dom0(self.target):
+                targets_for_ask = ["dom0"]
+            else:
+                targets_for_ask = [self.target]
         else:
             targets_for_ask = list(
                 self.rule.policy.collect_targets_for_ask(request)
@@ -1293,8 +1310,8 @@ class Ask(ActionType):
                 default_target = default_target.get_dispvm_template(
                     request.source, system_info=request.system_info
                 )
-            # expand default AdminVM
-            elif isinstance(default_target, AdminVM):
+            # expand @adminvm and uuid:0 to dom0
+            elif is_dom0(default_target):
                 default_target = "dom0"
 
         return request.ask_resolution_type(
