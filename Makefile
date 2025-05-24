@@ -5,6 +5,7 @@ PYTHON ?= python3
 export PYTHON CC MAKEFLAGS CFLAGS
 
 SYSLIBDIR ?= /lib
+UNITDIR ?= $(SYSLIBDIR)/systemd/system
 
 help:
 	:
@@ -64,8 +65,8 @@ install-dom0: all-dom0
 	install -t $(DESTDIR)/etc/qubes/policy.d -m 664 policy.d/README
 	install -d $(DESTDIR)/etc/qubes/policy.d/include -m 775
 	install -t $(DESTDIR)/etc/qubes/policy.d/include -m 664 policy.d/include/*
-	install -d $(DESTDIR)/lib/systemd/system -m 755
-	install -t $(DESTDIR)/lib/systemd/system -m 644 systemd/qubes-qrexec-policy-daemon.service
+	install -d $(DESTDIR)$(UNITDIR) -m 755
+	install -t $(DESTDIR)$(UNITDIR) -m 644 systemd/qubes-qrexec-policy-daemon.service
 .PHONY: install-dom0
 
 
@@ -77,8 +78,8 @@ all-vm-selinux:
 
 install-vm: all-vm
 	+$(MAKE) install -C agent
-	install -d $(DESTDIR)/$(SYSLIBDIR)/systemd/system -m 755
-	install -t $(DESTDIR)/$(SYSLIBDIR)/systemd/system -m 644 systemd/qubes-qrexec-agent.service
+	install -d $(DESTDIR)$(UNITDIR) -m 755
+	install -t $(DESTDIR)$(UNITDIR) -m 644 systemd/qubes-qrexec-agent.service
 	install -m 0644 -D qubes-rpc-config/README $(DESTDIR)/etc/qubes/rpc-config/README
 install-vm-selinux:
 	install -m 0644 -D -t $(DESTDIR)/usr/share/selinux/packages selinux/qubes-core-qrexec.pp
