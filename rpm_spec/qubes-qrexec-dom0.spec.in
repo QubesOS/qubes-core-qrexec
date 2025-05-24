@@ -123,7 +123,7 @@ rm -f %{name}-%{version}
 %{_sysconfdir}/qubes-rpc/policy.include.Remove
 %{_tmpfilesdir}/qrexec.conf
 
-/lib/systemd/system/qubes-qrexec-policy-daemon.service
+%{_unitdir}/qubes-qrexec-policy-daemon.service
 
 %changelog
 @CHANGELOG@
