@@ -1,3 +1,23 @@
+qubes-core-qrexec (4.3.8-1) unstable; urgency=medium
+
+  [ Simon Gaiser ]
+  * tests: always mock get_system_info when mock_request is used
+  * tests: Fix test for too long destination qube name
+  * qrexec-policy-daemon: reject policy.Eval for an empty service name
+  * Fix uuid_to_name
+  * Fix TestClient::test_run_dom0_service_socket_no_read
+  * Re-add target override tests
+  * tests/policy_parser: Cleanup commented out code
+  * qrexec-policy-agent: Replace usage of deprecated
+    Gtk.Entry.set_icon_from_stock
+  * Don't translate dom0 to @adminvm
+
+  [ Marek Marczykowski-Górecki ]
+  * Restart qrexec-agent on update
+  * rpm: fix systemd unit installation
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 24 May 2025 19:19:22 +0200
+
 qubes-core-qrexec (4.3.7-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
