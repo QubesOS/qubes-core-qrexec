@@ -97,6 +97,9 @@ rm -f %{name}-%{version}
 %preun
 %systemd_preun qubes-qrexec-agent.service
 
+%postun
+%systemd_postun_with_restart qubes-qrexec-agent.service
+
 %pre selinux
 %selinux_relabel_pre
 
@@ -137,7 +140,7 @@ fi
 /usr/lib/qubes/qrexec-agent
 /usr/lib/qubes/qrexec-client-vm
 /usr/lib/qubes/qrexec_client_vm
-/lib/systemd/system/qubes-qrexec-agent.service
+%{_unitdir}/qubes-qrexec-agent.service
 
 %files selinux
 %{_datadir}/selinux/devel/include/contrib/ipp-qubes-core-qrexec.if
