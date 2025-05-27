@@ -10,7 +10,7 @@ Build-Depends:
  dh-python,
  lsb-release,
  python3-setuptools,
- python3-gbulb,
+ python3-gi (>= 3.50.0) | python3-gbulb,
  pandoc,
 Standards-Version: 4.4.0.1
 Homepage: https://www.qubes-os.org
