@@ -7,6 +7,7 @@ post_install() {
 
 post_upgrade() {
   ldconfig
+  systemctl try-restart qubes-qrexec-agent.service > /dev/null
 }
 
 post_remove() {
