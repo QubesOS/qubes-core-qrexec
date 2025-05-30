@@ -11,6 +11,7 @@ depends=(
     bash
     glibc
     python
+    python-gobject
     python-setuptools
     pam
     qubes-libvchan
