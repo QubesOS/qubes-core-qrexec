@@ -1,3 +1,14 @@
+qubes-core-qrexec (4.3.9-1) unstable; urgency=medium
+
+  [ Ben Grande ]
+  * Remove internal qubes from being target of ask
+
+  [ Marek Marczykowski-Górecki ]
+  * archlinux: restart qubes-qrexec-agent on update
+  * Use glib's native asyncio integration when available
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 30 May 2025 03:55:21 +0200
+
 qubes-core-qrexec (4.3.8-1) unstable; urgency=medium
 
   [ Simon Gaiser ]
