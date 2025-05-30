@@ -1835,6 +1835,23 @@ class TC_40_evaluate(ParserTestCase):
             ],
         )
 
+    def test_043_eval_ask_invalid_default_target(self):
+        policy = parser.StringPolicy(
+            policy="""\
+            * * test-vm3 test-vm2 ask default_target=test-vm1"""
+        )
+        with unittest.mock.patch("qrexec.policy.parser.logging") as mock_log:
+            resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm2"))
+        self.assertIsInstance(resolution, parser.AskResolution)
+        self.assertCountEqual(
+            sorted(resolution.targets_for_ask),
+            [
+                "test-vm2",
+            ],
+        )
+        self.assertIsNone(resolution.default_target)
+        mock_log.warning.assert_called_once()
+
     def test_050_eval_resolve_dispvm(self):
         policy = parser.StringPolicy(
             policy="""\
