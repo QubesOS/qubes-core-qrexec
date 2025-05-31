@@ -53,6 +53,7 @@ allow qubes_qrexec_agent_t xauth_exec_t:file execute;
 type_transition qubes_qrexec_agent_t qubes_var_run_t:sock_file qubes_qrexec_socket_t "qrexec-agent";
 manage_sock_files_pattern(qubes_qrexec_agent_t, qubes_var_run_t, qubes_qrexec_socket_t)
 write_sock_files_pattern(qubes_qrexec_agent_t, qubes_var_run_t, qubes_var_run_t)
+delete_sock_files_pattern(qubes_qrexec_agent_t, qubes_var_run_t, qubes_var_run_t)
 allow domain qubes_qrexec_agent_t:unix_stream_socket { rw_inherited_sock_file_perms ioctl };
 allow qubes_qrexec_agent_t domain:unix_stream_socket connectto;
 allow qubes_qrexec_agent_t file_type:sock_file { rw_sock_file_perms ioctl };
