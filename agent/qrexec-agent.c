@@ -995,4 +995,6 @@ int main(int argc, char **argv)
     }
 
     libvchan_close(ctrl_vchan);
+
+    unlink(agent_trigger_path);
 }
