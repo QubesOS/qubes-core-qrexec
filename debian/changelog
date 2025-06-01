@@ -1,3 +1,10 @@
+qubes-core-qrexec (4.3.10-1) unstable; urgency=medium
+
+  * selinux: fix qrexec-agent restart
+  * qrexec-agent: remove socket on shutdown
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 01 Jun 2025 20:54:08 +0200
+
 qubes-core-qrexec (4.3.9-1) unstable; urgency=medium
 
   [ Ben Grande ]
