@@ -1314,6 +1314,17 @@ class Ask(ActionType):
             elif is_dom0(default_target):
                 default_target = "dom0"
 
+        if default_target not in targets_for_ask:
+            logging.warning(
+                "warning: policy define default_target=%s at %s:%s "
+                "but it is not amoung allowed targets (%s)",
+                default_target,
+                self.rule.filepath,
+                self.rule.lineno,
+                ", ".join(targets_for_ask),
+            )
+            default_target = None
+
         return request.ask_resolution_type(
             self.rule,
             request,
