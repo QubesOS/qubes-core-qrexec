@@ -1,3 +1,32 @@
+qubes-core-qrexec (4.2.24-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Fix checking for memory allocation errors
+
+  [ Marek Marczykowski-Górecki ]
+  * rpm: drop BR: lsb-core-noarch
+  * Fix protocol version negotiation on agent reconnect
+  * Add error messages to few more QREXEC_EXIT_PROBLEM cases
+  * Add RTD config file
+
+  [ Frédéric Pierret (fepitre) ]
+  * Several fixes for doc inclusion
+
+  [ Simon Gaiser ]
+  * qrexec-policy-daemon: reject policy.Eval for an empty service name
+  * qrexec-policy-agent: Replace usage of deprecated
+    Gtk.Entry.set_icon_from_stock
+
+  [ Marek Marczykowski-Górecki ]
+  * Restart qrexec-agent on update
+  * rpm: fix systemd unit installation
+  * Use glib's native asyncio integration when available
+  * archlinux: restart qubes-qrexec-agent on update
+  * selinux: fix qrexec-agent restart
+  * qrexec-agent: remove socket on shutdown
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 04 Jun 2025 03:36:26 +0200
+
 qubes-core-qrexec (4.2.23-1) unstable; urgency=medium
 
   [ Piotr Bartman-Szwarc ]
