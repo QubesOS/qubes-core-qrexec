@@ -1314,10 +1314,10 @@ class Ask(ActionType):
             elif is_dom0(default_target):
                 default_target = "dom0"
 
-        if default_target not in targets_for_ask:
+        if default_target and default_target not in targets_for_ask:
             logging.warning(
                 "warning: policy define default_target=%s at %s:%s "
-                "but it is not amoung allowed targets (%s)",
+                "but it is not among allowed targets (%s)",
                 default_target,
                 self.rule.filepath,
                 self.rule.lineno,
