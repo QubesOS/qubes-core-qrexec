@@ -4,8 +4,10 @@
 Every Qubes domain can trigger various RPC services, but if such call would be
 allowed depends on Qubes RPC policy (qrexec policy in short).
 
-Qrexec policy format
---------------------
+Qrexec policy format v1
+-----------------------
+
+.. warning:: this format is replaced by :doc:`multifile-policy`
 
 Policy consists of a file, which is parsed line-by-line. First matching line
 is used as an action.
