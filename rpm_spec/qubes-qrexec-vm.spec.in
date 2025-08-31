@@ -119,7 +119,7 @@ exit 0
 # %%post of this package. Redo the action in %%posttrans
 %systemd_post qubes-qrexec-agent.service
 # and then start it back
-if systemctl is-enabled qubes-qrexec-agent.service >/dev/null 2>&1; then
+if [ -e /run/systemd/system ] && systemctl is-enabled qubes-qrexec-agent.service >/dev/null 2>&1; then
     systemctl start qubes-qrexec-agent.service
 fi
 
