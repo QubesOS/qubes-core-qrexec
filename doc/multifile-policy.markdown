@@ -5,9 +5,9 @@
 The aim of this improvement is to increase flexibility of qrexec policy
 management. If user wishes to install a Qubes-based application, 
 
-# The changes
+## The changes
 
-## New file syntax
+### New file syntax
 
 ```
 qrexec.Service  +ARGUMENT   SRCQUBE     DSTQUBE     {allow|deny|ask} [PARAM=VALUE [PARAM=VALUE ...]]
@@ -31,7 +31,7 @@ Supported params for actions other than `deny` (*NO CHANGE*):
 Service may be specified as `*` (a single asterisk) which means "any service".
 For that case, argument also has to be `*`.
 
-### Qube specification
+#### Qube specification
 
 | token                 | SRCQUBE   | DSTQUBE   | target=   | orig. target |
 | --------------------- | --------- | --------- | --------- | --------- |
@@ -45,15 +45,15 @@ For that case, argument also has to be `*`.
 | `@tag:TAG`            | +         | +         | -         | -         |
 | `@type:TYPE`          | +         | +         | -         | -         |
 
-### Rationale for \*
+#### Rationale for \*
 Previously there was no possibility to ensure that a call is prohibited for any
 argument, not just as a default and hoping that no-one allowed any particular
 argument.
 
-### Rationale for dropping comma as separator of params
+#### Rationale for dropping comma as separator of params
 Simplicity.
 
-## New policy location
+### New policy location
 
 The files reside in `/etc/qubes/policy.d`. Files with `.` as first character
 and/or files not ending with `.policy` are ignored.
@@ -65,7 +65,7 @@ qrexec call to be rejected.
 
 Files are considered in lexicographical order of the "C" locale.
 
-### Rationale for file name constraints
+#### Rationale for file name constraints
 
 The command `ls` has locale-dependent order. Many locales have different sort
 orders than "C" locale for mixed-case filenames. If multiple files share common
@@ -84,7 +84,7 @@ files together with edited files. Typically they won't parse correctly, so they
 would cause errors. Effectively this would break any qrexec calls while the
 policy file is opened for editing.
 
-## New include syntax
+### New include syntax
 ```
 !include FILEPATH
 !include-dir DIRPATH
@@ -103,7 +103,7 @@ The character `@` was changed to `!`. This is to have difference between `@`
 tokens which are used in actual rules and the tokens that actually changes line
 syntax.
 
-## New per-service include syntax
+### New per-service include syntax
 ```
 !include-service {qrexec.Service|*} {+ARGUMENT|*} FILENAME
 ```
@@ -123,7 +123,7 @@ as it is the only way to express policy for multiple services in one place. For
 example it is used for Admin API, which consists of multiple calls which should
 be managed together.
 
-## Compatibility statement (R4.0)
+### Compatibility statement (R4.0)
 ```
 !compat-4.0
 ```
@@ -136,18 +136,18 @@ filename) not to shadow the default policy.
 
 This statement is transitional and will be unavailable in 5.0.
 
-## New Policy API service: per-policy restore
+### New Policy API service: per-policy restore
 
 The service `policy.RestoreService+SERVICE` restores a service, not an API. It
 operates on `/etc/qubes/policy.d/40-policyapi` file. The content of the policy
 should only include rules related to the SERVICE. Arguments are not constrained.
 
-# Other ideas and options not included elsewhere
+## Other ideas and options not included elsewhere
 
 This section is a coredump of ideas I came upon while thinking this through.
 Most of those are probably rubbish.
 
-# An overview of policy files
+## An overview of policy files
 
 By default we ship those files:
 
@@ -170,9 +170,9 @@ This is expected of vendors to avoid conflicts between different packages.
 A non-numbered `README` file is shipped, with (commented) explanation. This file
 should not contain any policy.
 
-# Examples (informative)
+## Examples (informative)
 
-## Support for both R4.x and R5.0
+### Support for both R4.x and R5.0
 
 In R5.0 package include this transitional policy:
 
