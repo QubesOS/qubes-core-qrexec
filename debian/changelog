@@ -1,3 +1,11 @@
+qubes-core-qrexec (4.3.11-1) unstable; urgency=medium
+
+  * policy: ignore (with warning) non-allowed default_target=
+  * Fix warning about wrong default_target
+  * rpm: don't fail posttrans scriptlet when running in chroot/container
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 31 Aug 2025 14:10:02 +0200
+
 qubes-core-qrexec (4.3.10-1) unstable; urgency=medium
 
   * selinux: fix qrexec-agent restart
