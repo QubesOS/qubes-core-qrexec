@@ -9,6 +9,7 @@ Build-Depends:
  pkg-config,
  dh-python,
  lsb-release,
+ python3-myst-parser,
  python3-setuptools,
  python3-gi (>= 3.50.0) | python3-gbulb,
  pandoc,
