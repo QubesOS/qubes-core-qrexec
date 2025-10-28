@@ -2046,7 +2046,9 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
     def __init__(
         self,
         *,
-        policy_path: Union[None, pathlib.PurePath, Iterable[pathlib.PurePath]],
+        policy_path: Union[
+            None, pathlib.PurePath, Iterable[pathlib.PurePath]
+        ] = None,
     ) -> None:
         super().__init__()
         if policy_path is None:
