@@ -16,7 +16,7 @@ if ! [ -L "$qrexec_name_sock" ]; then
     exit 1
 fi
 
-qrexec_id_sock=$(readlink "$qrexec_name_sock")
+qrexec_id_sock=$(readlink -e "$qrexec_name_sock")
 
 if [ -z "$qrexec_id_sock" ]; then
     echo "$0: readlink failed for $qrexec_name_sock" >&2
