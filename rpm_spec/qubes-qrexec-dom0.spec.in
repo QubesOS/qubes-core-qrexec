@@ -111,7 +111,6 @@ rm -f %{name}-%{version}
 %dir %{_sysconfdir}/qubes-rpc/policy/include
 
 %{_sysconfdir}/qubes-rpc/policy.RegisterArgument
-%{_sysconfdir}/qubes-rpc/qubes.WaitForSession
 %{_sysconfdir}/qubes-rpc/policy.List
 %{_sysconfdir}/qubes-rpc/policy.Get
 %{_sysconfdir}/qubes-rpc/policy.GetFiles

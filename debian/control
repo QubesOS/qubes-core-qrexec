@@ -23,8 +23,11 @@ Depends:
  python3-qrexec,
  ${shlibs:Depends},
  ${misc:Depends}
-Replaces: qubes-core-agent-qrexec (<< 4.1.0-1)
+Replaces:
+  qubes-core-agent-qrexec (<< 4.1.0-1),
+  qubes-core-agent (<< 4.3.40)
 Breaks:
+ qubes-core-agent (<< 4.3.40),
  qubes-core-agent-qrexec (<< 4.1.0-1),
  qubes-gui-agent (<< 4.1.6-1),
  qubes-gpg-split (<< 2.0.45-1),
