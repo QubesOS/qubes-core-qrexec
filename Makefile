@@ -36,6 +36,7 @@ install-base: all-base
 	install -d $(DESTDIR)/etc/qubes-rpc -m 755
 	ln -sf /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Ask
 	ln -sf /var/run/qubes/policy-agent.sock $(DESTDIR)/etc/qubes-rpc/policy.Notify
+	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc-base/*
 	install -d $(DESTDIR)/etc/xdg/autostart -m 755
 	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
 		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
