@@ -28,7 +28,7 @@ import subprocess
 
 from ..policy.admin_client import PolicyClient
 from .. import RPCNAME_ALLOWED_CHARSET
-from ..client import VERSION
+from ..client import IN_DOM0
 
 parser = argparse.ArgumentParser(
     usage="qubes-policy {[-l]|-g|-r|-d} [include/][RPCNAME[+ARGUMENT]]"
@@ -116,7 +116,7 @@ def run_method(method, name, client, is_include):
 def main(args=None):
     args = parser.parse_args(args)
 
-    if VERSION == "dom0" and os.getuid() != 0:
+    if IN_DOM0 and os.getuid() != 0:
         print("You need to run as root in dom0")
         sys.exit(1)
 
