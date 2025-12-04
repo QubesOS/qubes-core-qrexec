@@ -31,7 +31,7 @@ import sys
 import tempfile
 from ..policy.admin_client import PolicyClient
 from .. import RPCNAME_ALLOWED_CHARSET, POLICYPATH, INCLUDEPATH
-from ..client import VERSION
+from ..client import IN_DOM0
 
 
 def validate_name(name):
@@ -185,7 +185,7 @@ def main():
     )
     args = parser.parse_args()
 
-    if VERSION == "dom0" and os.getuid() != 0:
+    if IN_DOM0 and os.getuid() != 0:
         print("You need to run as root in dom0")
         sys.exit(1)
 

@@ -82,11 +82,11 @@ def _list_compat_files(legacy_path):
             continue
 
         if filepath.suffix in IGNORED_SUFFIXES:
-            logging.info("ignoring %s (ignored suffix)")
+            logging.info("ignoring %s (ignored suffix)", filepath)
             continue
 
         if filepath.name.startswith("."):
-            logging.info("ignoring %s (dotfile)")
+            logging.info("ignoring %s (dotfile)", filepath)
             continue
 
         invalid_chars = parser.get_invalid_characters(filepath.name)

@@ -24,13 +24,13 @@ from .utils import prepare_subprocess_kwds
 
 QREXEC_CLIENT_DOM0 = "/usr/bin/qrexec-client"
 QREXEC_CLIENT_VM = "/usr/bin/qrexec-client-vm"
-
-VERSION = None
+# pylint: disable=invalid-name
+IN_DOM0 = None
 
 if pathlib.Path(QREXEC_CLIENT_DOM0).is_file():
-    VERSION = "dom0"
+    IN_DOM0 = True
 elif pathlib.Path(QREXEC_CLIENT_VM).is_file():
-    VERSION = "vm"
+    IN_DOM0 = False
 
 
 def call(dest: str, rpcname: str, arg: Optional[str] = None, *, input=None):
@@ -104,15 +104,15 @@ def make_command(dest, rpcname, arg):
         assert " " not in arg
         rpcname = f"{rpcname}+{arg}"
 
-    if VERSION == "dom0":
+    if IN_DOM0 is True:
         return [
             QREXEC_CLIENT_DOM0,
             "-d",
             dest,
             f"DEFAULT:QUBESRPC {rpcname} dom0",
         ]
-    if VERSION == "vm":
+    if IN_DOM0 is False:
         return [QREXEC_CLIENT_VM, "--", dest, rpcname]
 
-    assert VERSION is None
+    assert IN_DOM0 is None
     raise NotImplementedError("qrexec not available")
