@@ -1,0 +1,87 @@
+#!/bin/sh
+#
+# If no argument is provided, wait for the session to start.
+# If QREXEC_SERVICE_ARGUMENT=guid, wait for QREXEC_REMOTE_DOMAIN's GUID.
+
+set -eu
+
+# Waits for qubes-guid to become available for a given domain.
+wait_client_guid(){
+    qube="${1-}"
+    if test -z "$qube"; then
+        echo "QREXEC_REMOTE_DOMAIN variable needs to be set" >&2
+        exit 1
+    fi
+
+    prefix="/var/run/qubes"
+    if test "$in_dom0" = "true"; then
+        qrexec_name_sock="$prefix/qrexec.$qube"
+        if ! test -L "$qrexec_name_sock"; then
+            echo "$0: $qrexec_name_sock not found, domain might be dead" >&2
+            exit 1
+        fi
+        qrexec_id_sock="$(readlink -e "$qrexec_name_sock")"
+        if test -z "$qrexec_id_sock"; then
+            echo "$0: readlink failed for $qrexec_name_sock" >&2
+            exit 1
+        fi
+        xid="${qrexec_id_sock##*/qrexec.}"
+        guid_running="${qrexec_id_sock%/*}/guid-running.$xid"
+    else
+        xid="$(qvm-prefs -- "$qube" xid)"
+        guid_running="$(readlink -e "$prefix/guid-running.$xid")"
+    fi
+
+    while true; do
+        if test -f "$guid_running"; then
+            break
+        fi
+
+        if test "$in_dom0" = "true" && ! test -e "$qrexec_id_sock"; then
+            echo "$0: $qrexec_id_sock not found, domain might be dead" >&2
+            exit 1
+        fi
+
+        sleep 0.5
+    done
+    exit 0
+}
+
+# Wait for our session to complete.
+wait_self_session(){
+    if ! test "$in_dom0" = "true" &&
+        test "$(qubesdb-read --default=True /qubes-gui-enabled)" = "True"
+    then
+        user="$(qubesdb-read /default-user || echo 'user')"
+        while ! test -e "/var/run/qubes/qrexec-server.$user.sock"; do
+            sleep 0.1
+        done
+    fi
+
+    true "${XDG_RUNTIME_DIR:="/run/user/$(id -u)"}"
+    true "${DBUS_SESSION_BUS_ADDRESS:="unix:path=${XDG_RUNTIME_DIR}/bus"}"
+    export DBUS_SESSION_BUS_ADDRESS
+    systemctl --user --wait --quiet is-system-running
+    exit 0
+}
+
+main(){
+    arg="${QREXEC_SERVICE_ARGUMENT-}"
+    client="${QREXEC_REMOTE_DOMAIN-}"
+    in_dom0=""
+    if command -v qrexec-client >/dev/null; then
+        in_dom0="true"
+    fi
+    case "${arg}" in
+        guid)
+            wait_client_guid "$client"
+            ;;
+        "")
+            wait_self_session
+            ;;
+        *)
+            echo "Invalid argument, only allowed value is 'guid'" >&2
+    esac
+}
+
+main
