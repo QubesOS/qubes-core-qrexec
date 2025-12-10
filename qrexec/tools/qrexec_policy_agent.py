@@ -20,7 +20,7 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #
 
-""" Agent running in user session, responsible for asking the user about policy
+"""Agent running in user session, responsible for asking the user about policy
 decisions."""
 
 import itertools

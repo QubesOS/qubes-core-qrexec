@@ -243,7 +243,7 @@ qubes.Filecopy\t*\twork\t@anyvm\task default_target=personal
 
 
 def test_input_rules_simple(
-    mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]
+    mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path],
 ):
     # rules that are too complex for the configtool
     new_policy_dir, old_policy_dir = mock_policy_dirs
@@ -285,7 +285,7 @@ qubes.InputTablet\t*\tsys-usb\tdom0\tdeny
 
 
 def test_input_multiple_rules(
-    mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]
+    mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path],
 ):
     # rules that are too complex for the configtool
     new_policy_dir, old_policy_dir = mock_policy_dirs
@@ -341,7 +341,7 @@ qubes.InputKeyboard\t*\tsys-usb\t@anyvm\tdeny
 
 
 def test_input_multiple_sys_usbs(
-    mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]
+    mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path],
 ):
     # rules that are too complex for the configtool
     new_policy_dir, old_policy_dir = mock_policy_dirs

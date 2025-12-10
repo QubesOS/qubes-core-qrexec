@@ -1590,7 +1590,7 @@ class TestClientVm(unittest.TestCase):
     def test_run_client_replace_chars(self):
         target_client = self.run_service(options=["-t"])
         target_client.send_message(
-            qrexec.MSG_DATA_STDOUT, b"hello\x00world\xFF"
+            qrexec.MSG_DATA_STDOUT, b"hello\x00world\xff"
         )
         target_client.send_message(qrexec.MSG_DATA_STDOUT, b"")
         self.assertEqual(self.client.stdout.read(), b"hello_world_")
