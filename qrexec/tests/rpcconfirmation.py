@@ -27,15 +27,15 @@ import os
 from qrexec.tests.gtkhelpers import GtkTestCase, FocusStealingHelperMock
 from qrexec.tests.gtkhelpers import mock_domains_info, mock_whitelist
 
-from qrexec.tools.qrexec_policy_agent import VMListModeler
-from qrexec.tools.qrexec_policy_agent import RPCConfirmationWindow
-from qrexec.tools.qrexec_policy_agent import escape_and_format_rpc_text
+from qrexec.rpcconfirmation.base import VMListModeler
+from qrexec.rpcconfirmation.base import escape_and_format_rpc_text
+from qrexec.rpcconfirmation.generic import RPCConfirmationWindow
+from qrexec.rpcconfirmation.in_vm_admin_access import (
+    InVMAdminAccessRPCConfirmationWindow,
+)
 
 
 class MockRPCConfirmationWindow(RPCConfirmationWindow):
-    def _new_vm_list_modeler(self):
-        return VMListModeler(mock_domains_info)
-
     def _new_focus_stealing_helper(self):
         return FocusStealingHelperMock(
             self._rpc_window, self._rpc_ok_button, self._focus_stealing_seconds
@@ -407,6 +407,202 @@ class RPCConfirmationWindowTestWhitelist(unittest.TestCase):
         domains = rpcWindow.get_shown_domains()
 
         self.assertCountEqual(domains, expected)
+
+
+class MockInVMAdminAccessRPCConfirmationWindow(
+    InVMAdminAccessRPCConfirmationWindow
+):
+    def _new_focus_stealing_helper(self):
+        return FocusStealingHelperMock(
+            self._rpc_window, self._rpc_ok_button, self._focus_stealing_seconds
+        )
+
+    def __init__(
+        self,
+        source,
+        service,
+        argument,
+        whitelist,
+        target=None,
+        focus_stealing_seconds=1,
+    ):
+        # pylint: disable=too-many-arguments
+        self._focus_stealing_seconds = focus_stealing_seconds
+
+        super().__init__(
+            mock_domains_info,
+            source,
+            service,
+            argument,
+            whitelist,
+            target,
+        )
+
+        self.test_called_close = False
+        self.test_called_show = False
+
+        self.test_clicked_ok = False
+        self.test_clicked_cancel = False
+
+    def _can_perform_action(self):
+        return True
+
+    def _close(self):
+        self.test_called_close = True
+
+    def _show(self):
+        self.test_called_show = True
+
+    async def _wait_for_close(self):
+        pass
+
+    def _clicked_ok(self, button):
+        super()._clicked_ok(button)
+        self.test_clicked_ok = True
+
+    def _clicked_cancel(self, button):
+        super()._clicked_cancel(button)
+        self.test_clicked_cancel = True
+
+
+@unittest.skipUnless(os.environ.get("DISPLAY"), "no DISPLAY variable")
+class InVMAdminAccessRPCConfirmationWindowTestBase(GtkTestCase):
+    def __init__(
+        self,
+        test_method,
+        source_name="test-source",
+        service="qubes.AuthorizeInVMAdminAccess",
+        argument="+",
+        whitelist=["dom0"],
+        target_name="dom0",
+    ):
+        # pylint: disable=too-many-arguments
+        GtkTestCase.__init__(self, test_method)
+        self.test_source_name = source_name
+        self.test_service = service
+        self.test_argument = argument
+        self.test_target_name = target_name
+
+        self.whitelist = whitelist
+
+        self._test_time = 0.1
+
+    def setUp(self):
+        self.window = MockInVMAdminAccessRPCConfirmationWindow(
+            self.test_source_name,
+            self.test_service,
+            self.test_argument,
+            self.whitelist,
+            self.test_target_name,
+            focus_stealing_seconds=self._test_time,
+        )
+
+    def test_has_linked_the_fields(self):
+        self.assertIsNotNone(self.window._rpc_window)
+        self.assertIsNotNone(self.window._rpc_ok_button)
+        self.assertIsNotNone(self.window._rpc_cancel_button)
+        self.assertIsNotNone(self.window._rpc_label)
+        self.assertIsNotNone(self.window._source_entry)
+        self.assertIsNotNone(self.window._target_entry)
+
+    def test_is_showing_source(self):
+        self.assertTrue(
+            self.test_source_name in self.window._source_entry.get_text()
+        )
+
+    def test_is_showing_target(self):
+        self.assertTrue(
+            self.test_target_name in self.window._target_entry.get_text()
+        )
+
+    def test_is_showing_operation(self):
+        self.assertTrue(self.test_service in self.window._rpc_label.get_text())
+
+    async def test_lifecycle_open_select_ok(self):
+        await self._lifecycle_start()
+        self._lifecycle_click(click_type="ok")
+
+    async def test_lifecycle_open_select_cancel(self):
+        await self._lifecycle_start()
+        self._lifecycle_click(click_type="cancel")
+
+    async def test_lifecycle_open_select_exit(self):
+        await self._lifecycle_start()
+        self._lifecycle_click(click_type="exit")
+
+    async def test_lifecycle_open_cancel(self):
+        await self._lifecycle_start()
+        self._lifecycle_click(click_type="cancel")
+
+    async def test_lifecycle_open_exit(self):
+        await self._lifecycle_start()
+        self._lifecycle_click(click_type="exit")
+
+    def _lifecycle_click(self, click_type):
+        if click_type == "ok":
+            self.window._rpc_ok_button.clicked()
+
+            self.assertTrue(self.window.test_clicked_ok)
+            self.assertFalse(self.window.test_clicked_cancel)
+            self.assertTrue(self.window._confirmed)
+            self.assertIsNotNone(self.window._target_name)
+        elif click_type == "cancel":
+            self.window._rpc_cancel_button.clicked()
+
+            self.assertFalse(self.window.test_clicked_ok)
+            self.assertTrue(self.window.test_clicked_cancel)
+            self.assertFalse(self.window._confirmed)
+        elif click_type == "exit":
+            self.window._close()
+
+            self.assertFalse(self.window.test_clicked_ok)
+            self.assertFalse(self.window.test_clicked_cancel)
+            self.assertIsNone(self.window._confirmed)
+
+        self.assertTrue(self.window.test_called_close)
+
+    async def _lifecycle_start(self):
+        self.assertFalse(self.window.test_called_close)
+        self.assertFalse(self.window.test_called_show)
+
+        self.assert_initial_state(False)
+        self.assertTrue(
+            isinstance(self.window._focus_helper, FocusStealingHelperMock)
+        )
+
+        # Need the following because of pylint's complaints
+        if isinstance(self.window._focus_helper, FocusStealingHelperMock):
+            FocusStealingHelperMock.simulate_focus(self.window._focus_helper)
+
+        self.flush_gtk_events(self._test_time * 2)
+        self.assert_initial_state(True)
+
+        # We expect the call to exit immediately, since no window is opened
+        await self.window.confirm_rpc()
+
+        self.assertFalse(self.window.test_called_close)
+        self.assertTrue(self.window.test_called_show)
+
+        self.assert_initial_state(True)
+
+        self.assertFalse(self.window.test_called_close)
+        self.assertTrue(self.window.test_called_show)
+        self.assertFalse(self.window.test_clicked_ok)
+        self.assertFalse(self.window.test_clicked_cancel)
+        self.assertFalse(self.window._confirmed)
+
+    def assert_initial_state(self, after_focus_timer):
+        self.assertEqual(self.window._target_name, "dom0")
+        self.assertFalse(self.window.test_clicked_ok)
+        self.assertFalse(self.window.test_clicked_cancel)
+        self.assertFalse(self.window._confirmed)
+
+        if after_focus_timer:
+            self.assertTrue(self.window._focus_helper.can_perform_action())
+            self.assertTrue(self.window._rpc_ok_button.get_sensitive())
+        else:
+            self.assertFalse(self.window._focus_helper.can_perform_action())
+            self.assertFalse(self.window._rpc_ok_button.get_sensitive())
 
 
 if __name__ == "__main__":
