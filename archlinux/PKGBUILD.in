@@ -26,6 +26,7 @@ makedepends=(
     qubes-libvchan
 )
 provides=('qubes-vm-qrexec')
+conflicts=('qubes-vm-core<4.3.40')
 install=archlinux/PKGBUILD.install
 _pkgnvr="${pkgname}-${pkgver}-${pkgrel}"
 source=("${_pkgnvr}.tar.gz")
@@ -57,4 +58,3 @@ package() {
 }
 
 # vim:set ts=2 sw=2 et:
-

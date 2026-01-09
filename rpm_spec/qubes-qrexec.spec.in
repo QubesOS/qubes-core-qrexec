@@ -58,6 +58,7 @@ Requires:   python%{python3_pkgversion}-pyinotify
 Requires:   python%{python3_pkgversion}-inotify
 %endif
 Conflicts:  qubes-utils-libs < 4.1.0
+Conflicts:  qubes-core-agent < 4.3.40
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 # UUID in SystemInfo response from qubesd
 Conflicts:  qubes-core-dom0 < 4.3.9
@@ -145,6 +146,7 @@ rm -f %{name}-%{version}
 %dir %{_sysconfdir}/qubes-rpc
 %{_sysconfdir}/qubes-rpc/policy.Ask
 %{_sysconfdir}/qubes-rpc/policy.Notify
+%{_sysconfdir}/qubes-rpc/qubes.WaitForSession
 
 %{_sysconfdir}/xdg/autostart/qrexec-policy-agent.desktop
 
