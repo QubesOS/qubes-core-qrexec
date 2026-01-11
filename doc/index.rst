@@ -12,9 +12,11 @@ Welcome to qubes-core-qrexec's documentation!
    qrexec-policy-parser_compat
    qrexec-exc
    qrexec-utils
+   multifile-policy
    execution
    qrexec-policy-daemon
    qrexec-remotevm
+   manpages/index
 
 Indices and tables
 ==================
