@@ -1,0 +1,62 @@
+## Vim spell file
+## Language:     Qrexec
+## Maintainer:   Ben Grande <ben@invisiblethingslab.com>
+## License:      Vim (see :h license)
+## Repository:   https://github.com/QubesOS/qubes-core-qrexec
+## Last Change:  2024 Oct 10
+##
+## Vim requires a compiled spell file to work and this process is manual.
+## If you have changed this '.add' file, please regenerate the '.spl' file:
+##   $ vim -u NONE -c "mkspell! -ascii qrexec.ascii.spl qrexec.ascii.add" -c q
+## or set Vim to auto compile ascii spell files when writing:
+##   autocmd BufWritePre,FileWritePre **/spell/*.ascii.add
+##         \ silent execute "mkspell! -ascii ".expand('%:r').".spl %"
+
+## Standard
+QubesOS
+Qubes
+qubes
+qube
+Qrexec
+RPC
+
+## Paths
+rpc-config
+
+## File types
+qrexecpolicy
+qrexecpolicyservice
+qrexecconfig
+
+## To do
+TODO
+FIXME
+XXX
+
+## Directives
+!compat-4.0
+!include
+!include-dir
+!include-service
+
+## Literal names
+UUID
+uuid
+dom0
+
+## Tokens
+@adminvm
+@anyvm
+@default
+@dispvm
+@dispvm:
+@dispvm:@tag:
+@tag:
+@type:
+
+## Types
+AdminVM
+AppVM
+DispVM
+TemplateVM
+StandaloneVM

@@ -22,6 +22,7 @@ build/
 *.gcno
 *.gcda
 *.gcov
+*.spl
 *~
 \#*#
 /selinux/*.pp

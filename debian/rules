@@ -25,10 +25,12 @@ export DESTDIR=$(shell pwd)/debian/tmp
 override_dh_auto_build:
 	make all-base
 	make all-vm
+	make all-vim
 
 override_dh_auto_install:
 	make install-base
 	make install-vm
+	make install-vim
 
 override_dh_install:
 	dh_install --fail-missing

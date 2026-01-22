@@ -1,0 +1,9 @@
+vim/ale_linters usr/share/vim-qrexec
+vim/autoload    usr/share/vim-qrexec
+vim/compiler    usr/share/vim-qrexec
+vim/doc         usr/share/vim-qrexec
+vim/ftdetect    usr/share/vim-qrexec
+vim/ftplugin    usr/share/vim-qrexec
+vim/indent      usr/share/vim-qrexec
+vim/spell       usr/share/vim-qrexec
+vim/syntax      usr/share/vim-qrexec

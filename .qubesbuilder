@@ -2,11 +2,13 @@ host:
   rpm:
     build:
     - rpm_spec/qubes-qrexec.spec
+    - rpm_spec/qubes-qrexec-vim.spec
     - rpm_spec/qubes-qrexec-dom0.spec
 vm:
   rpm:
     build:
     - rpm_spec/qubes-qrexec.spec
+    - rpm_spec/qubes-qrexec-vim.spec
     - rpm_spec/qubes-qrexec-vm.spec
   deb:
     build:

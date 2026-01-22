@@ -1,0 +1,82 @@
+#
+# This is the SPEC file for creating binary RPMs for the Dom0.
+#
+#
+# The Qubes OS Project, http://www.qubes-os.org
+#
+# Copyright (C) 2023 Ben Grande <ben@invisiblethingslab.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, see <https://www.gnu.org/licenses/>.
+#
+#
+
+Name:       qubes-core-qrexec-vim
+Version:    @VERSION@
+Release:    1%{dist}
+Summary:    The Qubes qrexec vim files
+
+Group:      Qubes
+Vendor:     Invisible Things Lab
+License:    Vim
+URL:        https://www.qubes-os.org
+
+BuildRequires:  vim-filesystem
+BuildRequires:  vim-enhanced
+BuildRequires:  make
+BuildRequires:  lsb_release
+
+Requires:   vim-filesystem
+
+Source0:    qubes-core-qrexec-vim-%{version}.tar.gz
+
+%description
+A Qrexec companion for the policy breakers. Vim files for Qrexec.
+
+%prep
+%setup -qn qubes-core-qrexec-vim-%{version}
+
+%build
+make all-vim
+
+%install
+make install-vim DESTDIR=$RPM_BUILD_ROOT DATADIR=%{_datadir}
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+rm -f %{name}-%{version}
+
+%files
+%defattr(-,root,root,-)
+%{_datadir}/vim/vimfiles/syntax/qrexecconfig.vim
+%{_datadir}/vim/vimfiles/syntax/qrexecpolicy.vim
+%{_datadir}/vim/vimfiles/syntax/qubespolicy.vim
+%{_datadir}/vim/vimfiles/syntax/qrexecpolicyservice.vim
+%{_datadir}/vim/vimfiles/autoload/qrexeccomplete.vim
+%{_datadir}/vim/vimfiles/ftdetect/qrexecconfig.vim
+%{_datadir}/vim/vimfiles/ftdetect/qrexecpolicy.vim
+%{_datadir}/vim/vimfiles/ftdetect/qrexecpolicyservice.vim
+%{_datadir}/vim/vimfiles/ftplugin/qrexecconfig.vim
+%{_datadir}/vim/vimfiles/ftplugin/qrexecpolicy.vim
+%{_datadir}/vim/vimfiles/ftplugin/qrexecpolicyservice.vim
+%{_datadir}/vim/vimfiles/ale_linters/qrexecpolicy/qubes_policy_lint.vim
+%{_datadir}/vim/vimfiles/spell/qrexec.ascii.add
+%{_datadir}/vim/vimfiles/doc/ale-qrexecpolicy.txt
+%{_datadir}/vim/vimfiles/doc/qrexec.txt
+%{_datadir}/vim/vimfiles/compiler/qrexec.vim
+%{_datadir}/vim/vimfiles/indent/qrexecconfig.vim
+%{_datadir}/vim/vimfiles/indent/qrexecpolicy.vim
+%{_datadir}/vim/vimfiles/indent/qrexecpolicyservice.vim
+
+%changelog
+@CHANGELOG@

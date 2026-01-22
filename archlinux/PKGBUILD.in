@@ -15,6 +15,7 @@ depends=(
     python-setuptools
     pam
     qubes-libvchan
+    vim-plugin-runtime
 )
 makedepends=(
     gcc
@@ -24,6 +25,7 @@ makedepends=(
     python-setuptools
     lsb-release
     qubes-libvchan
+    vim
 )
 provides=('qubes-vm-qrexec')
 install=archlinux/PKGBUILD.install
@@ -36,6 +38,7 @@ build() {
     cd "${_pkgnvr}"
     make all-base
     make all-vm
+    make all-vim
 }
 
 package() {
@@ -54,7 +57,9 @@ package() {
         SYSLIBDIR=/usr/lib \
         SYSTEM_DROPIN_DIR=/usr/lib/systemd/system \
         USER_DROPIN_DIR=/usr/lib/systemd/user
+    make install-vim \
+        DESTDIR="$pkgdir" \
+        DATADIR=/usr/share
 }
 
 # vim:set ts=2 sw=2 et:
-
