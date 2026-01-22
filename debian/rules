@@ -20,15 +20,17 @@ include /usr/share/dpkg/default.mk
 export DESTDIR=$(shell pwd)/debian/tmp
 
 %:
-	dh $@ --with systemd,python3
+	dh $@ --with systemd,python3,vim_addon
 
 override_dh_auto_build:
 	make all-base
 	make all-vm
+	make all-vim
 
 override_dh_auto_install:
 	make install-base
 	make install-vm
+	make install-vim
 
 override_dh_install:
 	dh_install --fail-missing

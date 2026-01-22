@@ -13,6 +13,8 @@ Build-Depends:
  python3-setuptools,
  python3-gi (>= 3.50.0) | python3-gbulb,
  pandoc,
+ vim,
+ dh-vim-addon,
 Standards-Version: 4.4.0.1
 Homepage: https://www.qubes-os.org
 #Vcs-Git: https://github.com/QubesOS/qubes-core-qrexec
@@ -33,6 +35,8 @@ Breaks:
  qubes-input-proxy (<< 1.0.17),
  qubes-pdf-converter (<< 2.1.7-1),
  qubes-usb-proxy (<< 1.0.28)
+Recommends:
+ qubes-core-qrexec-vim
 Description: Qubes qrexec agent
  Agent part of Qubes RPC system. A daemon responsible for starting processes as
  requested by dom0 or other VMs, according to dom0-enforced policy.
@@ -61,3 +65,16 @@ Depends:
  ${python3:Depends},
 Description: Qrexec policy related python module
  Qrexec policy related python module
+
+Package: qubes-core-qrexec-vim
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${vim-addon:Depends},
+Description: A Qrexec companion for the policy breakers.
+ Vim files for Qrexec.
+ - File types: Qrexec Policy, Qrexec Policy Service, Qrexec Config
+ - Syntax Highlighting: strict check, errors are emphasized
+ - Lint integration: native mode or via plugins (Dispatch, Ale)
+ - Code completion: based on syntax and previous entries
+ - Spell file: good words list
