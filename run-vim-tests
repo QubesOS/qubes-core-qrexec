@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+
+cmd="source % | call RunTests()"
+if test -z "${DEBUG-}"; then
+  cmd="${cmd} | q"
+fi
+
+vim -e -c "${cmd}" vim/test/syntax.vim
