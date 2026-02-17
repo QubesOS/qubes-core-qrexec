@@ -1,0 +1,28 @@
+===============================================================================
+ALE QREXEC POLICY Integration                         *ale-qrexecpolicy-options*
+
+===============================================================================
+qubes-policy-lint                           *ale-qrexecpolicy-qubes-policy-lint*
+
+Website: https://github.com/QubesOS/qubes-core-qrexec
+
+Options
+-------------------------------------------------------------------------------
+
+g:ale_qrexecpolicy_qubes_policy_lint_executable *g:ale_qrexecpolicy_qubes_policy_lint_executable*
+                                               *b:ale_qrexecpolicy_qubes_policy_lint_executable*
+  Type: |String|
+  Default: `'qubes-policy-lint'`
+
+  This variable can be set to change the path to qubes-policy-lint.
+
+
+g:ale_qrexecpolicy_qubes_policy_lint_options *g:ale_qrexecpolicy_qubes_policy_lint_options*
+                                            *b:ale_qrexecpolicy_qubes_policy_lint_options*
+  Type: |String|
+  Default: `''`
+
+  This variable can be set to pass additional options to qubes-policy-lint.
+
+===============================================================================
+ vim:tw=78:et:ft=help:norl:

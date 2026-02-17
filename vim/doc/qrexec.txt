@@ -1,0 +1,153 @@
+*qrexec.txt*  A Qrexec companion for the policy breakers
+*qrexec* *qrexec.vim* *vim-qrexec*  Last Change:  2024 Sep 25
+>
+       ______     ______     ______     __  __     ______     ______
+      /\  __ \   /\  == \   /\  ___\   /\_\_\_\   /\  ___\   /\  ___\
+      \ \ \/\_\  \ \  __<   \ \  __\   \/_/\_\/_  \ \  __\   \ \ \____
+       \ \___\_\  \ \_\ \_\  \ \_____\   /\_\/\_\  \ \_____\  \ \_____\
+        \/___/_/   \/_/ /_/   \/_____/   \/_/\/_/   \/_____/   \/_____/
+<
+                                                 For Vim version 8.2 or newer
+
+                                By Ben Grande
+                           <ben@invisiblethingslab.com>
+
+                              Reference Manual~
+
+CONTENTS                                                     *qrexec-contents*
+
+  Introduction...........................................|qrexec-introduction|
+  Options................................................|qrexec-options|
+  Lint...................................................|qrexec-lint|
+  Syntax.................................................|qrexec-syntax|
+  Completion.............................................|qrexec-completion|
+  Spell..................................................|qrexec-spell|
+  License................................................|qrexec-license|
+
+INTRODUCTION                                             *qrexec-introduction*
+
+Whenever you edit Qrexec files, a set of scripts are defined to help you
+write syntactically correct policies and configurations, lint the buffer and
+do code completion.
+
+Although the policy syntax is small, it takes one syntax error to break the
+parser, denying every Qrexec call made after the occurrence until the mistake
+is removed. With the vimfiles provided by this plugin, you can greatly
+decrease the chances of breaking your inter-qube connections.
+
+Available file types and directories where they are detected automatically:
+
+- qrexecpolicy:~
+        /etc/qubes/policy.d/*.policy
+        /run/qubes/policy.d/*.policy
+- qrexecpolicyservice:~
+        /etc/qubes/policy.d/include/*
+        /run/qubes/policy.d/include/*
+- qrexecconfig:~
+        /etc/qubes/rpc-config/*
+
+The source code is available at https://github.com/QubesOS/qubes-core-qrexec
+and at https://github.com/ben-grande/vim-qrexec
+
+OPTIONS                                                       *qrexec-options*
+
+g:qrexec_recommended_style                        *g:qrexec_recommended_style*
+        Type: |Number|, Default: `1`
+
+        Enables or disables recommended style conventions. If enabled, the
+        following options will be set: >
+          setlocal expandtab tabstop=2 softtabstop=2 shiftwidth=2 textwidth=78
+
+<        To disable the recommended behavior, set the following variable in
+        your |.vimrc|: >
+          let g:qrexec_recommended_style = 0
+<
+LINT                                                             *qrexec-lint*
+
+Several commands are provided that wrap the `qubes-policy-lint` executable.
+Additionally, `qubes-policy-lint` can be invoked directly with |:make| or
+dispatch.vim's ":Make" or by ale.vim's ":ALELint". ALE's main advantage over
+the previous methods is that it saves the buffer to a temporary file to lint a
+copy of the original, instead of saving the file in place to be linted,
+avoiding an erroneous file being applied just because you want it to be
+linted. All of the above methods utilize the |quickfix-window|.
+
+If you want to lint a policy that is embedded into another file type, such as
+Markdown fended code blocks, you can do so by linting the lines selected from
+Visual mode: >
+        :'<,'>w !qubes-policy-lint -
+        :'<,'>w !qubes-policy-lint --include-service -
+<
+SYNTAX                                                         *qrexec-syntax*
+
+The Qrexec parser is strict, so the syntax check must also be. The syntax
+highlighting goal is to show errors, the valid highlighting is just a nice
+side effect to help distinguish the fields and their data types.
+
+Every rule has a minimum and a maximum number of fields. While the line
+hasn't reached the least amount of fields, the last group is highlighted as
+incomplete:
+>
+        # qrexecpolicy
+        qubes.Example * @anyvm @default
+                               ^------^
+
+        # qrexecpolicyservice
+        @anyvm @anyvm
+               ^----^
+
+        # qrexecconfig
+        wait-for-session =
+        ^---------------^
+<
+On the other side, if the maximum number of fields has been reached,
+everything after it will be highlighted as an error:
+>
+        # qrexecpolicy and qrexecpolicyservice
+        !include-dir directory/ example test
+                                ^----------^
+<
+Duplicated parameters are also highlighted as an error:
+>
+        # qrexecpolicy
+        qubes.Example * * * allow target=test autostart=no target=diff
+                                                           ^---------^
+
+        # qrexecpolicyservice
+        * * deny notify=no notify=yes
+                           ^--------^
+<
+The syntax check is extensive but not perfect, it might fail on some edge
+cases where showing the error by highlighting would not be clear enough. To
+better understand its limitations, search for "TODO" and "Limitations" in the
+source code.
+
+COMPLETION                                                 *qrexec-completion*
+
+A completion function is provided. It can complete fields where there are
+known values or by entries present in the current buffer. You can use
+CTRL-X CTRL-U or CTRL-X CTRL-O during insert mode.  Consult |compl-function|
+and |compl-omni| for more help.
+
+Note that the completion based on the buffer entries will not verify the
+syntax, it will only do a basic check, so if you inserted an erroneous item
+on the file and the line reached the minimum number of fields, then the
+erroneous item will also appear in the completion list. Make sure to first
+correct all syntax errors before trying to complete an item.
+
+SPELL                                                           *qrexec-spell*
+
+The option 'spell' is enabled and 'spelllang' has the value "en_us,qrexec"
+appended. If any spelling errors occurs but you consider them a good word, add
+them to your 'spellfile'.
+
+The spell file is only used for comments, as the syntax disables spell
+checking in rules to not distract the reader's attention, as the rule fields
+can't be spell checked.
+
+LICENSE                                                       *qrexec-license*
+
+Copyright (c) Ben Grande. Distributed under the same terms as Vim itself.
+See |license|.
+
+ vim:tw=78:et:ft=help:norl:

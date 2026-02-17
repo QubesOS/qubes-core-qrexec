@@ -5,6 +5,7 @@ PYTHON ?= python3
 export PYTHON CC MAKEFLAGS CFLAGS
 
 SYSLIBDIR ?= /lib
+DATADIR ?= /usr/share
 UNITDIR ?= $(SYSLIBDIR)/systemd/system
 
 help:
@@ -15,6 +16,7 @@ clean:
 	+$(MAKE) -C libqrexec clean
 	+$(MAKE) -C daemon clean
 	+$(MAKE) -C agent clean
+	+$(MAKE) -C vim clean
 	rm -rf selinux/*.pp selinux/tmp/
 .PHONY: clean
 
@@ -92,5 +94,15 @@ install-vm-selinux:
 #	install -t $(DESTDIR)/etc/qubes-rpc -m 755 qubes-rpc/*
 .PHONY: install-vm
 
-all: all-vm all-dom0
+
+all-vim:
+	+$(MAKE) all -C vim
+.PHONY: all-vim
+
+install-vim: all-vim
+	+$(MAKE) install -C vim
+.PHONY: install-vim
+
+
+all: all-vm all-dom0 all-vim
 .PHONY: all

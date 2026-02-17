@@ -1,0 +1,95 @@
+## Qrexec Config
+## Syntax Test
+## vim:ft=qrexecconfig:spell
+
+## Valid {{{
+## Key, assignment and value can optionally be separated with whitespace.
+force-user='user'
+force-user = 'root'
+wait-for-session = 0
+wait-for-session=0
+## String values must be enclosed in single quotes.
+force-user='root'
+force-user   =   'user'
+## Boolean Integer values must be 0/1, true/false.
+wait-for-session=0
+wait-for-session  =   1
+wait-for-session=true
+wait-for-session  =  false
+skip-service-descriptor=false
+skip-service-descriptor  =  true
+exit-on-client-eof=false
+exit-on-client-eof  =  true
+exit-on-service-eof=false
+exit-on-service-eof  =  true
+## }}}
+## Invalid {{{
+## Keys must be known.
+force-user Y = 'user'
+force-useruser = 'user'
+wait-for-sessionX = 1
+wait-for-session X= 1
+skip-service-descriptor-
+skip-service-descriptors
+exit-on-client-eoff
+eexit-on-service-eof=false
+## Assignment must be made.
+force-user
+wait-for-session
+skip-service-descriptor
+exit-on-client-eof
+eexit-on-service-eof
+## Value of assignment must also be made
+force-user =
+wait-for-session =
+skip-service-descriptor =
+exit-on-client-eof =
+eexit-on-service-eof =
+## Assignment must respect the value type, can't repeat the assignment sign.
+force-user =='user'
+wait-for-session == 1
+skip-service-descriptor == 1
+exit-on-client-eof == 1
+eexit-on-service-eof == 1
+## Strings must be single quoted.
+force-user = user
+force-user = "user"
+## Strings must be quoted correctly, else, show the error.
+force-user = u'se'r
+## If value is provided, it can't be empty.
+force-user = ''
+## Value can't contain disallowed characters.
+force-user='u\ser'
+force-user = ' user '
+## Nothing can come before the opening quote.
+force-user = a 't'
+force-user = a't'
+## Nothing can come after the closing quote.
+force-user = 'u'ser
+force-user = 'u'a'
+## Unterminated quoted string is also shown.
+force-user = 'unfinished
+force-user = unfinished'
+## For Boolean Integers, block everything that is not 0 or 1.
+wait-for-session = 2
+wait-for-session = -1
+wait-for-session = 11
+skip-service-descriptor = 01
+skip-service-descriptor = '1'
+skip-service-descriptor = \1
+## For Boolean Strings, block everything that is not false or true.
+wait-for-session = falsee
+wait-for-session = xtrue
+wait-for-session = very true
+skip-service-descriptor = 0
+skip-service-descriptor = 1
+skip-service-descriptor = very false
+skip-service-descriptor = 'true'
+skip-service-descriptor = false ok
+exit-on-client-eof = ffalse
+exit-on-client-eof = 0
+exit-on-client-eof = 1
+exit-on-service-eof = truue
+exit-on-service-eof = 0
+exit-on-service-eof = 1
+## }}}
