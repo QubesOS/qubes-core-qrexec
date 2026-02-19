@@ -447,7 +447,7 @@ static void wake_meminfo_writer(void)
 
 static int try_fork_server(int type, int connect_domain, int connect_port,
         const char *cmdline, size_t cmdline_len, const char *username) {
-    char *colon;
+    const char *colon;
     char *fork_server_socket_path;
     int s = -1;
     struct sockaddr_un remote;

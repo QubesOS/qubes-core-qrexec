@@ -599,7 +599,7 @@ struct qrexec_parsed_command *parse_qubes_rpc_command(
 
         /* Parse service name ("qubes.Service") */
 
-        char *const plus = memchr(start, '+', descriptor_len);
+        const char *const plus = memchr(start, '+', descriptor_len);
         size_t const name_len = plus != NULL ? (size_t)(plus - start) : descriptor_len;
         if (name_len > NAME_MAX) {
             LOG(ERROR, "Service name too long to execute (length %zu)", name_len);
