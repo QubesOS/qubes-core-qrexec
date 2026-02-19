@@ -23,7 +23,9 @@
 #ifndef LIBQREXEC_UTILS_H
 #define LIBQREXEC_UTILS_H
 
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 #define _GNU_SOURCE 1
 #include <signal.h>
 #include <stdbool.h>
