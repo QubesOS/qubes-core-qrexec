@@ -1,3 +1,16 @@
+qubes-core-qrexec (4.2.25-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * rpm: don't fail posttrans scriptlet when running in chroot/container
+
+  [ Ben Grande ]
+  * Fix pylint complaints
+
+  [ Marek Marczykowski-Górecki ]
+  * Fix building on F44
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 20 Feb 2026 04:46:11 +0100
+
 qubes-core-qrexec (4.2.24-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
