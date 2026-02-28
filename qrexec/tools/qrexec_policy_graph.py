@@ -24,6 +24,8 @@ import pathlib
 
 import sys
 
+import qubesadmin
+
 from .. import POLICYPATH
 from .. import exc
 from .. import utils
@@ -78,8 +80,8 @@ argparser.add_argument(
 )
 
 
-def handle_single_action(args, action):
-    """Get single policy action and output (or not) a line to add"""
+def handle_single_action(args, action, app):
+    """Get single policy action and output (or not) lines to add"""
     if args.skip_labels:
         service = ""
     else:
@@ -91,19 +93,41 @@ def handle_single_action(args, action):
     if action.rule.action.target:
         target = action.rule.action.target
     if args.target and target not in args.target:
-        return ""
+        return []
+
+    lines = []
+
+    # create nodes for source and target, with colors
+    for node in [action.request.source, target]:
+        if node.startswith("@"):  # non-literal qubes
+            node_attributes = "style = dotted"
+        else:
+            node_color = app.domains[node].label.color.replace("0x", "#")
+            node_attributes = f'color = "{node_color}", penwidth = 5'
+        lines.append(f'  "{node}" [{node_attributes}];\n')
+
+    # create edges with services as labels
     if args.full_output:
         color = "orange" if isinstance(action, parser.AskResolution) else "red"
-        return (
+        lines.append(
             f'  "{action.request.source}" -> "{target}" '
             f'[label="{service} {action.rule.action}" color={color}];\n'
         )
+        return lines
+
     if isinstance(action, parser.AskResolution):
         if args.include_ask:
-            return f'  "{action.request.source}" -> "{target}" [label="{service}" color=orange];\n'
+            lines.append(
+                f'  "{action.request.source}" -> "{target}" [label="{service}" color=orange];\n'
+            )
+            return lines
     elif isinstance(action, parser.AllowResolution):
-        return f'  "{action.request.source}" -> "{target}" [label="{service}" color=red];\n'
-    return ""
+        lines.append(
+            f'  "{action.request.source}" -> "{target}" [label="{service}" color=red];\n'
+        )
+        return lines
+
+    return []
 
 
 def main(args=None, output=sys.stdout):
@@ -159,6 +183,8 @@ def main(args=None, output=sys.stdout):
     )
     targets.append("@default")
 
+    app = qubesadmin.Qubes()
+
     connections = set()
 
     policy = parser.FilePolicy(policy_path=args.policy_dir)
@@ -195,14 +221,15 @@ def main(args=None, output=sys.stdout):
                         system_info=system_info,
                     )
                     action = policy.evaluate(request)
-                    line = handle_single_action(args, action)
+                except exc.AccessDenied:
+                    continue
+
+                for line in handle_single_action(args, action, app):
                     if line in connections:
                         continue
                     if line:
                         output.write(line)
                     connections.add(line)
-                except exc.AccessDenied:
-                    continue
 
     output.write("}\n")
     if args.output:
