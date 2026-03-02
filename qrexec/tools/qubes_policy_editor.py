@@ -132,13 +132,13 @@ def lint_policy(path, is_include=False):
     :param path: path or "-"
     :param is_include: Boolean
     """
-    edit_cmd = "${VISUAL:-${EDITOR:-vi}} " + path
+    edit_cmd = "${VISUAL:-${EDITOR:-vi}} -- " + path
     subprocess.run(edit_cmd, shell=True, check=True)
 
+    lint_cmd = "qubes-policy-lint "
     if is_include:
-        lint_cmd = "qubes-policy-lint --include-service " + path
-    else:
-        lint_cmd = "qubes-policy-lint " + path
+        lint_cmd += "--include-service "
+    lint_cmd += "-- " + path
 
     try:
         subprocess.run(lint_cmd, shell=True, check=True)
