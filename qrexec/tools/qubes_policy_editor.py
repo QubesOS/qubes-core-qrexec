@@ -63,32 +63,27 @@ def manage_policy(name, is_include=False):
     # not found, ignore, else abort as the request was refused.
     file_exists = False
     if is_include:
-        try:
-            original_content, token = client.policy_include_get(name)
-            file_exists = True
-        except subprocess.CalledProcessError as e:
-            wanted_path = str(INCLUDEPATH) + "/" + name + "\n"
-            not_found = "Not found: " + wanted_path
-            if e.output.decode() != not_found:
-                print("Failed to get file: " + name)
-                sys.exit(1)
+        policy_get = client.policy_include_get
+        policy_replace = client.policy_include_replace
+        wanted_path = str(INCLUDEPATH) + "/" + name + "\n"
+        suffix = "_include_"
     else:
-        try:
-            original_content, token = client.policy_get(name)
-            file_exists = True
-        except subprocess.CalledProcessError as e:
-            wanted_path = str(POLICYPATH) + "/" + name + ".policy\n"
-            not_found = "Not found: " + wanted_path
-            if e.output.decode() != not_found:
-                print("Failed to get file: " + name)
-                sys.exit(1)
+        policy_get = client.policy_get
+        policy_replace = client.policy_replace
+        wanted_path = str(POLICYPATH) + "/" + name + ".policy\n"
+        suffix = "_"
 
-    if is_include:
-        # pylint: disable=consider-using-with
-        tmpfile = tempfile.NamedTemporaryFile(suffix="_include_" + name)
-    else:
-        # pylint: disable=consider-using-with
-        tmpfile = tempfile.NamedTemporaryFile(suffix="_" + name)
+    try:
+        original_content, token = policy_get(name)
+        file_exists = True
+    except subprocess.CalledProcessError as e:
+        not_found = "Not found: " + wanted_path
+        if e.output.decode() != not_found:
+            print("Failed to get file: " + name)
+            sys.exit(1)
+
+    # pylint: disable=consider-using-with
+    tmpfile = tempfile.NamedTemporaryFile(suffix=suffix + name)
 
     if file_exists:
         with open(tmpfile.name, "w", encoding="utf-8") as current_file:
@@ -104,10 +99,7 @@ def manage_policy(name, is_include=False):
         current_file.close()
 
     try:
-        if is_include:
-            client.policy_include_replace(name, content, token)
-        else:
-            client.policy_replace(name, content, token)
+        policy_replace(name, content, token)
     except subprocess.CalledProcessError as e:
         print("Failed to replace file: " + name)
         sys.exit(1)
