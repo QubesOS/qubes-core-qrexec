@@ -1,30 +1,29 @@
-" Vim syntax file
-" Language:     Qrexec Config
-" Maintainer:   Ben Grande <ben@invisiblethingslab.com>
-" License:      Vim (see :h license)
-" Repository:   https://github.com/QubesOS/qubes-core-qrexec
-" Last Change:  2026 Mar 25
+vim9script
 
-" TODO: Implement error when key appears more than once. See libqrexec/toml.c
+# Vim syntax file
+# Language:     Qrexec Config
+# Maintainer:   Ben Grande <ben@invisiblethingslab.com>
+# License:      Vim (see :h license)
+# Repository:   https://github.com/QubesOS/qubes-core-qrexec
+# Last Change:  2026 Mar 25
+
+# TODO: Implement error when key appears more than once. See libqrexec/toml.c
 
 
-" Section: Bootstrap
+# Section: Bootstrap
 if exists("b:current_syntax")
   finish
 endif
 
-let s:cpo_save = &cpo
-set cpo&vim
 
-
-" Section: Cluster
+# Section: Cluster
 syn cluster qrexecconfigCommentGroup
   \ add=qrexecconfigComment
   \ add=qrexecconfigCommentModeline
   \ add=qrexecconfigTodo
 
 
-" Section: Key
+# Section: Key
 syn match qrexecconfigIncompleteError
   \ '\v^(\s+|\zs\S*\ze)'
   \ contains=@NoSpell
@@ -52,7 +51,7 @@ syn match qrexecconfigStringKey
   \ skipwhite
 
 
-" Section: Assign
+# Section: Assign
 syn match qrexecconfigBooleanAssign
   \ '\S'
   \ contained
@@ -75,7 +74,7 @@ syn match qrexecconfigStringAssign
   \ skipwhite
 
 
-" Section: Value
+# Section: Value
 syn match qrexecconfigBooleanValueUnknownError
   \ '\S\+'
   \ contained
@@ -100,7 +99,7 @@ syn match qrexecconfigStringValueUnknownError
   \ contained
   \ contains=@NoSpell
 
-" Require string to start and end with single quote.
+# Require string to start and end with single quote.
 syn match qrexecconfigStringValue
   \ /\v(')%(\1@!.)+\1/
   \ contained
@@ -108,7 +107,7 @@ syn match qrexecconfigStringValue
   \ nextgroup=qrexecconfigMustEndError
 
 
-" Section: Errors
+# Section: Errors
 syn match qrexecconfigMustEndError
   \ '.*'
   \ contained
@@ -130,7 +129,7 @@ syn match qrexecconfigStringValueError
   \ contained
 
 
-" Section: Comments
+# Section: Comments
 syn match qrexecconfigComment
   \ '^#.*$'
   \ contains=@qrexecconfigCommentGroup
@@ -144,14 +143,14 @@ syn match qrexecconfigCommentModeline
   \ contains=@NoSpell
 
 
-" Section: Highlight
-" Config Group
+# Section: Highlight
+# Config Group
 hi def link qrexecconfigBooleanKey                     qrexecconfigKey
 hi def link qrexecconfigBooleanCompatKey               qrexecconfigKey
 hi def link qrexecconfigStringKey                      qrexecconfigKey
 hi def link qrexecconfigCommentModeLine                qrexecconfigComment
 
-" Error Group
+# Error Group
 hi def link qrexecconfigIncompleteError                qrexecconfigError
 hi def link qrexecconfigMustEndError                   qrexecconfigError
 hi def link qrexecconfigKeyUnknownError                qrexecconfigError
@@ -162,7 +161,7 @@ hi def link qrexecconfigBooleanValueUnknownError       qrexecconfigError
 hi def link qrexecconfigStringValueError               qrexecconfigError
 hi def link qrexecconfigStringValueUnknownError        qrexecconfigError
 
-" Reference Group
+# Reference Group
 hi def link qrexecconfigKey                            Identifier
 hi def link qrexecconfigBooleanValue                   Number
 hi def link qrexecconfigBooleanValueCompat             Number
@@ -172,10 +171,7 @@ hi def link qrexecconfigComment                        Comment
 hi def link qrexecconfigError                          Error
 
 
-" Section: End
-let b:current_syntax = "qrexecconfig"
+# Section: End
+b:current_syntax = "qrexecconfig"
 
-let &cpo = s:cpo_save
-unlet s:cpo_save
-
-" vim: sw=2 sts=2 et :
+# vim: sw=2 sts=2 et :

@@ -7,7 +7,7 @@
        \ \___\_\  \ \_\ \_\  \ \_____\   /\_\/\_\  \ \_____\  \ \_____\
         \/___/_/   \/_/ /_/   \/_____/   \/_/\/_/   \/_____/   \/_____/
 <
-                                                 For Vim version 8.2 or newer
+                                                 For Vim version 9.0 or newer
 
                              By Benjamin Grande
                         <ben@invisiblethingslab.com>
@@ -48,7 +48,7 @@ g:qrexec_recommended_style                        *g:qrexec_recommended_style*
 
 <        To disable the recommended behavior, set the following variable in
         your |.vimrc|: >
-          let g:qrexec_recommended_style = 0
+          g:qrexec_recommended_style = 0
 <
 LINT                                                             *qrexec-lint*
 

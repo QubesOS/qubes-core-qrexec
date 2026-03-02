@@ -1,80 +1,79 @@
-" Vim syntax file
-" Language:     Qrexec Policy
-" Maintainer:   Ben Grande <ben@invisiblethingslab.com>
-" License:      Vim (see :h license)
-" Repository:   https://github.com/QubesOS/qubes-core-qrexec
-" Last Change:  2026 Mar 09
+vim9script
+
+# Vim syntax file
+# Language:     Qrexec Policy
+# Maintainer:   Ben Grande <ben@invisiblethingslab.com>
+# License:      Vim (see :h license)
+# Repository:   https://github.com/QubesOS/qubes-core-qrexec
+# Last Change:  2026 Mar 09
 
 
-" Section: To do
-" TODO: Because it involves multiple fields, a previous one requiring a later
-"       one, how can a previous field indicate that it is missing a later but
-"       not subsequent field without being confusing for the user?
-"   Allow: For @default rule must specify target= option; and
-"   Ask: For @default rule must specify target= option, else we get:
-"        'no target is available to choose from';
+# Section: To do
+# TODO: Because it involves multiple fields, a previous one requiring a later
+#       one, how can a previous field indicate that it is missing a later but
+#       not subsequent field without being confusing for the user?
+#   Allow: For @default rule must specify target= option; and
+#   Ask: For @default rule must specify target= option, else we get:
+#        'no target is available to choose from';
 
 
-" Section: Summary
-"
-" Implementation:
-"   Correctness:
-"     Catch All Fields: All fields must be in a syntax item;
-"     Known Field Value: Set of possible values that are permitted;
-"     Literal Field Value: Range of characters that are permitted; and
-"     Minimum Field Number: Warn on the last field if next field is missing.
-"   Style:
-"     Spell: @NoSpell is set per item to limit false negatives;
-"     Line Breaks: Easier to read, copy and paste to other sections;
-"     Incomplete Item: Unterminated rule; and
-"     Unknown Item: Invalid value.
-" Service:
-"   Literal Name: char range; and
-"   Catch All: '*', its argument must also be '*'.
-" Argument:
-"   Literal Name: char range; and
-"   Catch All: '*', its argument must also be '*'.
-" Source:
-"   Literal Name: char range on name or uuid;
-"   Catch All: '*';
-"   Token Single: @adminvm, @anyvm; and
-"   Token Combo: @dispvm:VMNAME, @dispvm:@tag:TAG, @tag:TAG, @type:TYPE.
-" Target:
-"   Literal Name: char range on name or uuid;
-"   Catch All: '*';
-"   Token Single: @adminvm, @anyvm, @default, @dispvm; and
-"   Token Combo: @dispvm:VMNAME, @dispvm:@tag:TAG, @tag:TAG, @type:TYPE.
-" Resolution: deny, allow and ask.
-" Parameter:
-"   Autostart: yes, no;
-"   Notify: yes, no;
-"   User: char range;
-"   Target: char range, uuid, '*', @adminvm, @dispvm, @dispvm:VMNAME,
-"   @dispvm:uuid:; and
-"   Default Target: char range uuid, '*', @adminvm, @dispvm, @dispvm:VMNAME
-"   @dispvm:uuid.
-" Parameters Verification:
-"   Duplicated Parameters: forbidden;
-"   Deny: notify=;
-"   Allow: previous parameters, autostart=, user= and target=; and
-"   Ask: previous parameters + default_target=.
-" Token Argument Verification:
-"   Type: AdminVM, AppVM, DispVM, StandaloneVM, TemplateVM;
-"   Tag: char range; and
-"   Name: char range.
-"   UUID: char range with strict format
+# Section: Summary
+#
+# Implementation:
+#   Correctness:
+#     Catch All Fields: All fields must be in a syntax item;
+#     Known Field Value: Set of possible values that are permitted;
+#     Literal Field Value: Range of characters that are permitted; and
+#     Minimum Field Number: Warn on the last field if next field is missing.
+#   Style:
+#     Spell: @NoSpell is set per item to limit false negatives;
+#     Line Breaks: Easier to read, copy and paste to other sections;
+#     Incomplete Item: Unterminated rule; and
+#     Unknown Item: Invalid value.
+# Service:
+#   Literal Name: char range; and
+#   Catch All: '*', its argument must also be '*'.
+# Argument:
+#   Literal Name: char range; and
+#   Catch All: '*', its argument must also be '*'.
+# Source:
+#   Literal Name: char range on name or uuid;
+#   Catch All: '*';
+#   Token Single: @adminvm, @anyvm; and
+#   Token Combo: @dispvm:VMNAME, @dispvm:@tag:TAG, @tag:TAG, @type:TYPE.
+# Target:
+#   Literal Name: char range on name or uuid;
+#   Catch All: '*';
+#   Token Single: @adminvm, @anyvm, @default, @dispvm; and
+#   Token Combo: @dispvm:VMNAME, @dispvm:@tag:TAG, @tag:TAG, @type:TYPE.
+# Resolution: deny, allow and ask.
+# Parameter:
+#   Autostart: yes, no;
+#   Notify: yes, no;
+#   User: char range;
+#   Target: char range, uuid, '*', @adminvm, @dispvm, @dispvm:VMNAME,
+#   @dispvm:uuid:; and
+#   Default Target: char range uuid, '*', @adminvm, @dispvm, @dispvm:VMNAME
+#   @dispvm:uuid.
+# Parameters Verification:
+#   Duplicated Parameters: forbidden;
+#   Deny: notify=;
+#   Allow: previous parameters, autostart=, user= and target=; and
+#   Ask: previous parameters + default_target=.
+# Token Argument Verification:
+#   Type: AdminVM, AppVM, DispVM, StandaloneVM, TemplateVM;
+#   Tag: char range; and
+#   Name: char range.
+#   UUID: char range with strict format
 
 
-" Section: Bootstrap
+# Section: Bootstrap
 if exists("b:current_syntax")
   finish
 endif
 
-let s:cpo_save = &cpo
-set cpo&vim
 
-
-" Section: Cluster
+# Section: Cluster
 syn cluster qrexecpolicyInclServiceGroup
   \ add=qrexecpolicyInclServiceIncomplete
   \ add=qrexecpolicyInclServiceGeneric
@@ -168,7 +167,7 @@ syn cluster qrexecpolicyCommentGroup
   \ add=qrexecpolicyTodo
 
 
-" Section: Top level
+# Section: Top level
 syn match qrexecpolicyRuleIncomplete
   \ '^\s*\zs\S\+\ze\(\s\+\)\?$'
   \ contains=@NoSpell
@@ -219,7 +218,7 @@ syn match qrexecpolicyInclFile
   \ skipwhite
 
 
-" Section: Incl options
+# Section: Incl options
 syn match qrexecpolicyInclServiceIncomplete
   \ '\S\+'
   \ contained
@@ -276,7 +275,7 @@ syn match qrexecpolicyInclFilePath
   \ contains=qrexecpolicyInclFilePathError,@NoSpell
   \ nextgroup=qrexecpolicyMustEndError
 
-" Section: Arg
+# Section: Arg
 syn match qrexecpolicyArgPrefixIncomplete
   \ '\S\+'
   \ contained
@@ -311,7 +310,7 @@ syn match qrexecpolicyArg
   \ skipwhite
 
 
-" Section: Source
+# Section: Source
 syn match qrexecpolicySourceIncomplete
   \ '\S\+'
   \ contained
@@ -377,7 +376,7 @@ syn match qrexecpolicySourceUuidArg
   \ skipwhite
 
 
-" Section: Target
+# Section: Target
 syn match qrexecpolicyTargetIncomplete
   \ '\S\+'
   \ contained
@@ -443,7 +442,7 @@ syn match qrexecpolicyTargetUuidArg
   \ skipwhite
 
 
-" Section: Resolution
+# Section: Resolution
 syn match qrexecpolicyResolutionUnknownError
   \ '\s*\zs\S\+'
   \ contained
@@ -471,7 +470,7 @@ syn match qrexecpolicyResolutionAsk
   \ skipwhite
 
 
-" Section: Param UnknownError
+# Section: Param UnknownError
 syn match qrexecpolicyParamDenyUnknownError
   \ '\S\+'
   \ contained
@@ -494,7 +493,7 @@ syn match qrexecpolicyParamAskUnknownError
   \ skipwhite
 
 
-" Section: Param Normal
+# Section: Param Normal
 syn match qrexecpolicyParamAllowNormal
   \ '\(user\ze=\S\+\)'
   \ contained
@@ -527,7 +526,7 @@ syn match qrexecpolicyParamAskNormalArg
   \ nextgroup=@qrexecpolicyParamAskGroup
   \ skipwhite
 
-" Section: Param Boolean
+# Section: Param Boolean
 syn match qrexecpolicyParamDenyBoolean
   \ '\(notify\ze=\S\+\)'
   \ contained
@@ -577,7 +576,7 @@ syn match qrexecpolicyParamAskBooleanArg
   \ skipwhite
 
 
-" Section: Param Target
+# Section: Param Target
 syn match qrexecpolicyParamAllowTarget
   \ '\(target\ze=\S\+\)'
   \ contained
@@ -667,7 +666,7 @@ syn match qrexecpolicyParamAskTargetArgUuidArg
   \ skipwhite
 
 
-" Section: Errors
+# Section: Errors
 syn match qrexecpolicyCharError
   \ '[^[:space:]0-9A-Za-z!=_@.*:+-]'
   \ containedin=ALLBUT,@qrexecpolicyCommentGroup,qrexecpolicyInclFilePath
@@ -743,7 +742,7 @@ syn match qrexecpolicyParamDupDefaulttargetError
   \ contained
 
 
-" Section: Comments
+# Section: Comments
 syn match qrexecpolicyComment
   \ '^\s*\zs#.*$'
   \ contains=@qrexecpolicyCommentGroup
@@ -757,8 +756,8 @@ syn match qrexecpolicyCommentModeline
   \ contains=@NoSpell
 
 
-" Section: Highlight
-" Incl Group
+# Section: Highlight
+# Incl Group
 hi def link qrexecpolicyCompat                         qrexecpolicyIncl
 hi def link qrexecpolicyInclFile                       qrexecpolicyIncl
 hi def link qrexecpolicyInclDir                        qrexecpolicyIncl
@@ -768,7 +767,7 @@ hi def link qrexecpolicyInclArgPrefixGeneric           qrexecpolicyArgPrefix
 hi def link qrexecpolicyInclArgPrefixSpecific          qrexecpolicyArgPrefix
 hi def link qrexecpolicyInclArg                        qrexecpolicyArg
 
-" Service Group
+# Service Group
 hi def link qrexecpolicyServiceGeneric                 qrexecpolicySpecialChar
 hi def link qrexecpolicyArgPrefix                      qrexecpolicySpecialChar
 hi def link qrexecpolicyArgPrefixGeneric               qrexecpolicyArgPrefix
@@ -800,7 +799,7 @@ hi def link qrexecpolicyParamAskTargetArgTokenSingle   qrexecpolicyToken
 hi def link qrexecpolicyParamAskTargetArgTokenCombo    qrexecpolicyToken
 hi def link qrexecpolicyParamAskTargetArgUuid          qrexecpolicyToken
 
-" Incomplete Group
+# Incomplete Group
 hi def link qrexecpolicyRuleIncomplete                 qrexecpolicyIncomplete
 hi def link qrexecpolicyInclServiceIncomplete          qrexecpolicyIncomplete
 hi def link qrexecpolicyInclArgPrefixIncomplete        qrexecpolicyIncomplete
@@ -808,7 +807,7 @@ hi def link qrexecpolicyArgPrefixIncomplete            qrexecpolicyIncomplete
 hi def link qrexecpolicySourceIncomplete               qrexecpolicyIncomplete
 hi def link qrexecpolicyTargetIncomplete               qrexecpolicyIncomplete
 
-" Error Group
+# Error Group
 hi def link qrexecpolicyMustEndError                   qrexecpolicyError
 hi def link qrexecpolicyInclArgPrefixUnknownError      qrexecpolicyError
 hi def link qrexecpolicyInclFilePathError              qrexecpolicyError
@@ -839,10 +838,10 @@ hi def link qrexecpolicyParamDupAutostartError         qrexecpolicyError
 hi def link qrexecpolicyParamDupTargetError            qrexecpolicyError
 hi def link qrexecpolicyParamDupDefaulttargetError     qrexecpolicyError
 
-" Comment Group
+# Comment Group
 hi def link qrexecpolicyCommentModeline                qrexecpolicyComment
 
-" Reference Group
+# Reference Group
 hi def link qrexecpolicyIncl                           Include
 hi def link qrexecpolicyResolution                     Keyword
 hi def link qrexecpolicyTodo                           Todo
@@ -855,10 +854,7 @@ hi def link qrexecpolicyComment                        Comment
 hi def link qrexecpolicyIncomplete                     SpellRare
 
 
-" Section: End
-let b:current_syntax = "qrexecpolicy"
+# Section: End
+b:current_syntax = "qrexecpolicy"
 
-let &cpo = s:cpo_save
-unlet s:cpo_save
-
-" vim: sw=2 sts=2 et :
+# vim: sw=2 sts=2 et :
