@@ -66,12 +66,12 @@ def manage_policy(name, is_include=False):
         policy_get = client.policy_include_get
         policy_replace = client.policy_include_replace
         wanted_path = str(INCLUDEPATH) + "/" + name + "\n"
-        suffix = "_include_"
+        suffix = "_include_" + name
     else:
         policy_get = client.policy_get
         policy_replace = client.policy_replace
         wanted_path = str(POLICYPATH) + "/" + name + ".policy\n"
-        suffix = "_"
+        suffix = "_" + name + ".policy"
 
     try:
         original_content, token = policy_get(name)
@@ -83,7 +83,7 @@ def manage_policy(name, is_include=False):
             sys.exit(1)
 
     # pylint: disable=consider-using-with
-    tmpfile = tempfile.NamedTemporaryFile(suffix=suffix + name)
+    tmpfile = tempfile.NamedTemporaryFile(suffix=suffix)
 
     if file_exists:
         with open(tmpfile.name, "w", encoding="utf-8") as current_file:
