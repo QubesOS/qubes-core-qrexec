@@ -74,10 +74,10 @@ def manage_policy(name, is_include=False):
     try:
         original_content, token = policy_get(name)
         file_exists = True
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError as exc:
         not_found = "Not found: " + wanted_path
-        if e.output.decode() != not_found:
-            print("Failed to get file: " + name, file=sys.stderr)
+        if exc.output.decode() != not_found:
+            print(f"Failed to get policy {name!r}: {exc}", file=sys.stderr)
             sys.exit(1)
 
     # pylint: disable=consider-using-with
@@ -98,8 +98,12 @@ def manage_policy(name, is_include=False):
 
     try:
         policy_replace(name, content, token)
-    except subprocess.CalledProcessError as e:
-        print("Failed to replace file: " + name, file=sys.stderr)
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"Failed to replace policy {name!r} with file {tmpfile.name!r}: "
+            f"{exc}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     tmpfile.close()
@@ -131,7 +135,11 @@ def lint_policy(path, is_include=False):
     :param is_include: Boolean
     """
     edit_cmd = "${VISUAL:-${EDITOR:-vi}} -- " + path
-    subprocess.run(edit_cmd, shell=True, check=True)
+    try:
+        subprocess.run(edit_cmd, shell=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        print(f"Failed to open editor: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     lint_cmd = "qubes-policy-lint "
     if is_include:
@@ -146,7 +154,7 @@ def lint_policy(path, is_include=False):
             return
         if return_code == 127:
             print(
-                "The linting program 'qubes-policy-lint' is not installed.",
+                "The linting program 'qubes-policy-lint' is not installed",
                 file=sys.stderr,
             )
             sys.exit(1)
