@@ -596,14 +596,16 @@ static void handle_server_exec_request_init(struct msg_header *hdr)
     } else {
         cmd = parse_qubes_rpc_command(params->cmdline, true);
         if (cmd == NULL) {
-            LOG(ERROR, "Could not parse command line: %s", params->cmdline);
+            LOG(ERROR, "Cannot parse command line: %s", params->cmdline);
             goto doit;
         }
 
         /* load service config only for service requests */
         if (cmd->service_descriptor) {
             if (load_service_config_v2(cmd) < 0) {
-                LOG(ERROR, "Could not load config for command %s", params->cmdline);
+                LOG(ERROR,
+                    "Cannot load service configuration: %s+%s",
+                    cmd->service_name, cmd->arg ? cmd->arg : "");
                 destroy_qrexec_parsed_command(cmd);
                 cmd = NULL;
                 goto doit;
@@ -685,7 +687,7 @@ static void handle_server_exec_request_do(int type,
     /* No fork server case */
     child_agent = handle_new_process(type,
             params->connect_domain, params->connect_port,
-            cmd);
+            cmd, cmdline);
 
     register_vchan_connection(child_agent, -1,
             params->connect_domain, params->connect_port);
