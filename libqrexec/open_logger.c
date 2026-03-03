@@ -29,7 +29,7 @@ int open_logger(struct qrexec_parsed_command *command, int *pid)
     case 0:
         fix_fds(pipes[0], 1, 2);
         execvp("logger", buf);
-        _exit(126);
+        _exit(QREXEC_EXIT_REQUEST_REFUSED);
     default:
         free(buf[2]);
         close(pipes[0]);
