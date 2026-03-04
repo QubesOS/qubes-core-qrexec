@@ -42,7 +42,7 @@ def validate_name(name):
     if invalid_chars:
         print(
             "invalid character(s) in the file name: {!r}".format(
-                "".join(sorted(invalid_chars))
+                "".join(sorted(invalid_chars)), file=sys.stderr
             )
         )
         sys.exit(1)
@@ -77,7 +77,7 @@ def manage_policy(name, is_include=False):
     except subprocess.CalledProcessError as e:
         not_found = "Not found: " + wanted_path
         if e.output.decode() != not_found:
-            print("Failed to get file: " + name)
+            print("Failed to get file: " + name, file=sys.stderr)
             sys.exit(1)
 
     # pylint: disable=consider-using-with
@@ -97,9 +97,9 @@ def manage_policy(name, is_include=False):
         current_file.close()
 
     try:
-    except subprocess.CalledProcessError as e:
         policy_replace(name, content, token)
-        print("Failed to replace file: " + name)
+    except subprocess.CalledProcessError as e:
+        print("Failed to replace file: " + name, file=sys.stderr)
         sys.exit(1)
 
     tmpfile.close()
@@ -112,7 +112,7 @@ def get_reply(path, is_include=False):
     :param path: path or "-"
     :param is_include: Boolean
     """
-    print("What now? ", end="")
+    print("What now? ", end="", file=sys.stderr)
     reply = str(input())
     if reply == "e":
         lint_policy(path, is_include=is_include)
@@ -145,13 +145,17 @@ def lint_policy(path, is_include=False):
         if return_code == 0:
             return
         if return_code == 127:
-            print("The linting program 'qubes-policy-lint' is not installed.")
+            print(
+                "The linting program 'qubes-policy-lint' is not installed.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         else:
             print(
                 "Linting failed, do you want to:\n"
                 "  (e)dit again\n"
-                "  (q)uit without saving changes?"
+                "  (q)uit without saving changes?",
+                file=sys.stderr,
             )
             get_reply(path, is_include=is_include)
 
