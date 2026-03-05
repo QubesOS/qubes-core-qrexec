@@ -180,7 +180,7 @@ def main():
         default=default_file,
         help="set file to be edited. The '.policy' suffix "
         "must not be included. Will search for an "
-        "editor by looking at $EDITOR, $VISUAL if "
+        "editor by looking at $VISUAL, $EDITOR, and if "
         "previous entry is unset or 'vi' if previous "
         "entry is also unset. Defaults to the user file.",
         nargs="?",
