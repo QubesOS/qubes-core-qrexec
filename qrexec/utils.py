@@ -176,23 +176,23 @@ def get_system_info() -> FullSystemInfo:
 
 
 def prepare_subprocess_kwds(
-    input: object, for_popen: bool = True
+    payload: object, for_popen: bool = True
 ) -> Dict[str, object]:
     """Prepare kwds for :py:func:`subprocess.run` for given input"""  # pylint: disable=redefined-builtin
     kwds: Dict[str, object] = {}
-    if input is None:
+    if payload is None:
         kwds["stdin"] = subprocess.DEVNULL
         kwds["input"] = None
-    elif isinstance(input, bytes):
+    elif isinstance(payload, bytes):
         if for_popen:
             kwds["stdin"] = subprocess.PIPE
-        kwds["input"] = input
-    elif isinstance(input, str):
+        kwds["input"] = payload
+    elif isinstance(payload, str):
         if for_popen:
             kwds["stdin"] = subprocess.PIPE
-        kwds["input"] = input.encode()
+        kwds["input"] = payload.encode()
     else:
         # XXX this breaks on file-like objects that don't have .fileno
-        kwds["stdin"] = input
+        kwds["stdin"] = payload
         kwds["input"] = None
     return kwds

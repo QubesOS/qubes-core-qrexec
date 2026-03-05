@@ -71,4 +71,4 @@ class PolicyClient:
 
     @staticmethod
     def call(service_name, arg=None, payload=""):
-        return call("dom0", service_name, arg, input=payload)
+        return call("dom0", service_name, arg, payload=payload)
