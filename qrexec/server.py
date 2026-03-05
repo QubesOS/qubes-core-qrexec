@@ -116,5 +116,5 @@ async def call_socket_service_local(
 
 async def call_socket_service_remote(remote_domain, service, params):
     input_data = json.dumps(params)
-    output_data = await call_async(remote_domain, service, input=input_data)
+    output_data = await call_async(remote_domain, service, payload=input_data)
     return output_data

@@ -33,45 +33,41 @@ elif pathlib.Path(QREXEC_CLIENT_VM).is_file():
     IN_DOM0 = False
 
 
-def call(dest: str, rpcname: str, arg: Optional[str] = None, *, input=None):
+def call(dest: str, rpcname: str, arg: Optional[str] = None, *, payload=None):
     """Invoke qrexec call
 
-    The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
+    The `payload` parameter should be either :py:class:`str` or :py:class:`bytes`
     or a *real* file, which has file descriptor (as returned by ``.fileno()``
     method). Other file-like objects are not supported.
 
     :param str dest: name of the policied call
     :param str rpcname: name of a call from Policy API
     :param str or None arg: argument of the call
-    :param str or bytes or file or None input: an input to the qrexec call
+    :param str or bytes or file or None payload: an payload to the qrexec call
     :rtype: str
     :raises subprocess.CalledProcessError: on failure
     """
-    # pylint: disable=redefined-builtin
-
     command = make_command(dest, rpcname, arg)
-    kwds = prepare_subprocess_kwds(input, for_popen=False)
+    kwds = prepare_subprocess_kwds(payload, for_popen=False)
     return subprocess.check_output(command, **kwds).decode()
 
 
-async def call_async(dest, rpcname, arg=None, *, input=None):
+async def call_async(dest, rpcname, arg=None, *, payload=None):
     """Invoke qrexec call (async version)
 
-    The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
+    The `payload` parameter should be either :py:class:`str` or :py:class:`bytes`
     or a *real* file, which has file descriptor (as returned by ``.fileno()``
     method). Other file-like objects are not supported.
 
     :param str dest: name of the policied call
     :param str rpcname: name of a call from Policy API
     :param str or None arg: argument of the call
-    :param str or bytes or file or None input: an input to the qrexec call
+    :param str or bytes or file or None payload: an payload to the qrexec call
     :rtype: str
     :raises subprocess.CalledProcessError: on failure
     """
-    # pylint: disable=redefined-builtin
-
     command = make_command(dest, rpcname, arg)
-    kwds = prepare_subprocess_kwds(input)
+    kwds = prepare_subprocess_kwds(payload)
     to_communicate = kwds.pop("input")
     process = await asyncio.create_subprocess_exec(*command, **kwds)
     stdout, _stderr = await process.communicate(to_communicate)
