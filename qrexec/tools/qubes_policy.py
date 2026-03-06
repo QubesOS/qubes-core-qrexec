@@ -69,44 +69,32 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "name",
-    metavar="[include/][name]",
+    "policy",
+    metavar="[include/][policy]",
     nargs="?",
     help="specify qubes RPC name or filename to operate on;"
     ' with "include/", operate on files in include subdirectory',
 )
 
-parser.set_defaults(method="list", name="")
+parser.set_defaults(method="list", policy="")
 
 
-def run_method(method, name, client, is_include):
+def run_method(method, policy, is_include, client):
     if method == "list":
-        if is_include:
-            result = client.policy_include_list()
-        else:
-            result = client.policy_list()
+        result = client.policy_list(is_include=is_include)
         print("\n".join(result))
-
     elif method == "get":
-        if is_include:
-            content, _token = client.policy_include_get(name)
-        else:
-            content, _token = client.policy_get(name)
+        content, _token = client.policy_get(
+            policy=policy, is_include=is_include
+        )
         print(content.rstrip())
-
     elif method == "replace":
         content = sys.stdin.read()
-        if is_include:
-            client.policy_include_replace(name, content)
-        else:
-            client.policy_replace(name, content)
-
+        client.policy_replace(
+            policy=policy, content=content, is_include=is_include
+        )
     elif method == "remove":
-        if is_include:
-            client.policy_include_remove(name)
-        else:
-            client.policy_remove(name)
-
+        client.policy_remove(policy=policy, is_include=is_include)
     else:
         assert False, method
 
@@ -114,15 +102,15 @@ def run_method(method, name, client, is_include):
 def main(args=None):
     args = parser.parse_args(args)
     client = PolicyClient()
-    name = args.name
+    policy = args.policy
 
     is_include = False
-    if name:
-        if name == "include" or name.startswith("include/"):
-            name = name[len("include/") :]
+    if policy:
+        if policy == "include" or policy.startswith("include/"):
+            policy = policy[len("include/") :]
             is_include = True
 
-        invalid_chars = set(name) - RPCNAME_ALLOWED_CHARSET
+        invalid_chars = set(policy) - RPCNAME_ALLOWED_CHARSET
         if invalid_chars:
             parser.error(
                 "invalid character(s) in RPCNAME: {!r}".format(
@@ -130,13 +118,18 @@ def main(args=None):
                 )
             )
 
-    if args.method == "list" and name:
+    if args.method == "list" and policy:
         parser.error("--list doesn't work with a file name")
-    elif args.method != "list" and not name:
+    elif args.method != "list" and not policy:
         parser.error("you need to provide a file name")
 
     try:
-        run_method(args.method, name, client, is_include)
+        run_method(
+            method=args.method,
+            policy=policy,
+            is_include=is_include,
+            client=client,
+        )
     except subprocess.CalledProcessError as e:
         print("Command failed")
         output = e.output.decode().rstrip()
