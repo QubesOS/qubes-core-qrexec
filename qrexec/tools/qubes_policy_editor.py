@@ -25,9 +25,11 @@ qubes-policy-editor -- CLI tool for editing a policy safely
 
 from __future__ import print_function
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
+
 from ..policy.admin_client import PolicyClient
 from ..policy.admin import (
     PolicyAdminException,
@@ -90,7 +92,7 @@ class PolicyManager:
             sys.exit(1)
 
         # pylint: disable=consider-using-with
-        tmpfile = tempfile.NamedTemporaryFile(suffix=suffix)
+        tmpfile = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
 
         if file_exists:
             with open(tmpfile.name, "w", encoding="utf-8") as current_file:
@@ -122,6 +124,7 @@ class PolicyManager:
             sys.exit(1)
 
         tmpfile.close()
+        os.remove(self.tmpfile_name)
 
     def get_reply(self) -> None:
         """
