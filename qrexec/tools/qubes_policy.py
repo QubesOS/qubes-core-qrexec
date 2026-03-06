@@ -27,6 +27,7 @@ import subprocess
 
 from ..policy.admin_client import PolicyClient
 from .. import RPCNAME_ALLOWED_CHARSET
+from ..policy.admin import PolicyAdminException
 
 parser = argparse.ArgumentParser(
     usage="qubes-policy {[-l]|-g|-r|-d} [include/][RPCNAME[+ARGUMENT]]"
@@ -131,10 +132,13 @@ def main(args=None):
             client=client,
         )
     except subprocess.CalledProcessError as e:
-        print("Command failed")
+        print("Command failed", file=sys.stderr)
         output = e.output.decode().rstrip()
         if output:
-            print(output)
+            print(output, file=sys.stderr)
+        sys.exit(1)
+    except PolicyAdminException as e:
+        print(e, file=sys.stderr)
         sys.exit(1)
 
 

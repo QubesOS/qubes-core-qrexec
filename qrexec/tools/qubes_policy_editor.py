@@ -29,7 +29,11 @@ import subprocess
 import sys
 import tempfile
 from ..policy.admin_client import PolicyClient
-from .. import RPCNAME_ALLOWED_CHARSET, POLICYPATH, INCLUDEPATH
+from ..policy.admin import (
+    PolicyAdminException,
+    PolicyAdminFileNotFoundException,
+)
+from .. import RPCNAME_ALLOWED_CHARSET
 
 
 def validate_name(name):
@@ -68,10 +72,8 @@ class PolicyManager:
         # not found, ignore, else abort as the request was refused.
         file_exists = False
         if self.is_include:
-            wanted_path = str(INCLUDEPATH) + "/" + self.policy + "\n"
             suffix = "_include_" + self.policy
         else:
-            wanted_path = str(POLICYPATH) + "/" + self.policy + ".policy\n"
             suffix = "_" + self.policy + ".policy"
 
         try:
@@ -79,14 +81,13 @@ class PolicyManager:
                 policy=self.policy, is_include=self.is_include
             )
             file_exists = True
+        except PolicyAdminFileNotFoundException:
+            pass
         except subprocess.CalledProcessError as exc:
-            not_found = "Not found: " + wanted_path
-            if exc.output.decode() != not_found:
-                print(
-                    f"Failed to get policy {self.policy!r}: {exc}",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+            print(
+                f"Failed to get policy {self.policy!r}: {exc}", file=sys.stderr
+            )
+            sys.exit(1)
 
         # pylint: disable=consider-using-with
         tmpfile = tempfile.NamedTemporaryFile(suffix=suffix)
@@ -112,7 +113,7 @@ class PolicyManager:
                 token=token,
                 is_include=self.is_include,
             )
-        except subprocess.CalledProcessError as exc:
+        except PolicyAdminException as exc:
             print(
                 f"Failed to replace policy {self.policy!r} with file {tmpfile.name!r}: "
                 f"{exc}",

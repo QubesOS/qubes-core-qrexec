@@ -22,6 +22,18 @@ from typing import Optional
 
 from .utils import prepare_subprocess_kwds
 
+# The PolicyAdmin*Exception is used by issubclass(..., PolicyAdminException).
+# pylint: disable=unused-import
+from .policy.admin import (
+    PolicyAdminException,
+    PolicyAdminTokenException,
+    PolicyAdminFileNotFoundException,
+    PolicyAdminProtocolException,
+    PolicyAdminSyntaxException,
+    PolicyAdminInvalidFileNameException,
+    PolicyAdminInvalidFilePathException,
+)
+
 QREXEC_CLIENT_DOM0 = "/usr/bin/qrexec-client"
 QREXEC_CLIENT_VM = "/usr/bin/qrexec-client-vm"
 # pylint: disable=invalid-name
@@ -45,11 +57,22 @@ def call(dest: str, rpcname: str, arg: Optional[str] = None, *, payload=None):
     :param str or None arg: argument of the call
     :param str or bytes or file or None payload: an payload to the qrexec call
     :rtype: str
-    :raises subprocess.CalledProcessError: on failure
+    :raises subprocess.CalledProcessError: on unexpected failure, instance of \
+            PolicyAdminException otherwise
     """
     command = make_command(dest=dest, rpcname=rpcname, arg=arg)
     kwds = prepare_subprocess_kwds(payload, for_popen=False)
-    return subprocess.check_output(command, **kwds).decode()
+    try:
+        return subprocess.check_output(command, **kwds).decode()
+    except subprocess.CalledProcessError as exc:
+        stderr_exc = exc.stderr.decode()
+        stderr_exc_type = stderr_exc.split(" ")[0]
+        if stderr_exc_type in globals():
+            exception = globals()[stderr_exc_type]
+            if issubclass(exception, PolicyAdminException):
+                stderr_exc_msg = stderr_exc[len(exception.__name__ + " ") :]
+                raise exception(stderr_exc_msg) from exc
+        raise
 
 
 async def call_async(dest, rpcname, arg=None, *, payload=None):
