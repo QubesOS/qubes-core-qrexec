@@ -68,18 +68,16 @@ class PolicyManager:
         # not found, ignore, else abort as the request was refused.
         file_exists = False
         if self.is_include:
-            policy_get = client.policy_include_get
-            policy_replace = client.policy_include_replace
             wanted_path = str(INCLUDEPATH) + "/" + self.policy + "\n"
             suffix = "_include_" + self.policy
         else:
-            policy_get = client.policy_get
-            policy_replace = client.policy_replace
             wanted_path = str(POLICYPATH) + "/" + self.policy + ".policy\n"
             suffix = "_" + self.policy + ".policy"
 
         try:
-            original_content, token = policy_get(self.policy)
+            original_content, token = client.policy_get(
+                policy=self.policy, is_include=self.is_include
+            )
             file_exists = True
         except subprocess.CalledProcessError as exc:
             not_found = "Not found: " + wanted_path
@@ -108,7 +106,12 @@ class PolicyManager:
             current_file.close()
 
         try:
-            policy_replace(self.policy, content, token)
+            client.policy_replace(
+                policy=self.policy,
+                content=content,
+                token=token,
+                is_include=self.is_include,
+            )
         except subprocess.CalledProcessError as exc:
             print(
                 f"Failed to replace policy {self.policy!r} with file {tmpfile.name!r}: "

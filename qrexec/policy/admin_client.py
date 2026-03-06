@@ -34,41 +34,88 @@ Admin client in Python
 """
 
 from typing import List, Tuple
+from warnings import warn
 
 from ..client import call
 
 
 class PolicyClient:
-    def policy_list(self) -> List[str]:
-        return self.call("policy.List").rstrip("\n").split("\n")
+    def policy_list(self, is_include: bool = False) -> List[str]:
+        rpc = "List"
+        return self.call(rpc, is_include=is_include).rstrip("\n").split("\n")
 
     def policy_include_list(self) -> List[str]:
-        return self.call("policy.include.List").rstrip("\n").split("\n")
+        warn(
+            "Method 'policy_include_list()' is deprecated, use 'policy_list()' "
+            "instead",
+            DeprecationWarning,
+        )
+        return self.policy_list(is_include=True)
 
-    def policy_get(self, name: str) -> Tuple[str, str]:
-        token, content = self.call("policy.Get", name).split("\n", 1)
+    def policy_get(
+        self, policy: str, is_include: bool = False
+    ) -> Tuple[str, str]:
+        rpc = "Get"
+        token, content = self.call(
+            rpc=rpc, arg=policy, is_include=is_include
+        ).split("\n", 1)
         return content, token
 
     def policy_include_get(self, name: str) -> Tuple[str, str]:
-        token, content = self.call("policy.include.Get", name).split("\n", 1)
-        return content, token
+        warn(
+            "Method 'policy_include_get()' is deprecated, use 'policy_get()' "
+            "instead",
+            DeprecationWarning,
+        )
+        return self.policy_get(policy=name, is_include=True)
 
-    def policy_replace(self, name: str, content: str, token="any"):
-        self.call("policy.Replace", name, token + "\n" + content)
+    def policy_replace(
+        self,
+        policy: str,
+        content: str,
+        token: str = "any",
+        is_include: bool = False,
+    ):
+        rpc = "Replace"
+        self.call(
+            rpc=rpc,
+            arg=policy,
+            payload=token + "\n" + content,
+            is_include=is_include,
+        )
 
     def policy_include_replace(self, name: str, content: str, token="any"):
-        self.call("policy.include.Replace", name, token + "\n" + content)
+        warn(
+            "Method 'policy_include_replace()' is deprecated, use "
+            "'policy_replace()' instead",
+            DeprecationWarning,
+        )
+        return self.policy_replace(
+            policy=name, content=content, token=token, is_include=True
+        )
 
-    def policy_remove(self, name: str, token="any"):
-        self.call("policy.Remove", name, token)
+    def policy_remove(
+        self, policy: str, token: str = "any", is_include: bool = False
+    ):
+        rpc = "Remove"
+        self.call(rpc=rpc, arg=policy, payload=token, is_include=is_include)
 
     def policy_include_remove(self, name: str, token="any"):
-        self.call("policy.include.Remove", name, token)
+        warn(
+            "Method 'policy_include_remove()' is deprecated, use "
+            "'policy_remove()' instead",
+            DeprecationWarning,
+        )
+        return self.policy_remove(policy=name, token=token, is_include=True)
 
-    def policy_get_files(self, name: str):
-        result = self.call("policy.GetFiles", name)
+    def policy_get_files(self, policy: str) -> list:
+        rpc = "GetFiles"
+        result = self.call(rpc=rpc, arg=policy)
         return [] if result == "" else result.rstrip("\n").split("\n")
 
     @staticmethod
-    def call(service_name, arg=None, payload=""):
-        return call("dom0", service_name, arg, payload=payload)
+    def call(rpc, arg=None, payload="", is_include: bool = False):
+        if is_include:
+            rpc = "include." + rpc
+        rpc = "policy." + rpc
+        return call(dest="dom0", rpcname=rpc, arg=arg, payload=payload)
