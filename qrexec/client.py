@@ -49,7 +49,7 @@ def call(dest: str, rpcname: str, arg: Optional[str] = None, *, input=None):
     """
     # pylint: disable=redefined-builtin
 
-    command = make_command(dest, rpcname, arg)
+    command = make_command(dest=dest, rpcname=rpcname, arg=arg)
     kwds = prepare_subprocess_kwds(input, for_popen=False)
     return subprocess.check_output(command, **kwds).decode()
 
@@ -70,7 +70,7 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
     """
     # pylint: disable=redefined-builtin
 
-    command = make_command(dest, rpcname, arg)
+    command = make_command(dest=dest, rpcname=rpcname, arg=arg)
     kwds = prepare_subprocess_kwds(input)
     to_communicate = kwds.pop("input")
     process = await asyncio.create_subprocess_exec(*command, **kwds)
