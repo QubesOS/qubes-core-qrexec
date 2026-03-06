@@ -30,7 +30,6 @@ import logging
 from ..policy.admin import (
     PolicyAdmin,
     PolicyAdminException,
-    PolicyAdminTokenException,
 )
 from .. import POLICYPATH
 
@@ -56,7 +55,7 @@ def main():
     admin = PolicyAdmin(POLICYPATH)
     try:
         response = admin.handle_request(service_name, argument, payload)
-    except (PolicyAdminException, PolicyAdminTokenException) as exc:
+    except PolicyAdminException as exc:
         logging.warning(
             "%s+%s (%s): error: %s", service_name, argument, source, exc
         )
