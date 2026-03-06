@@ -195,4 +195,5 @@ def prepare_subprocess_kwds(
         # XXX this breaks on file-like objects that don't have .fileno
         kwds["stdin"] = input
         kwds["input"] = None
+    kwds["stderr"] = subprocess.PIPE
     return kwds
