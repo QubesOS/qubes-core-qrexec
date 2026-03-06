@@ -197,4 +197,5 @@ def prepare_subprocess_kwds(
         kwds["input"] = None
     if not for_check:
         kwds["stdout"] = subprocess.PIPE
+    kwds["stderr"] = subprocess.PIPE
     return kwds

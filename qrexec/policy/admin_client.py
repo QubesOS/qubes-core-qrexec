@@ -35,8 +35,21 @@ Admin client in Python
 
 from typing import List, Tuple
 from warnings import warn
+from subprocess import CalledProcessError
 
 from ..client import call
+
+# The PolicyAdmin*Exception is used by issubclass(..., PolicyAdminException).
+# pylint: disable=unused-import
+from .admin import (
+    PolicyAdminException,
+    PolicyAdminTokenException,
+    PolicyAdminFileNotFoundException,
+    PolicyAdminProtocolException,
+    PolicyAdminSyntaxException,
+    PolicyAdminInvalidFileNameException,
+    PolicyAdminInvalidFilePathException,
+)
 
 
 class PolicyClient:
@@ -120,4 +133,16 @@ class PolicyClient:
         if is_include:
             service_name = "include." + service_name
         service_name = "policy." + service_name
-        return call(dest="dom0", rpcname=service_name, arg=arg, input=payload)
+        try:
+            return call(
+                dest="dom0", rpcname=service_name, arg=arg, input=payload
+            )
+        except CalledProcessError as exc:
+            stderr_exc = exc.stderr.decode()
+            stderr_exc_type = stderr_exc.split(" ")[0]
+            if stderr_exc_type in globals():
+                exception = globals()[stderr_exc_type]
+                if issubclass(exception, PolicyAdminException):
+                    stderr_exc_msg = stderr_exc[len(exception.__name__ + " ") :]
+                    raise exception(stderr_exc_msg) from exc
+            raise

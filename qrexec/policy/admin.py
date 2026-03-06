@@ -38,9 +38,41 @@ class PolicyAdminException(Exception):
     """
 
 
-class PolicyAdminTokenException(Exception):
+class PolicyAdminTokenException(PolicyAdminException):
     """
     A token check exception, indicating that a file is in unexpected state.
+    """
+
+
+class PolicyAdminFileNotFoundException(PolicyAdminException):
+    """
+    Policy cannot be found.
+    """
+
+
+class PolicyAdminProtocolException(PolicyAdminException):
+    """
+    Client sent an invalid request that it should have known to not send in the
+    first place.
+    """
+
+
+class PolicyAdminSyntaxException(PolicyAdminProtocolException):
+    """
+    Client sent an invalid policy. That it should have known to not send in the
+    first place. Clients should validate the policy before sending them.
+    """
+
+
+class PolicyAdminInvalidFileNameException(PolicyAdminProtocolException):
+    """
+    Client sent a policy with invalid name.
+    """
+
+
+class PolicyAdminInvalidFilePathException(PolicyAdminProtocolException):
+    """
+    Client sent a policy using a path out of bounds.
     """
 
 
@@ -89,7 +121,7 @@ class PolicyAdmin:
         """
 
         if not all(char in RPCNAME_ALLOWED_CHARSET for char in arg):
-            raise PolicyAdminException(
+            raise PolicyAdminProtocolException(
                 'Invalid argument: "{}"\n'
                 "Valid characters are letters, numbers, dot, plus, hyphen and "
                 "underline".format(arg)
@@ -97,7 +129,7 @@ class PolicyAdmin:
 
         func = self._find_method(service_name)
         if not func:
-            raise PolicyAdminException(
+            raise PolicyAdminProtocolException(
                 "unrecognized method: {}".format(service_name)
             )
 
@@ -105,13 +137,13 @@ class PolicyAdmin:
 
         if func.api_no_arg:
             if arg != "":
-                raise PolicyAdminException("Unexpected argument")
+                raise PolicyAdminProtocolException("Unexpected argument")
         else:
             args.append(arg)
 
         if func.api_no_payload:
             if payload != b"":
-                raise PolicyAdminException("Unexpected payload")
+                raise PolicyAdminProtocolException("Unexpected payload")
         else:
             args.append(payload)
 
@@ -178,7 +210,7 @@ class PolicyAdmin:
 
     def _common_get(self, path: Path) -> bytes:
         if not path.is_file():
-            raise PolicyAdminException("Not found: {}".format(path))
+            raise PolicyAdminFileNotFoundException("Not found: {}".format(path))
 
         data = path.read_bytes()
         token = compute_token(data)
@@ -198,7 +230,7 @@ class PolicyAdmin:
 
     def _common_replace(self, path: Path, payload: bytes) -> bytes:
         if b"\n" not in payload:
-            raise PolicyAdminException(
+            raise PolicyAdminProtocolException(
                 "Payload needs to include first line with token"
             )
         token, data = payload.split(b"\n", 1)
@@ -234,7 +266,7 @@ class PolicyAdmin:
         self._check_token(payload, path)
 
         if not path.is_file():
-            raise PolicyAdminException("Not found: {}".format(path))
+            raise PolicyAdminFileNotFoundException("Not found: {}".format(path))
 
         self._validate(path, None)
 
@@ -245,10 +277,10 @@ class PolicyAdmin:
     @method("policy.GetFiles", no_payload=True)
     def policy_get_files(self, arg):
         if not isinstance(arg, str) or not arg:
-            raise PolicyAdminException("Service cannot be empty.")
+            raise PolicyAdminProtocolException("Service cannot be empty.")
         invalid_chars = get_invalid_characters(arg, disallowed="+")
         if invalid_chars:
-            raise PolicyAdminException(
+            raise PolicyAdminProtocolException(
                 "Service {!r} contains invalid characters: {!r}".format(
                     arg, invalid_chars
                 )
@@ -276,7 +308,7 @@ class PolicyAdmin:
 
     def _get_path(self, arg: str, dir_path: str, suffix: str) -> Path:
         if not re.compile(r"^[\w-]+$").match(arg):
-            raise PolicyAdminException(
+            raise PolicyAdminInvalidFileNameException(
                 f"Invalid policy file name: {arg}\n"
                 "Names must contain only alphanumeric characters, "
                 "underscore and hyphen."
@@ -284,7 +316,7 @@ class PolicyAdmin:
         path = dir_path / (arg + suffix)
         path = path.resolve()
         if path.parent != dir_path:
-            raise PolicyAdminException(
+            raise PolicyAdminInvalidFilePathException(
                 "Expecting a path inside {}".format(dir_path)
             )
 
@@ -296,7 +328,7 @@ class PolicyAdmin:
                 policy_path=self.policy_path, overrides={path: content}
             )
         except PolicySyntaxError as exc:
-            raise PolicyAdminException(
+            raise PolicyAdminSyntaxException(
                 "Policy change validation failed: {}".format(exc)
             ) from exc
 
@@ -312,7 +344,7 @@ class PolicyAdmin:
             return
 
         if not token.startswith(b"sha256:"):
-            raise PolicyAdminException("Unrecognized token")
+            raise PolicyAdminProtocolException("Unrecognized token")
 
         if not path.exists():
             raise PolicyAdminTokenException(
