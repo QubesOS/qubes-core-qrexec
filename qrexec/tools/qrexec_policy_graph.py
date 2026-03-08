@@ -24,8 +24,6 @@ import pathlib
 
 import sys
 
-import qubesadmin
-
 from .. import POLICYPATH
 from .. import exc
 from .. import utils
@@ -80,7 +78,7 @@ argparser.add_argument(
 )
 
 
-def handle_single_action(args, action, app):
+def handle_single_action(args, action, system_info):
     """Get single policy action and output (or not) lines to add"""
     if args.skip_labels:
         service = ""
@@ -102,7 +100,9 @@ def handle_single_action(args, action, app):
         if node.startswith("@"):  # non-literal qubes
             node_attributes = "style = dotted"
         else:
-            node_color = app.domains[node].label.color.replace("0x", "#")
+            node_color = system_info["domains"][node]["label"].replace(
+                "0x", "#"
+            )
             node_attributes = f'color = "{node_color}", penwidth = 5'
         lines.append(f'  "{node}" [{node_attributes}];\n')
 
@@ -183,8 +183,6 @@ def main(args=None, output=sys.stdout):
     )
     targets.append("@default")
 
-    app = qubesadmin.Qubes()
-
     connections = set()
 
     policy = parser.FilePolicy(policy_path=args.policy_dir)
@@ -224,7 +222,7 @@ def main(args=None, output=sys.stdout):
                 except exc.AccessDenied:
                     continue
 
-                for line in handle_single_action(args, action, app):
+                for line in handle_single_action(args, action, system_info):
                     if line in connections:
                         continue
                     if line:
