@@ -103,7 +103,7 @@ def handle_single_action(args, action, system_info):
             node_color = system_info["domains"][node]["label"].replace(
                 "0x", "#"
             )
-            node_attributes = f'color = "{node_color}", penwidth = 5'
+            node_attributes = f'color = "{node_color}", penwidth = 3'
         lines.append(f'  "{node}" [{node_attributes}];\n')
 
     # create edges with services as labels
