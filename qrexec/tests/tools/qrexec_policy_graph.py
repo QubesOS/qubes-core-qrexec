@@ -31,6 +31,7 @@ def system_info():
     system_info = {
         "dom0": {
             "icon": "black",
+            "label": "0xffffff",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AdminVM",
@@ -39,6 +40,7 @@ def system_info():
         },
         "work": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -47,6 +49,7 @@ def system_info():
         },
         "personal": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -55,6 +58,7 @@ def system_info():
         },
         "sys-usb": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -63,6 +67,7 @@ def system_info():
         },
         "sys-usb-2": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -71,6 +76,7 @@ def system_info():
         },
         "dvm_template": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": True,
             "guivm": None,
             "type": "AppVM",
@@ -104,6 +110,8 @@ def test_simple_graph():
             main(["--policy-dir", policy_dir, "--output", output.name])
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "personal" [color = "#cc0000", penwidth = 3];
   "work" -> "personal" [label="test.Service" color=red];
 }
 """
@@ -126,6 +134,8 @@ def test_simple_ask():
             )
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "personal" [color = "#cc0000", penwidth = 3];
   "work" -> "personal" [label="test.Service" color=orange];
 }
 """
@@ -151,7 +161,10 @@ def test_simple_service():
             )
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "personal" [color = "#cc0000", penwidth = 3];
   "work" -> "personal" [label="test.Service" color=red];
+  "sys-usb" [color = "#cc0000", penwidth = 3];
   "sys-usb" -> "personal" [label="test.Service" color=red];
 }
 """
@@ -177,7 +190,10 @@ def test_simple_service_arg():
             )
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "personal" [color = "#cc0000", penwidth = 3];
   "work" -> "personal" [label="test.Service" color=red];
+  "sys-usb" [color = "#cc0000", penwidth = 3];
   "sys-usb" -> "personal" [label="test.Service" color=red];
 }
 """
@@ -202,6 +218,8 @@ def test_simple_service_arg_single():
             )
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "personal" [color = "#cc0000", penwidth = 3];
   "work" -> "personal" [label="test.Service" color=red];
 }
 """
@@ -227,6 +245,8 @@ def test_simple_service_no_wildcard():
             )
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "personal" [color = "#cc0000", penwidth = 3];
   "work" -> "personal" [label="test.Service" color=red];
 }
 """
@@ -253,6 +273,8 @@ def test_simple_service_no_wildcard_full():
             )
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "personal" [color = "#cc0000", penwidth = 3];
   "work" -> "personal" [label="test.Service+arg allow" color=red];
   "work" -> "personal" [label="test.Service+arg2 allow" color=red];
 }
@@ -277,6 +299,8 @@ def test_simple_redirect():
             )
             content = output.read().decode()
             expected = """digraph g {
+  "work" [color = "#cc0000", penwidth = 3];
+  "dom0" [color = "#ffffff", penwidth = 3];
   "work" -> "dom0" [label="test.Service" color=red];
 }
 """
