@@ -31,6 +31,7 @@ def system_info():
     system_info = {
         "dom0": {
             "icon": "black",
+            "label": "0xffffff",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AdminVM",
@@ -39,6 +40,7 @@ def system_info():
         },
         "work": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -47,6 +49,7 @@ def system_info():
         },
         "personal": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -55,6 +58,7 @@ def system_info():
         },
         "sys-usb": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -63,6 +67,7 @@ def system_info():
         },
         "sys-usb-2": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": False,
             "guivm": None,
             "type": "AppVM",
@@ -71,6 +76,7 @@ def system_info():
         },
         "dvm_template": {
             "icon": "red",
+            "label": "0xcc0000",
             "template_for_dispvms": True,
             "guivm": None,
             "type": "AppVM",
