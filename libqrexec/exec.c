@@ -224,7 +224,7 @@ void fix_fds(int fdin, int fdout, int fderr)
     if (fdin < 0 || fdout < 1 || fderr < 2) {
         LOG(ERROR, "fix_fds: bad FD numbers: fdin %d, fdout %d, fderr %d",
             fdin, fdout, fderr);
-        _exit(125);
+        _exit(QREXEC_EXIT_PROBLEM);
     }
     if ((fdin != 0 && dup2(fdin, 0) < 0) ||
         (fdout != 1 && dup2(fdout, 1) < 0) ||
