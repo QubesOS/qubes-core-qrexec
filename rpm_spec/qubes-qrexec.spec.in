@@ -162,6 +162,14 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/utils.py
 %{python3_sitelib}/qrexec/server.py
 
+%dir %{python3_sitelib}/qrexec/rpcconfirmation
+%dir %{python3_sitelib}/qrexec/rpcconfirmation/__pycache__
+%{python3_sitelib}/qrexec/rpcconfirmation/__pycache__/*
+%{python3_sitelib}/qrexec/rpcconfirmation/__init__.py
+%{python3_sitelib}/qrexec/rpcconfirmation/base.py
+%{python3_sitelib}/qrexec/rpcconfirmation/generic.py
+%{python3_sitelib}/qrexec/rpcconfirmation/in_vm_admin_access.py
+
 %dir %{python3_sitelib}/qrexec/policy
 %dir %{python3_sitelib}/qrexec/policy/__pycache__
 %{python3_sitelib}/qrexec/policy/__pycache__/*
@@ -213,6 +221,7 @@ rm -f %{name}-%{version}
 
 %dir %{python3_sitelib}/qrexec/glade
 %{python3_sitelib}/qrexec/glade/RPCConfirmationWindow.glade
+%{python3_sitelib}/qrexec/glade/InVMAdminAccessRPCConfirmationWindow.glade
 
 %{_datadir}/man/man1/qubes-core-qrexec.1.gz
 
