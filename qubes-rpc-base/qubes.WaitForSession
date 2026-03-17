@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+
+# Wait for our session to complete.
+wait_self_session(){
+    if ! test "$in_dom0" = "true" &&
+        test "$(qubesdb-read --default=True /qubes-gui-enabled)" = "True"
+    then
+        user="$(qubesdb-read /default-user || echo 'user')"
+        while ! test -e "/var/run/qubes/qrexec-server.$user.sock"; do
+            sleep 0.1
+        done
+    fi
+
+    true "${XDG_RUNTIME_DIR:="/run/user/$(id -u)"}"
+    true "${DBUS_SESSION_BUS_ADDRESS:="unix:path=${XDG_RUNTIME_DIR}/bus"}"
+    export DBUS_SESSION_BUS_ADDRESS
+    systemctl --user --wait --quiet is-system-running
+    exit 0
+}
+
+main(){
+    arg="${QREXEC_SERVICE_ARGUMENT-}"
+    in_dom0=""
+    if command -v qrexec-client >/dev/null; then
+        in_dom0="true"
+    fi
+    case "${arg}" in
+        "")
+            wait_self_session
+            ;;
+        *)
+            # Reserve argument for future use.
+            echo "No argument is allowed" >&2
+    esac
+}
+
+main

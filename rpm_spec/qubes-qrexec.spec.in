@@ -145,6 +145,7 @@ rm -f %{name}-%{version}
 %dir %{_sysconfdir}/qubes-rpc
 %{_sysconfdir}/qubes-rpc/policy.Ask
 %{_sysconfdir}/qubes-rpc/policy.Notify
+%{_sysconfdir}/qubes-rpc/qubes.WaitForSession
 
 %{_sysconfdir}/xdg/autostart/qrexec-policy-agent.desktop
 

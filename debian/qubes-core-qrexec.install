@@ -2,6 +2,7 @@ etc/pam.d/qrexec
 etc/qubes/rpc-config/README
 etc/qubes-rpc/policy.Ask
 etc/qubes-rpc/policy.Notify
+etc/qubes-rpc/qubes.WaitForSession
 etc/xdg/autostart/qrexec-policy-agent.desktop
 lib/systemd/system/qubes-qrexec-agent.service
 usr/bin/qrexec-client-vm
