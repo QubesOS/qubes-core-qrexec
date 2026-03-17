@@ -58,6 +58,7 @@ Requires:   python%{python3_pkgversion}-pyinotify
 Requires:   python%{python3_pkgversion}-inotify
 %endif
 Conflicts:  qubes-utils-libs < 4.1.0
+Conflicts:  qubes-core-agent < 4.4.0
 Conflicts:  qubes-core-agent-qrexec < 4.1.0
 # UUID in SystemInfo response from qubesd
 Conflicts:  qubes-core-dom0 < 4.3.9
