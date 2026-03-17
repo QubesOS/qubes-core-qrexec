@@ -1,3 +1,20 @@
+qubes-core-qrexec (4.4.0-1) unstable; urgency=medium
+
+  [ parulin ]
+  * Migrate from recommonmark to myst-parser (doc)
+  * Update the RPC policy format in documentation
+  * Link to the online documentation in README
+  * Change recommonmark to myst in build dependencies
+
+  [ Ben Grande ]
+  * Read link to canonical path
+  * Change WaitForSession to wait for user session
+
+  [ Marek Marczykowski-Górecki ]
+  * Adjust package dependencies for clean update
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Tue, 17 Mar 2026 17:25:54 +0100
+
 qubes-core-qrexec (4.3.12-1) unstable; urgency=medium
 
   [ Ben Grande ]
