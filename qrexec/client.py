@@ -22,6 +22,18 @@ from typing import Optional
 
 from .utils import prepare_subprocess_kwds
 
+# The PolicyAdmin*Exception is used by issubclass(..., PolicyAdminException).
+# pylint: disable=unused-import
+from .policy.admin import (
+    PolicyAdminException,
+    PolicyAdminTokenException,
+    PolicyAdminFileNotFoundException,
+    PolicyAdminProtocolException,
+    PolicyAdminSyntaxException,
+    PolicyAdminInvalidFileNameException,
+    PolicyAdminInvalidFilePathException,
+)
+
 QREXEC_CLIENT_DOM0 = "/usr/bin/qrexec-client"
 QREXEC_CLIENT_VM = "/usr/bin/qrexec-client-vm"
 # pylint: disable=invalid-name
@@ -33,64 +45,54 @@ elif pathlib.Path(QREXEC_CLIENT_VM).is_file():
     IN_DOM0 = False
 
 
-def call(dest: str, rpcname: str, arg: Optional[str] = None, *, input=None):
+def call(dest: str, rpcname: str, arg: Optional[str] = None, *, payload=None):
     """Invoke qrexec call
 
-    The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
+    The `payload` parameter should be either :py:class:`str` or :py:class:`bytes`
     or a *real* file, which has file descriptor (as returned by ``.fileno()``
     method). Other file-like objects are not supported.
 
     :param str dest: name of the policied call
     :param str rpcname: name of a call from Policy API
     :param str or None arg: argument of the call
-    :param str or bytes or file or None input: an input to the qrexec call
+    :param str or bytes or file or None payload: an payload to the qrexec call
     :rtype: str
-    :raises subprocess.CalledProcessError: on failure
+    :raises subprocess.CalledProcessError: on unexpected failure, instance of \
+            PolicyAdminException otherwise
     """
-    # pylint: disable=redefined-builtin
+    command = make_command(dest=dest, rpcname=rpcname, arg=arg)
+    kwds = prepare_subprocess_kwds(payload, for_popen=False)
+    try:
+        return subprocess.check_output(command, **kwds).decode()
+    except subprocess.CalledProcessError as exc:
+        stderr_exc = exc.stderr.decode()
+        stderr_exc_type = stderr_exc.split(" ")[0]
+        if stderr_exc_type in globals():
+            exception = globals()[stderr_exc_type]
+            if issubclass(exception, PolicyAdminException):
+                stderr_exc_msg = stderr_exc[len(exception.__name__ + " ") :]
+                raise exception(stderr_exc_msg) from exc
+        raise
 
-    command = make_command(dest, rpcname, arg)
-    return subprocess.check_output(
-        command, **prepare_subprocess_kwds(input)
-    ).decode()
 
-
-async def call_async(dest, rpcname, arg=None, *, input=None):
+async def call_async(dest, rpcname, arg=None, *, payload=None):
     """Invoke qrexec call (async version)
 
-    The `input` parameter should be either :py:class:`str` or :py:class:`bytes`
+    The `payload` parameter should be either :py:class:`str` or :py:class:`bytes`
     or a *real* file, which has file descriptor (as returned by ``.fileno()``
     method). Other file-like objects are not supported.
 
     :param str dest: name of the policied call
     :param str rpcname: name of a call from Policy API
     :param str or None arg: argument of the call
-    :param str or bytes or file or None input: an input to the qrexec call
+    :param str or bytes or file or None payload: an payload to the qrexec call
     :rtype: str
     :raises subprocess.CalledProcessError: on failure
     """
-    # pylint: disable=redefined-builtin
-
-    command = make_command(dest, rpcname, arg)
-
-    if input is None:
-        stdin = subprocess.DEVNULL
-        to_communicate = None
-    elif isinstance(input, bytes):
-        stdin = subprocess.PIPE
-        to_communicate = input
-    elif isinstance(input, str):
-        stdin = subprocess.PIPE
-        to_communicate = input.encode()
-    else:
-        # Assume this is a file
-        stdin = input
-        to_communicate = None
-
-    process = await asyncio.create_subprocess_exec(
-        *command, stdin=stdin, stdout=subprocess.PIPE
-    )
-
+    command = make_command(dest=dest, rpcname=rpcname, arg=arg)
+    kwds = prepare_subprocess_kwds(payload)
+    to_communicate = kwds.pop("input")
+    process = await asyncio.create_subprocess_exec(*command, **kwds)
     stdout, _stderr = await process.communicate(to_communicate)
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, command)
