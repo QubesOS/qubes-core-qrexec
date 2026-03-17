@@ -1,0 +1,201 @@
+## Qrexec Policy
+## Syntax Test
+## vim:ft=qrexecpolicy:spell
+
+
+## Valid {{{
+
+## Comments To-do.
+  ## TODO: working.
+  ## FIXME: working.
+  ## NOTE: working.
+  ## XXX: working.
+
+
+## White space between fields are accepted.
+  ## Comment
+  ## Tab shouldn't be used, they are expanded to spaces instead for
+  ## uniformity independent of editor's configuration. This is just to
+  ## demonstrate that tabs do not cause syntax errors.
+		service		*		@anyvm		@anyvm		deny		notify=no
+  service  *   @anyvm    @anyvm  deny
+  service  *   source    dest    deny
+  *        *   *         *       deny
+  !include               test
+  !include-dir           test
+  !include-service  *  * test
+  !include-service  a  * test
+  !compat-4.0
+
+## Include
+!compat-4.0
+!include      include/file_+-.test
+!include      file
+!include-dir  /dir/dir
+!include-dir  include/dir
+!include-service  *               *                 include/file_+-.test
+!include-service  qrexec.Service  *                 include/file_+-.test
+!include-service  qrexec.Service  ++-_.09argument   include/file_+-.test
+
+## Parameters
+* * source dest deny  notify=yes
+* * source dest allow notify=no autostart=yes user=user target=example
+* * source dest ask   notify=yes autostart=no user=user target=example default_target=test
+
+## Service name, Argument and @token in target and default_target
+local-09.Service  *         source dest deny notify=no
+local.Service     +         source dom0 allow target=@adminvm
+local.Service     ++_-.arg  source dest allow target=@dispvm:test
+qrexec_Service    +         source dest allow target=@dispvm:uuid:12345678-abcd-abcd-abcd-12345678abcd
+qrexec_Service    +         source dest allow target=uuid:12345678-abcd-abcd-abcd-12345678abcd
+qrexec_Service    +         source dom0 ask target=@adminvm default_target=@adminvm
+qrexec_Service    +         source dest ask target=@dispvm:test default_target=@dispvm
+qrexec_Service    +         source dest ask target=@dispvm:uuid:12345678-abcd-abcd-abcd-12345678abcd default_target=@dispvm:12345678-abcd-abcd-abcd-12345678abcd
+qrexec_Service    +         source dest ask target=uuid:12345678-abcd-abcd-abcd-12345678abcd default_target=uuid:12345678-abcd-abcd-abcd-12345678abcd
+
+## Source and Destination with catch all, literal names, UUID and @tokens
+*               *   *                   *                   deny
+qrexec.Service  *   @adminvm            @adminvm            deny
+qrexec.Service  *   @anyvm              @anyvm              deny
+qrexec.Service  *   source              @default            deny
+qrexec.Service  *   source              @dispvm             deny
+qrexec.Service  *   @dispvm:source      @dispvm:source      deny
+qrexec.Service  *   @dispvm:@tag:source @dispvm:@tag:source deny
+qrexec.Service  *   @tag:source         @tag:source         deny
+qrexec.Service  *   @type:AdminVM       @type:AdminVM       deny
+qrexec.Service  *   @type:AppVM         @type:AppVM         deny
+qrexec.Service  *   @type:DispVM        @type:DispVM        deny
+qrexec.Service  *   @type:StandaloneVM  @type:StandaloneVM  deny
+qrexec.Service  *   @type:TemplateVM    @type:TemplateVM    deny
+qrexec.Service  *   uuid:12345678-abcd-abcd-abcd-12345678abcd @dispvm:uuid:12345678-abcd-abcd-abcd-12345678abcd deny
+
+## }}}
+## Invalid {{{
+## Every line that is not a comment below, should have the described error.
+## If no error appears in a line with content, this is an error in the syntax
+## file and should be fixed, except if that is the last line in the block
+## having the expected behavior.
+
+## Everything extraneous is an error
+!compat-4.0err
+!compat-4.0  err
+!include file err
+!include-dir dir/err err
+!include-service * * file err
+
+## If the rule hasn't reached the minimum field number, the last syntax group
+## is highlighted as incomplete:
+   test
+   !include
+   !include-dir
+   !include-service
+q.T
+q.T  a*
+q.T  a+
+q.T  *
+q.T  +
+q.T  +a
+!include-service q.T  *a  a a
+q.T  *a  a
+q.T  a+  a
+q.T  h+h a
+q.T  *   @anyvm
+q.T  *   source
+q.T  *   @anyvm @anyvm
+q.T  *   source dest
+!include-service *
+!include-service service
+!include-service service argument
+!include-service service +
+!include-service service +a
+!include-service service a+
+!include-service service a*
+!include-service service argument file
+!include-service service a*       file
+!include-service service a+       file
+!include-service service *a       file
+!include-service service a+       file
+!include-service service a*       file
+
+# After the resolution, the check to see if the rule should end is by
+# checking if the parameter is allowed for that resolution and if
+# parameter is repeated.
+* * * * deny  notify=yes notify=no
+* * * * allow notify=yes autostart=no target=test notify=yes
+* * * * ask   default_target=test notify=yes default_target=test autostart=no
+
+## Service '*' must have argument '*':
+* + * * deny
+* ** * * deny
+* * * * deny
+
+## Service Test
+09AZaz_.+-><a/?\a'"=~a!@#$a%^&*a()[a]{} * * * deny
+
+## Argument Test
+*    **  * * deny
+*    *+* * * deny
+*    +*+ * * deny
+*    *+  * * deny
+*    ++  * * deny
+test *+  * * deny
+* +test  * * deny
+test +test.+-/!&oh*)error * * deny
+
+## Literal Source and Destination Test
+* * ** test-m@e deny
+* * any&vm t=est deny
+
+## UUID Source and Destination Test
+* * a uuuid:12345678-abcd-abcd-abcd-12345678abcd         deny
+* * uuid::12345678-abcd-abcd-abcd-12345678abcd a         deny
+* * a @dispvm:uuid:g2345678-abcd-abcd-abcd-12345678abcd deny
+* * @dispvm:uuid:12345678-abcd-abcd-abcd-12345678abcd1 a deny
+
+## Token Source and Destination Test
+* * @anyvmm       @anyvm deny
+* * @type:AppVMV  @@anyvm deny
+
+## Token without arguments Test
+* * @dispvm: @dispvm:@tag:  deny
+* * @type:   @tag:          deny
+
+## Token with wrong arguments Test
+* * @type:APPVM @type:AnY-+.ThInG deny
+
+## Token at the wrong field Test
+* * @default dest deny
+* * @dispvm  dest deny
+
+## Resolution Test
+* * * * alloww
+* * * * aalloww
+* * * * allowallow
+
+## Parameter permitted per resolution
+* * * * deny  notify=yes autostart=no user=user target=target default_target=test
+* * * * allow notify=yes autostart=no user=user target=target default_target=test
+* * * * ask   notify=yes autostart=no user=user target=target default_target=test
+
+## Parameter without argument is invalid
+* * * * ask   notify= autostart= user= target= default_target=
+
+## Anything that is not the permitted parameters are invalid
+* * * * ask   notify autostart user target default_target
+* * * * ask   checking if= it=fails
+
+## Boolean parameters Test
+* * * * ask notify=yess   autostart=yyes
+* * * * ask notify=yesyes autostart=nno
+* * * * ask notify=noo    autostart=nono
+* * * * ask notify=-.+@!   autostart=/*!@%&
+
+## Target UUID parameters Test
+* * * * ask target=@dispvm:uuid: default_target=@dispvm:uuid:a
+* * * * ask target=uuid: default_target=uuid:a
+
+## Target @token parameters Test
+* * * * ask target=@dispvm: default_target=@dispvmm
+* * * * ask target=@default: default_target=@tag:test
+
+## }}}

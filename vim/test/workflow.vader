@@ -1,0 +1,220 @@
+" Vim syntax file
+" Language:     Qrexec
+" Maintainer:   Ben Grande <ben@invisiblethingslab.com>
+" Last Change:  2023 May 14
+
+
+" Vader is unmaintained but it is the best framework for syntax tests.
+
+" Comments {{{
+" Given {{{
+Given qrexecpolicy (Comments):
+  	# Tab indented #
+      ##### Space indented and multiple signs
+  # TODO: FIXME: NOTE: XXX: Todo is emphasized
+  * # Comments cannot start after a rule started
+" }}}
+" Execute (Tab Indented Comments): {{{
+Execute (Tab Indented Comment):
+  AssertEqual SyntaxAt(1, 1),   ''
+  AssertEqual SyntaxAt(1, 2),   'qrexecpolicyComment'
+  AssertEqual SyntaxAt(1, 16),  'qrexecpolicyComment'
+  AssertEqual SyntaxAt(1, 16),  'qrexecpolicyComment'
+" }}}
+" Execute (Space Indented and Multiple Comment Signs) {{{
+Execute (Space Indented and Multiple Comment Signs):
+  AssertEqual SyntaxAt(2, 2),   ''
+  AssertEqual SyntaxAt(2, 11),  'qrexecpolicyComment'
+  AssertEqual SyntaxAt(2, 11),  'qrexecpolicyComment'
+  AssertEqual SyntaxAt(2, 43),  'qrexecpolicyComment'
+" }}}
+" Execute (Todos in Comments) {{{
+Execute (Todos in Comments):
+  AssertEqual SyntaxAt(3, 1),   'qrexecpolicyComment'
+  AssertEqual SyntaxAt(3, 2),   'qrexecpolicyComment'
+  AssertEqual SyntaxAt(3, 2),   'qrexecpolicyComment'
+  AssertEqual SyntaxAt(3, 3),   'qrexecpolicyTodo'
+  AssertEqual SyntaxAt(3, 6),   'qrexecpolicyTodo'
+  AssertEqual SyntaxAt(3, 7),   'qrexecpolicyComment'
+  AssertEqual SyntaxAt(3, 9),   'qrexecpolicyTodo'
+  AssertEqual SyntaxAt(3, 14),  'qrexecpolicyComment'
+  AssertEqual SyntaxAt(3, 16),  'qrexecpolicyTodo'
+  AssertEqual SyntaxAt(3, 20),  'qrexecpolicyComment'
+  AssertEqual SyntaxAt(3, 22),  'qrexecpolicyTodo'
+  AssertEqual SyntaxAt(3, 25),  'qrexecpolicyComment'
+  AssertEqual SyntaxAt(3, 27),  'qrexecpolicyComment'
+" }}}
+" Execute(Comments after Rules) {{{
+Execute (Comments after Rules):
+  AssertEqual SyntaxAt(4, 1),  'qrexecpolicyServiceGeneric'
+  AssertEqual SyntaxAt(4, 3),  'qrexecpolicyCharError'
+" }}}
+" }}}
+" Qrexec Policy Service {{{
+" Given {{{
+Given qrexecpolicyservice (R4.0):
+    * * deny notify=yes
+    # comment
+    !compat-4.0extraneous
+    !include-dir dir/test extra words
+    !include file/test extra words
+    !include-service	qubes.Service	+arg	file-test extra words
+" }}}
+" Execute (Specific Deny) {{{
+Execute (Specific Deny):
+  AssertEqual SyntaxAt(1, 3),   'qrexecpolicySourceGeneric'
+  AssertEqual SyntaxAt(1, 5),   'qrexecpolicyTargetGeneric'
+" }}}
+" Execute (Compat) {{{
+Execute (Compat):
+  AssertEqual SyntaxAt(3, 3),   'qrexecpolicyCompat'
+  AssertEqual SyntaxAt(3, 13),  'qrexecpolicyCompat'
+  AssertEqual SyntaxAt(3, 14),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(3, 23),  'qrexecpolicyMustEndError'
+" }}}
+" Execute (Include Directory) {{{
+Execute (Include Directory):
+  AssertEqual SyntaxAt(4, 3),   'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(4, 14),  'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(4, 16),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(4, 23),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(4, 24),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(4, 35),  'qrexecpolicyMustEndError'
+" }}}
+" Execute (Include File) {{{
+Execute (Include File):
+  AssertEqual SyntaxAt(5, 3),   'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(5, 10),  'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(5, 12),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(5, 20),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(5, 21),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(5, 32),  'qrexecpolicyMustEndError'
+" }}}
+" Execute (Include Service) {{{
+Execute (Include Service):
+  AssertEqual SyntaxAt(6, 3),   'qrexecpolicyInclService'
+  AssertEqual SyntaxAt(6, 18),  'qrexecpolicyInclService'
+  AssertEqual SyntaxAt(6, 20),  'qrexecpolicyInclServiceSpecific'
+  AssertEqual SyntaxAt(6, 32),  'qrexecpolicyInclServiceSpecific'
+  AssertEqual SyntaxAt(6, 34),  'qrexecpolicyInclArgPrefixSpecific'
+  AssertEqual SyntaxAt(6, 35),  'qrexecpolicyInclArg'
+  AssertEqual SyntaxAt(6, 37),  'qrexecpolicyInclArg'
+  AssertEqual SyntaxAt(6, 39),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(6, 47),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(6, 48),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(6, 59),  'qrexecpolicyMustEndError'
+" }}}
+" }}}
+" Qrexec Policy {{{
+" Given {{{
+Given qrexecpolicy (R5.0):
+  * * * * deny notify=yes autostart=yes user=t target=t default_target=t notify=no
+  qubes.Service +argument @anyvm @tag:work-1 allow  default_target=t  notify=yesy  autostart=nono	user=test	target=@dispvm:test random=param
+    !compat-4.0extraneous
+    !include-dir dir/test extra words
+    !include file/test extra words
+    !include-service	qubes.Service	+arg	file-test extra words
+" }}}
+" Execute (Generic Deny) {{{
+Execute (Generic Deny):
+  AssertEqual SyntaxAt(1, 1),   'qrexecpolicyServiceGeneric'
+  AssertEqual SyntaxAt(1, 3),   'qrexecpolicyArgPrefixGeneric'
+  AssertEqual SyntaxAt(1, 5),   'qrexecpolicySourceGeneric'
+  AssertEqual SyntaxAt(1, 7),   'qrexecpolicyTargetGeneric'
+  AssertEqual SyntaxAt(1, 9),   'qrexecpolicyResolutionDeny'
+  AssertEqual SyntaxAt(1, 12),  'qrexecpolicyResolutionDeny'
+  AssertEqual SyntaxAt(1, 14),  'qrexecpolicyParamDenyBoolean'
+  AssertEqual SyntaxAt(1, 20),  'qrexecpolicyParamDenyBooleanAssign'
+  AssertEqual SyntaxAt(1, 21),  'qrexecpolicyParamDenyBooleanArg'
+  AssertEqual SyntaxAt(1, 23),  'qrexecpolicyParamDenyBooleanArg'
+  AssertEqual SyntaxAt(1, 25),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 37),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 39),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 44),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 46),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 53),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 55),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 70),  'qrexecpolicyParamDenyUnknownError'
+  AssertEqual SyntaxAt(1, 72),  'qrexecpolicyParamDupNotifyError'
+  AssertEqual SyntaxAt(1, 80),  'qrexecpolicyParamDupNotifyError'
+" }}}
+" Execute (Specific Allow) {{{
+Execute (Specific Allow):
+  AssertEqual SyntaxAt(2, 1),   'qrexecpolicyServiceSpecific'
+  AssertEqual SyntaxAt(2, 13),  'qrexecpolicyServiceSpecific'
+  AssertEqual SyntaxAt(2, 15),  'qrexecpolicyArgPrefixSpecific'
+  AssertEqual SyntaxAt(2, 16),  'qrexecpolicyArg'
+  AssertEqual SyntaxAt(2, 23),  'qrexecpolicyArg'
+  AssertEqual SyntaxAt(2, 25),  'qrexecpolicySourceTokenSingle'
+  AssertEqual SyntaxAt(2, 30),  'qrexecpolicySourceTokenSingle'
+  AssertEqual SyntaxAt(2, 36),  'qrexecpolicyTargetTokenComboNormal'
+  AssertEqual SyntaxAt(2, 37),  'qrexecpolicyTargetTokenComboNormalArg'
+  AssertEqual SyntaxAt(2, 42),  'qrexecpolicyTargetTokenComboNormalArg'
+  AssertEqual SyntaxAt(2, 44),  'qrexecpolicyResolutionAllow'
+  AssertEqual SyntaxAt(2, 51),  'qrexecpolicyParamAllowUnknownError'
+  AssertEqual SyntaxAt(2, 66),  'qrexecpolicyParamAllowUnknownError'
+  AssertEqual SyntaxAt(2, 69),  'qrexecpolicyParamAllowBoolean'
+  AssertEqual SyntaxAt(2, 74),  'qrexecpolicyParamAllowBoolean'
+  AssertEqual SyntaxAt(2, 75),  'qrexecpolicyParamAllowBooleanAssign'
+  AssertEqual SyntaxAt(2, 76),  'qrexecpolicyParamBooleanArgError'
+  AssertEqual SyntaxAt(2, 79),  'qrexecpolicyParamBooleanArgError'
+  AssertEqual SyntaxAt(2, 82),  'qrexecpolicyParamAllowBoolean'
+  AssertEqual SyntaxAt(2, 90),  'qrexecpolicyParamAllowBoolean'
+  AssertEqual SyntaxAt(2, 91),  'qrexecpolicyParamAllowBooleanAssign'
+  AssertEqual SyntaxAt(2, 92),  'qrexecpolicyParamBooleanArgError'
+  AssertEqual SyntaxAt(2, 95),  'qrexecpolicyParamBooleanArgError'
+  AssertEqual SyntaxAt(2, 97),  'qrexecpolicyParamAllowNormal'
+  AssertEqual SyntaxAt(2, 100), 'qrexecpolicyParamAllowNormal'
+  AssertEqual SyntaxAt(2, 101), 'qrexecpolicyParamAllowNormalAssign'
+  AssertEqual SyntaxAt(2, 102), 'qrexecpolicyParamAllowNormalArg'
+  AssertEqual SyntaxAt(2, 105), 'qrexecpolicyParamAllowNormalArg'
+  AssertEqual SyntaxAt(2, 107), 'qrexecpolicyParamAllowTarget'
+  AssertEqual SyntaxAt(2, 112), 'qrexecpolicyParamAllowTarget'
+  AssertEqual SyntaxAt(2, 113), 'qrexecpolicyParamAllowTargetAssign'
+  AssertEqual SyntaxAt(2, 114), 'qrexecpolicyParamAllowTargetArgTokenCombo'
+  AssertEqual SyntaxAt(2, 121), 'qrexecpolicyParamAllowTargetArgTokenCombo'
+  AssertEqual SyntaxAt(2, 122), 'qrexecpolicyParamAllowTargetArgTokenComboArg'
+  AssertEqual SyntaxAt(2, 125), 'qrexecpolicyParamAllowTargetArgTokenComboArg'
+  AssertEqual SyntaxAt(2, 127), 'qrexecpolicyParamAllowUnknownError'
+  AssertEqual SyntaxAt(2, 138), 'qrexecpolicyParamAllowUnknownError'
+" }}}
+" Execute (Compat) {{{
+Execute (Compat):
+  AssertEqual SyntaxAt(3, 3),   'qrexecpolicyCompat'
+  AssertEqual SyntaxAt(3, 13),  'qrexecpolicyCompat'
+  AssertEqual SyntaxAt(3, 14),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(3, 23),  'qrexecpolicyMustEndError'
+" }}}
+" Execute (Include Directory) {{{
+Execute (Include Directory):
+  AssertEqual SyntaxAt(4, 3),   'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(4, 14),  'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(4, 16),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(4, 23),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(4, 24),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(4, 35),  'qrexecpolicyMustEndError'
+" }}}
+" Execute (Include File) {{{
+Execute (Include File):
+  AssertEqual SyntaxAt(5, 3),   'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(5, 10),  'qrexecpolicyInclFile'
+  AssertEqual SyntaxAt(5, 12),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(5, 20),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(5, 21),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(5, 32),  'qrexecpolicyMustEndError'
+" }}}
+" Execute (Include Service) {{{
+Execute (Include Service):
+  AssertEqual SyntaxAt(6, 3),   'qrexecpolicyInclService'
+  AssertEqual SyntaxAt(6, 18),  'qrexecpolicyInclService'
+  AssertEqual SyntaxAt(6, 20),  'qrexecpolicyInclServiceSpecific'
+  AssertEqual SyntaxAt(6, 32),  'qrexecpolicyInclServiceSpecific'
+  AssertEqual SyntaxAt(6, 34),  'qrexecpolicyInclArgPrefixSpecific'
+  AssertEqual SyntaxAt(6, 35),  'qrexecpolicyInclArg'
+  AssertEqual SyntaxAt(6, 37),  'qrexecpolicyInclArg'
+  AssertEqual SyntaxAt(6, 39),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(6, 47),  'qrexecpolicyInclFilePath'
+  AssertEqual SyntaxAt(6, 48),  'qrexecpolicyMustEndError'
+  AssertEqual SyntaxAt(6, 59),  'qrexecpolicyMustEndError'
+" }}}
+" }}}
