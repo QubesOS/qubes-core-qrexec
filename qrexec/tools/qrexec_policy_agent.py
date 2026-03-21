@@ -190,7 +190,9 @@ class VMListModeler:
 
             if destination_object.get_has_entry():
                 entry_box = destination_object.get_child()
-                entry_box.get_settings().set_property("gtk-key-theme-name", "Emacs")
+                entry_box.get_settings().set_property(
+                "gtk-key-theme-name", "Emacs"
+)
 
                 area = Gtk.CellAreaBox()
                 area.pack_start(icon_column, False, False, False)
