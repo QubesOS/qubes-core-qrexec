@@ -28,7 +28,14 @@ bool negotiate_connection_params(int s, int other_domid, unsigned type,
     if (!write_all(s, &hdr, sizeof(hdr))
             || !write_all(s, &params, sizeof(params))
             || !write_all(s, cmdline_param, cmdline_size)) {
-        PERROR("write daemon");
+        int saved_errno = errno;
+
+        if (saved_errno == EBADF || saved_errno == EPIPE) {
+            LOG(ERROR, "qrexec daemon connection lost during negotiation");
+        } else {
+            errno = saved_errno;
+            PERROR("write daemon");
+        }
         return false;
     }
     /* the daemon will respond with the same message with connect_port filled
