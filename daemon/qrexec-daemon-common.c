@@ -206,8 +206,13 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
     }
 
     s = connect_unix_socket_by_id((unsigned)remote_domain_id);
-    rc = send_service_connect(s, request_id, data_domain, data_port);
-    close(s);
+    if (s < 0) {
+        rc = false;
+    } else {
+        rc = send_service_connect(s, request_id, data_domain, data_port);
+        close(s);
+    }
+
     if (wait_connection_end) {
         /* wait for EOF */
         struct pollfd fds[1] = {
