@@ -345,6 +345,9 @@ int main(int argc, char **argv)
                                    wait_connection_end, use_uuid) ? 0 : 137;
         } else {
             s = connect_unix_socket(domname);
+            if (s < 0) {
+                goto cleanup;
+            }
             if (!negotiate_connection_params(s,
                         src_domain_id,
                         just_exec ? MSG_JUST_EXEC : MSG_EXEC_CMDLINE,
