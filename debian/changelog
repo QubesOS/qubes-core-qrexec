@@ -1,3 +1,17 @@
+qubes-core-qrexec (4.4.1-1) unstable; urgency=medium
+
+  [ Ben Grande ]
+  * Add Vim Qrexec companion for policy breakers
+  * Migrate to vim9script
+
+  [ Marek Marczykowski-Górecki ]
+  * Increase default connection timeout to 10s
+
+  [ Rohit Yadav ]
+  * qrexec: validate socket fd before use
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 27 Mar 2026 16:44:08 +0100
+
 qubes-core-qrexec (4.4.0-1) unstable; urgency=medium
 
   [ parulin ]
