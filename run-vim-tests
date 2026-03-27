@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+for pkg in git vim; do
+  if ! command -v "${pkg}" >/dev/null; then
+    printf '%s\n' "Missing program: ${pkg}" >&2
+  fi
+done
+
+cd "$(git rev-parse --show-toplevel)"
+
+cmd="set nocompatible | filetype off | set rtp+=../ | filetype plugin indent on
+  | syntax enable | source % | call RunTests()"
+if test -z "${DEBUG-}"; then
+  cmd="${cmd} | q"
+fi
+
+vim -e -u NONE -c "${cmd}" -- vim/test/test_syntax.vim
