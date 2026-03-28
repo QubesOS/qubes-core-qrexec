@@ -257,7 +257,7 @@ static int handle_new_process_common(
                     exit_code = 0;
             }
             if (exit_code != 0) {
-                LOG(ERROR, "failed to spawn process");
+                LOG(ERROR, "failed to spawn process %d, exited with %d", pid, exit_code);
                 /* Send stdout+stderr EOF first, since the service is expected to send
                  * one before exit code in case of MSG_EXEC_CMDLINE. Ignore
                  * libvchan_send error if any, as we're going to terminate soon

@@ -85,7 +85,7 @@ void setup_logging(const char *program_name) {
      * FDs breaks if they are not. */
     for (int i = 0; i < 3; ++i) {
         if (fcntl(i, F_GETFD) == -1 && errno == EBADF)
-            errx(125, "File descriptor %d is closed, cannot continue", i);
+            errx(QREXEC_EXIT_PROBLEM, "File descriptor %d is closed, cannot continue", i);
     }
 
     /* qrexec_logv() uses several separate fprintf calls, print them at once */
