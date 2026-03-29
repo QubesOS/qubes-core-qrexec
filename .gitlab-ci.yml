@@ -34,7 +34,7 @@ checks:tests:
     PYTEST_ADDOPTS: "--color=yes"
   script:
     - xvfb-run ./run-tests
-    - xvfb-run ./run-vim-tests
+    - env TERM=dumb ./run-vim-tests
   after_script:
     - (cd libqrexec; gcov *.c)
     - (cd daemon; gcov *.c)
