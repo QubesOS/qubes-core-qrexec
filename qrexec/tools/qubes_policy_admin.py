@@ -27,14 +27,18 @@ import os
 import sys
 import logging
 
-from ..policy.admin import PolicyAdmin, PolicyAdminException
+from ..policy.admin import (
+    PolicyAdmin,
+    PolicyAdminException,
+)
 from .. import POLICYPATH
 
 
 def main():
+    log_file = "/var/log/qubes/policy-admin.log"
     logging.basicConfig(
         level=logging.INFO,
-        filename="/var/log/qubes/policy-admin.log",
+        filename=log_file,
         format="%(asctime)s %(message)s",
     )
 
@@ -55,15 +59,17 @@ def main():
         logging.warning(
             "%s+%s (%s): error: %s", service_name, argument, source, exc
         )
-        print(exc)
+        pretty_exc = "{} {}".format(exc.__class__.__name__, exc)
+        sys.stderr.buffer.write(pretty_exc.encode())
         sys.exit(1)
     except Exception:  # pylint: disable=broad-except
         logging.exception(
             "%s+%s (%s): exception", service_name, argument, source
         )
-        print(
-            "Internal error. See /var/log/qubes/policy-admin.log in dom0 for details."
+        error_msg = "Internal error. See {!r} in dom0 for details.".format(
+            log_file
         )
+        sys.stderr.buffer.write(error_msg.encode())
         sys.exit(2)
     else:
         logging.info("%s+%s (%s)", service_name, argument, source)
