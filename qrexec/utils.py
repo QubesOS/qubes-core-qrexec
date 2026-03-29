@@ -127,6 +127,7 @@ class SystemInfoEntry(TypedDict):
     default_dispvm: Optional[str]
     power_state: str
     icon: str
+    label: str
     guivm: Optional[str]
     uuid: Optional[str]
     name: str
