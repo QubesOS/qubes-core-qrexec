@@ -15,8 +15,12 @@ wait_self_session(){
     true "${XDG_RUNTIME_DIR:="/run/user/$(id -u)"}"
     true "${DBUS_SESSION_BUS_ADDRESS:="unix:path=${XDG_RUNTIME_DIR}/bus"}"
     export DBUS_SESSION_BUS_ADDRESS
-    systemctl --user --wait --quiet is-system-running
-    exit 0
+    rc=0
+    systemctl --user --wait is-system-running >&2 || rc=$?
+    if test "$rc" -gt 0; then
+        LC_ALL=C TERM=dumb systemctl --user --failed --legend=no >&2
+    fi
+    exit "$rc"
 }
 
 main(){
