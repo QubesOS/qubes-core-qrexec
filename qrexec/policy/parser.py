@@ -411,7 +411,9 @@ class Redirect(_BaseTarget):
     ) -> "Redirect":
         if value is None:
             return None  # type: ignore
-        return super().__new__(cls, value, filepath=filepath, lineno=lineno)  # type: ignore
+        return super().__new__(
+            cls, value, filepath=filepath, lineno=lineno  # type: ignore
+        )
 
 
 # this method (with overloads in subclasses) was verify_target_value
@@ -819,7 +821,8 @@ class AllowResolution(AbstractResolution):
 
         if target_info.get("type") == "RemoteVM" and self.user is not None:
             logging.warning(
-                "Ignoring user directive in policy. This is not supported in the case of RemoveVM."
+                "Ignoring user directive in policy. This is not supported in "
+                "the case of RemoveVM."
             )
             user_line = "user=DEFAULT"
         else:
@@ -838,13 +841,15 @@ class AllowResolution(AbstractResolution):
             relayvm_info = request.system_info["domains"][relayvm_name]
             transport_rpc = target_info["transport_rpc"]
 
+            service = f"{transport_rpc}+{request.target}+{request.service}"
+            service += f"{request.argument}"
             lines.extend(
                 [
                     f"target={relayvm_name}",
                     f"target_uuid=uuid:{relayvm_info['uuid']}",
                     f"autostart={self.autostart}",
                     f"requested_target={request.target}",
-                    f"service={transport_rpc}+{request.target}+{request.service}{request.argument}",
+                    f"service={service}",
                 ]
             )
             if request.requested_source:
@@ -1024,7 +1029,8 @@ class Request:
                 )
             if requested_source_info.get("type") != "RemoteVM":
                 raise RequestError(
-                    f"{self.requested_source}: requested source is only authorized for RemoteVM"
+                    f"{self.requested_source}: requested source is only "
+                    "authorized for RemoteVM"
                 )
             if requested_source_info.get("relayvm", None) != self.source:
                 raise RequestError(
@@ -1798,7 +1804,8 @@ class AbstractParser(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def handle_compat40(self, *, filepath, lineno):
-        """Handle ``!compat-4.0`` line when encountered in :meth:`policy_load_file`.
+        """Handle ``!compat-4.0`` line when encountered in
+        :meth:`policy_load_file`.
 
         This method is to be provided by subclass.
         """
@@ -1877,11 +1884,11 @@ class AbstractPolicy(AbstractParser):
                 ):
                     try:
                         # The policy agent cannot handle UUIDs (and rightly so,
-                        # those are meaningless to humans). Convert them to names.
-                        # VM names can be reused, but in practice, this is unlikely
-                        # to happen except by user request or DispVM name reuse.
-                        # The latter will not happen for a week and so is unlikely
-                        # to confuse humans.
+                        # those are meaningless to humans). Convert them to
+                        # names.  VM names can be reused, but in practice, this
+                        # is unlikely to happen except by user request or DispVM
+                        # name reuse.  The latter will not happen for a week and
+                        # so is unlikely to confuse humans.
                         expansion.add(uuid_to_name(info, potential_target))
                     except KeyError:
                         continue
@@ -2059,7 +2066,8 @@ class AbstractFileSystemLoader(AbstractDirectoryLoader, AbstractFileLoader):
             iterable_policy_paths = policy_path
         else:
             raise TypeError(
-                "unexpected type of policy path in AbstractFileSystemLoader.__init__!"
+                "unexpected type of policy path in "
+                "AbstractFileSystemLoader.__init__!"
             )
         try:
             self.load_policy_dirs(iterable_policy_paths)
@@ -2258,8 +2266,8 @@ class ToposortMixIn:
             raise PolicySyntaxError(
                 filepath,
                 lineno,
-                "invalid path {}, only paths inside the directories {policypath} and "
-                "{policypath}/include are considered".format(
+                "invalid path {}, only paths inside the directories "
+                "{policypath} and {policypath}/include are considered".format(
                     included_path, policypath=POLICYPATH
                 ),
             )
@@ -2276,7 +2284,9 @@ class ToposortMixIn:
             filepath,
         )
         self.save_included_path(included_path, filepath=filepath, lineno=lineno)
-        super().handle_include(included_path, filepath=filepath, lineno=lineno)  # type: ignore
+        super().handle_include(  # type: ignore
+            included_path, filepath=filepath, lineno=lineno
+        )
 
     def handle_include_service(
         self,
