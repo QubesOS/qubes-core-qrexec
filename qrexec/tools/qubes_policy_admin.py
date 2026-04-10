@@ -35,7 +35,10 @@ from .. import POLICYPATH
 
 
 def main():
-    log_file = "/var/log/qubes/policy-admin.log"
+    policy_path = os.environ.get("QREXEC_POLICY_DIR", POLICYPATH)
+    log_file = os.environ.get(
+        "QREXEC_POLICY_ADMIN_LOG", "/var/log/qubes/policy-admin.log"
+    )
     logging.basicConfig(
         level=logging.INFO,
         filename=log_file,
@@ -52,7 +55,7 @@ def main():
 
     payload = sys.stdin.buffer.read()
 
-    admin = PolicyAdmin(POLICYPATH)
+    admin = PolicyAdmin(policy_path)
     try:
         response = admin.handle_request(service_name, argument, payload)
     except PolicyAdminException as exc:
