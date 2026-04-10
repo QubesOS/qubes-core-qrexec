@@ -108,8 +108,8 @@ class PolicyAdmin:
     # pylint: disable=no-self-use
 
     def __init__(self, policy_path):
-        self.policy_path = policy_path
-        self.include_path = policy_path / "include"
+        self.policy_path = Path(policy_path)
+        self.include_path = self.policy_path / "include"
 
     def handle_request(
         self, service_name: str, arg: str, payload: bytes
