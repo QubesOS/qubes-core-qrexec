@@ -49,10 +49,9 @@ def call(dest: str, rpcname: str, arg: Optional[str] = None, *, input=None):
     """
     # pylint: disable=redefined-builtin
 
-    command = make_command(dest, rpcname, arg)
-    return subprocess.check_output(
-        command, **prepare_subprocess_kwds(input)
-    ).decode()
+    command = make_command(dest=dest, rpcname=rpcname, arg=arg)
+    kwds = prepare_subprocess_kwds(input, for_popen=False)
+    return subprocess.check_output(command, **kwds).decode()
 
 
 async def call_async(dest, rpcname, arg=None, *, input=None):
@@ -71,26 +70,10 @@ async def call_async(dest, rpcname, arg=None, *, input=None):
     """
     # pylint: disable=redefined-builtin
 
-    command = make_command(dest, rpcname, arg)
-
-    if input is None:
-        stdin = subprocess.DEVNULL
-        to_communicate = None
-    elif isinstance(input, bytes):
-        stdin = subprocess.PIPE
-        to_communicate = input
-    elif isinstance(input, str):
-        stdin = subprocess.PIPE
-        to_communicate = input.encode()
-    else:
-        # Assume this is a file
-        stdin = input
-        to_communicate = None
-
-    process = await asyncio.create_subprocess_exec(
-        *command, stdin=stdin, stdout=subprocess.PIPE
-    )
-
+    command = make_command(dest=dest, rpcname=rpcname, arg=arg)
+    kwds = prepare_subprocess_kwds(input)
+    to_communicate = kwds.pop("input")
+    process = await asyncio.create_subprocess_exec(*command, **kwds)
     stdout, _stderr = await process.communicate(to_communicate)
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, command)

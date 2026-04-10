@@ -29,9 +29,13 @@ import os
 import subprocess
 import sys
 import tempfile
+
 from ..policy.admin_client import PolicyClient
-from .. import RPCNAME_ALLOWED_CHARSET, POLICYPATH, INCLUDEPATH
-from ..client import IN_DOM0
+from ..policy.admin import (
+    PolicyAdminException,
+    PolicyAdminFileNotFoundException,
+)
+from .. import RPCNAME_ALLOWED_CHARSET
 
 
 def validate_name(name):
@@ -44,7 +48,7 @@ def validate_name(name):
     if invalid_chars:
         print(
             "invalid character(s) in the file name: {!r}".format(
-                "".join(sorted(invalid_chars))
+                "".join(sorted(invalid_chars)), file=sys.stderr
             )
         )
         sys.exit(1)
@@ -55,115 +59,124 @@ def validate_name(name):
     return name
 
 
-def manage_policy(name, is_include=False):
-    client = PolicyClient()
+class PolicyManager:
 
-    # Don't use policy(.include).List to support restricted AdminVMs. Instead,
-    # try to policy(.include).Get the file and if it fails because the file is
-    # not found, ignore, else abort as the request was refused.
-    file_exists = False
-    if is_include:
-        try:
-            original_content, token = client.policy_include_get(name)
-            file_exists = True
-        except subprocess.CalledProcessError as e:
-            wanted_path = str(INCLUDEPATH) + "/" + name + "\n"
-            not_found = "Not found: " + wanted_path
-            if e.output.decode() != not_found:
-                print("Failed to get file: " + name)
-                sys.exit(1)
-    else:
-        try:
-            original_content, token = client.policy_get(name)
-            file_exists = True
-        except subprocess.CalledProcessError as e:
-            wanted_path = str(POLICYPATH) + "/" + name + ".policy\n"
-            not_found = "Not found: " + wanted_path
-            if e.output.decode() != not_found:
-                print("Failed to get file: " + name)
-                sys.exit(1)
+    def __init__(self, policy: str, is_include: bool = False) -> None:
+        self.policy = policy
+        self.is_include = is_include
+        self.tmpfile_name: str | None = None
 
-    if is_include:
-        # pylint: disable=consider-using-with
-        tmpfile = tempfile.NamedTemporaryFile(suffix="_include_" + name)
-    else:
-        # pylint: disable=consider-using-with
-        tmpfile = tempfile.NamedTemporaryFile(suffix="_" + name)
+    def manage_policy(self) -> None:
+        client = PolicyClient()
 
-    if file_exists:
-        with open(tmpfile.name, "w", encoding="utf-8") as current_file:
-            current_file.write(original_content)
-            current_file.close()
-    else:
-        token = "new"
-
-    lint_policy(tmpfile.name, is_include=is_include)
-
-    with open(tmpfile.name, "r", encoding="utf-8") as current_file:
-        content = current_file.read()
-        current_file.close()
-
-    try:
-        if is_include:
-            client.policy_include_replace(name, content, token)
+        # Don't use policy(.include).List to support restricted AdminVMs.
+        # Instead, try to policy(.include).Get the file and if it fails because
+        # the file is not found, ignore, else abort as the request was refused.
+        file_exists = False
+        if self.is_include:
+            suffix = "_include_" + self.policy
         else:
-            client.policy_replace(name, content, token)
-    except subprocess.CalledProcessError as e:
-        print("Failed to replace file: " + name)
-        sys.exit(1)
+            suffix = "_" + self.policy + ".policy"
 
-    tmpfile.close()
-
-
-def get_reply(path, is_include=False):
-    """
-    Get reply from user.
-
-    :param path: path or "-"
-    :param is_include: Boolean
-    """
-    print("What now? ", end="")
-    reply = str(input())
-    if reply == "e":
-        lint_policy(path, is_include=is_include)
-        return
-    if reply == "q":
-        sys.exit(0)
-    else:
-        get_reply(path, is_include=is_include)
-
-
-def lint_policy(path, is_include=False):
-    """
-    Open file and lint after closing it. If lint fails, wait for user reply.
-
-    :param path: path or "-"
-    :param is_include: Boolean
-    """
-    edit_cmd = "${VISUAL:-${EDITOR:-vi}} " + path
-    subprocess.run(edit_cmd, shell=True, check=True)
-
-    if is_include:
-        lint_cmd = "qubes-policy-lint --include-service " + path
-    else:
-        lint_cmd = "qubes-policy-lint " + path
-
-    try:
-        subprocess.run(lint_cmd, shell=True, check=True)
-    except subprocess.CalledProcessError as exc:
-        return_code = exc.returncode
-        if return_code == 0:
-            return
-        if return_code == 127:
-            print("The linting program 'qubes-policy-lint' is not installed.")
-            sys.exit(1)
-        else:
-            print(
-                "Linting failed, do you want to:\n"
-                "  (e)dit again\n"
-                "  (q)uit without saving changes?"
+        try:
+            original_content, token = client.policy_get(
+                name=self.policy, is_include=self.is_include
             )
-            get_reply(path, is_include=is_include)
+            file_exists = True
+        except PolicyAdminFileNotFoundException:
+            pass
+        except subprocess.CalledProcessError as exc:
+            print(
+                f"Failed to get policy {self.policy!r}: {exc}", file=sys.stderr
+            )
+            sys.exit(1)
+
+        # pylint: disable=consider-using-with
+        tmpfile = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+
+        if file_exists:
+            with open(tmpfile.name, "w", encoding="utf-8") as current_file:
+                current_file.write(original_content)
+                current_file.close()
+        else:
+            token = "new"
+
+        self.tmpfile_name = tmpfile.name
+        self.lint_policy()
+
+        with open(tmpfile.name, "r", encoding="utf-8") as current_file:
+            content = current_file.read()
+            current_file.close()
+
+        try:
+            client.policy_replace(
+                name=self.policy,
+                content=content,
+                token=token,
+                is_include=self.is_include,
+            )
+        except PolicyAdminException as exc:
+            print(
+                f"Failed to replace policy {self.policy!r} with file "
+                f"{tmpfile.name!r}: {exc}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        tmpfile.close()
+        os.remove(self.tmpfile_name)
+
+    def get_reply(self) -> None:
+        """
+        Get reply from user.
+        """
+        print("What now? ", end="", file=sys.stderr)
+        reply = str(input())
+        if reply == "e":
+            self.lint_policy()
+            return
+        if reply == "q":
+            sys.exit(0)
+        else:
+            self.get_reply()
+
+    def lint_policy(self) -> None:
+        """
+        Open file and lint after closing it. If lint fails, wait for user reply.
+        """
+        assert isinstance(self.tmpfile_name, str)
+        edit_cmd = "${VISUAL:-${EDITOR:-vi}} -- " + self.tmpfile_name
+        try:
+            subprocess.run(edit_cmd, shell=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            print(f"Failed to open editor: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        lint_cmd = "qubes-policy-lint "
+        if self.is_include:
+            lint_cmd += "--include-service "
+        lint_cmd += "-- " + self.tmpfile_name
+
+        try:
+            subprocess.run(lint_cmd, shell=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            return_code = exc.returncode
+            if return_code == 0:
+                return
+            if return_code == 127:
+                print(
+                    "The linting program 'qubes-policy-lint' is not installed",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            else:
+                print(
+                    "Linting failed, do you want to:\n"
+                    "  (e)dit again\n"
+                    "  (q)uit without saving changes?",
+                    file=sys.stderr,
+                )
+                self.get_reply()
 
 
 def main():
@@ -178,16 +191,12 @@ def main():
         default=default_file,
         help="set file to be edited. The '.policy' suffix "
         "must not be included. Will search for an "
-        "editor by looking at $EDITOR, $VISUAL if "
+        "editor by looking at $VISUAL, $EDITOR, and if "
         "previous entry is unset or 'vi' if previous "
         "entry is also unset. Defaults to the user file.",
         nargs="?",
     )
     args = parser.parse_args()
-
-    if IN_DOM0 and os.getuid() != 0:
-        print("You need to run as root in dom0")
-        sys.exit(1)
 
     name = args.file
     include_prefix = "include/"
@@ -196,8 +205,9 @@ def main():
         name = name[len(include_prefix) :]
         is_include = True
 
-    name = validate_name(name)
-    manage_policy(name, is_include)
+    policy = validate_name(name)
+    policy_manager = PolicyManager(policy=policy, is_include=is_include)
+    policy_manager.manage_policy()
 
 
 if __name__ == "__main__":

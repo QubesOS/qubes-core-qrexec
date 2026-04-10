@@ -23,12 +23,11 @@
 
 import argparse
 import sys
-import os
 import subprocess
 
 from ..policy.admin_client import PolicyClient
 from .. import RPCNAME_ALLOWED_CHARSET
-from ..client import IN_DOM0
+from ..policy.admin import PolicyAdminException
 
 parser = argparse.ArgumentParser(
     usage="qubes-policy {[-l]|-g|-r|-d} [include/][RPCNAME[+ARGUMENT]]"
@@ -81,45 +80,24 @@ parser.add_argument(
 parser.set_defaults(method="list", name="")
 
 
-def run_method(method, name, client, is_include):
+def run_method(method, name, is_include, client):
     if method == "list":
-        if is_include:
-            result = client.policy_include_list()
-        else:
-            result = client.policy_list()
+        result = client.policy_list(is_include=is_include)
         print("\n".join(result))
-
     elif method == "get":
-        if is_include:
-            content, _token = client.policy_include_get(name)
-        else:
-            content, _token = client.policy_get(name)
+        content, _token = client.policy_get(name=name, is_include=is_include)
         print(content.rstrip())
-
     elif method == "replace":
         content = sys.stdin.read()
-        if is_include:
-            client.policy_include_replace(name, content)
-        else:
-            client.policy_replace(name, content)
-
+        client.policy_replace(name=name, content=content, is_include=is_include)
     elif method == "remove":
-        if is_include:
-            client.policy_include_remove(name)
-        else:
-            client.policy_remove(name)
-
+        client.policy_remove(name=name, is_include=is_include)
     else:
         assert False, method
 
 
 def main(args=None):
     args = parser.parse_args(args)
-
-    if IN_DOM0 and os.getuid() != 0:
-        print("You need to run as root in dom0")
-        sys.exit(1)
-
     client = PolicyClient()
     name = args.name
 
@@ -143,12 +121,20 @@ def main(args=None):
         parser.error("you need to provide a file name")
 
     try:
-        run_method(args.method, name, client, is_include)
+        run_method(
+            method=args.method,
+            name=name,
+            is_include=is_include,
+            client=client,
+        )
     except subprocess.CalledProcessError as e:
-        print("Command failed")
+        print("Command failed", file=sys.stderr)
         output = e.output.decode().rstrip()
         if output:
-            print(output)
+            print(output, file=sys.stderr)
+        sys.exit(1)
+    except PolicyAdminException as e:
+        print(e, file=sys.stderr)
         sys.exit(1)
 
 
