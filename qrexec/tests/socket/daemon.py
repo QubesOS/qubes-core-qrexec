@@ -733,7 +733,9 @@ class TestClient(unittest.TestCase):
         target_daemon = self.connect_daemon(
             target_domain, target_domain_name, target_domain_uuid
         )
-        self.start_client(["-d", target_domain_name, cmd])
+        self.start_client(
+            ["-d", target_domain_name, "-p", "prefix data\n", cmd]
+        )
         target_daemon.accept()
         target_daemon.handshake(QREXEC_PROTOCOL_V3)
 
@@ -754,6 +756,9 @@ class TestClient(unittest.TestCase):
         target.handshake()
 
         # select_loop
+        self.assertEqual(
+            target.recv_message(), (qrexec.MSG_DATA_STDIN, b"prefix data\n")
+        )
         target.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
         target.send_message(qrexec.MSG_DATA_STDOUT, b"")
         self.assertEqual(self.client.stdout.read(), b"stdout data\n")
@@ -822,7 +827,7 @@ class TestClient(unittest.TestCase):
 
     def test_run_vm_command_from_dom0_with_local_command(self):
         cmd = "user:command"
-        local_cmd = "while read x; do echo input: $x; done; exit 44"
+        local_cmd = 'while read x; do echo input: "$x"; done; exit 44'
         target_domain_name = "target_domain"
         target_domain_uuid = "d95e1147-2d82-4595-90bb-5a7500cc3196"
         target_domain = 42
@@ -832,7 +837,15 @@ class TestClient(unittest.TestCase):
             target_domain, target_domain_name, target_domain_uuid
         )
         self.start_client(
-            ["-d", "uuid:" + target_domain_uuid, "-l", local_cmd, cmd]
+            [
+                "-d",
+                "uuid:" + target_domain_uuid,
+                "-l",
+                local_cmd,
+                "-p",
+                "prefix data\n",
+                cmd,
+            ]
         )
         target_daemon.accept()
         target_daemon.handshake(QREXEC_PROTOCOL_V3)
@@ -854,6 +867,10 @@ class TestClient(unittest.TestCase):
         target.handshake()
 
         # select_loop
+        self.assertEqual(
+            target.recv_message(),
+            (qrexec.MSG_DATA_STDIN, b"prefix data\n"),
+        )
         target.send_message(qrexec.MSG_DATA_STDOUT, b"stdout data\n")
         self.assertEqual(
             target.recv_message(),

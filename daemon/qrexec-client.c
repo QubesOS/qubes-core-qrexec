@@ -86,6 +86,7 @@ static struct option longopts[] = {
     { "help", no_argument, 0, 'h' },
     { "socket-dir", required_argument, 0, opt_socket_dir },
     { "no-exit-code", no_argument, 0, 'E' },
+    { "prefix-data", required_argument, 0, 'p' },
     { "use-stdin-socket", no_argument, 0, opt_use_stdin_socket },
     { NULL, 0, 0, 0 },
 };
@@ -108,6 +109,7 @@ _Noreturn static void usage(const char *const name, int status)
             "  -w timeout - override default connection timeout of 5s (set 0 for no timeout)\n"
             "  -k - kill the domain right before exiting\n"
             "  --socket-dir=PATH -  directory for qrexec socket, default: %s\n"
+            "  -p PREFIX-DATA, --prefix-data=PREFIX-DATA - send the given data before the provided stdin (can only be used once)\n"
             "  --use-stdin-socket - use fd 0 (which must be socket) for both stdin and stdout\n",
             name ? name : "qrexec-client", QREXEC_DAEMON_SOCKET_DIR);
     exit(status);
@@ -177,11 +179,12 @@ int main(int argc, char **argv)
     bool replace_chars_stderr = false;
     bool wait_connection_end = false;
     bool exit_with_code = true;
+    const char *prefix_data = NULL;
     int rc = QREXEC_EXIT_PROBLEM;
 
     setup_logging("qrexec-client");
 
-    while ((opt = getopt_long(argc, argv, "hd:l:eEc:tTw:Wk", longopts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hd:l:eEc:p:tTw:Wk", longopts, NULL)) != -1) {
         switch (opt) {
             case 'd':
                 domname = xstrdup(optarg);
@@ -205,6 +208,11 @@ int main(int argc, char **argv)
                     warnx("ERROR: -c cannot be used for requests to dom0");
                     usage(argv[0], 1);
                 }
+                break;
+            case 'p':
+                if (prefix_data)
+                    usage(argv[0], 2);
+                prefix_data = optarg;
                 break;
             case 't':
                 replace_chars_stdout = true;
@@ -281,7 +289,8 @@ int main(int argc, char **argv)
                                     src_domain_name,
                                     remote_cmdline,
                                     connection_timeout,
-                                    exit_with_code);
+                                    exit_with_code,
+                                    prefix_data);
         } else {
             /* dom0 -> dom0 fake service call */
             assert(src_domain_id == 0);
@@ -398,6 +407,7 @@ int main(int argc, char **argv)
                 .exit_with_code = exit_with_code,
                 .replace_chars_stdout = replace_chars_stdout,
                 .replace_chars_stderr = replace_chars_stderr,
+                .prefix_data = prefix_data,
             };
             rc = handshake_and_go(&params, NULL);
 cleanup:

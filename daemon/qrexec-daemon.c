@@ -1256,7 +1256,8 @@ _Noreturn static void handle_execute_service_child(
                            source_domain,
                            cmd,
                            5 /* 5 second timeout */,
-                           false /* return 0 not remote status code */));
+                           false /* return 0 not remote status code */,
+                           NULL /* prefix data */));
     } else {
         bool const use_uuid = target_uuid != NULL;
         const char *const selected_target = use_uuid ? target_uuid : target;

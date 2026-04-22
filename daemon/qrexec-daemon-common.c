@@ -478,8 +478,13 @@ static int select_loop(const struct handshake_params *params,
     req.data_protocol_version = params->data_protocol_version;
     req.sigchld = &sigchld;
     req.sigusr1 = NULL;
-    req.prefix_data.data = NULL;
-    req.prefix_data.len = 0;
+    if (params->prefix_data) {
+        req.prefix_data.data = params->prefix_data;
+        req.prefix_data.len = strlen(params->prefix_data);
+    } else {
+        req.prefix_data.data = NULL;
+        req.prefix_data.len = 0;
+    }
 
     exit_code = qrexec_process_io(&req, cmd);
     return (params->exit_with_code ? exit_code : 0);
@@ -490,7 +495,8 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
                         const char *src_domain_name,
                         char *remote_cmdline,
                         int connection_timeout,
-                        bool exit_with_code)
+                        bool exit_with_code,
+                        const char *prefix_data)
 {
     int data_domain;
     int data_port;
@@ -544,6 +550,7 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
         .exit_with_code = exit_with_code,
         .replace_chars_stdout = false, // stdout is _from_ dom0
         .replace_chars_stderr = false, // stderr is _from_ dom0
+        .prefix_data = prefix_data,
     };
     return handshake_and_go(&params, command);
 }
