@@ -72,7 +72,8 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
                        const char *src_domain_name,
                        char *remote_cmdline,
                        int connection_timeout,
-                       bool exit_with_code);
+                       bool exit_with_code,
+                       const char *prefix_data);
 /** Parameters for handshake_and_go(), organized as a struct
  * for convenience. */
 struct handshake_params {
@@ -97,6 +98,8 @@ struct handshake_params {
     bool replace_chars_stdout;
     /// Whether to replace problematic bytes with _ before writing to stderr.
     bool replace_chars_stderr;
+    /// Data to send after connecting
+    const char *prefix_data;
 };
 /**
  * Process IO call with the parameters specified by the parameters.
