@@ -81,8 +81,6 @@ class Client(unittest.TestCase):
 
     def make_command_fail_side_effect(self, dest, rpcname, arg):
         # pylint: disable=unused-argument
-        if arg:
-            rpcname += "+" + arg
         return [
             "env",
             "QREXEC_POLICY_DIR=" + "FAIL"

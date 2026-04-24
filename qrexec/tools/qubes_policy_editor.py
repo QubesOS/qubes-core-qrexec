@@ -168,7 +168,7 @@ class PolicyManager:
             self.get_reply()
 
 
-def main():
+def main(args=None):
     """
     Main.
     """

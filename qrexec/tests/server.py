@@ -22,12 +22,17 @@ import shutil
 import os
 import asyncio
 import socket
+import unittest
 from unittest import mock
 
 import pytest
 import pytest_asyncio
 
-from ..server import SocketService, call_socket_service_local
+from ..server import (
+    SocketService,
+    call_socket_service_local,
+    call_socket_service_remote,
+)
 
 # Disable warnings that conflict with Pytest's use of fixtures.
 # pylint: disable=redefined-outer-name, unused-argument
@@ -99,3 +104,22 @@ async def test_call_socket_service_local(temp_dir, server):
             "service": "Service",
             "source_domain": "source",
         }
+
+
+@pytest.mark.asyncio
+async def test_call_socket_service_remote(temp_dir, server):
+    def make_command_side_effect(dest, rpcname, arg):
+        # pylint: disable=unused-argument
+        return ["printf", "%s", rpcname]
+
+    make_command_patch = unittest.mock.patch(
+        "qrexec.client.make_command",
+        side_effect=make_command_side_effect,
+    )
+    make_command_patch.start()
+
+    for i in range(2):
+        response = await call_socket_service_remote(
+            "remote", "Service", {"request": i}
+        )
+        assert response == "Service"

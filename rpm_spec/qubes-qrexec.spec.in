@@ -206,6 +206,13 @@ rm -f %{name}-%{version}
 %{python3_sitelib}/qrexec/tests/policy_admin.py
 %{python3_sitelib}/qrexec/tests/policy_admin_client.py
 
+%dir %{python3_sitelib}/qrexec/tests/tools
+%dir %{python3_sitelib}/qrexec/tests/tools/__pycache__
+%{python3_sitelib}/qrexec/tests/tools/__pycache__/*
+%{python3_sitelib}/qrexec/tests/tools/__init__.py
+%{python3_sitelib}/qrexec/tests/tools/qubes_policy.py
+%{python3_sitelib}/qrexec/tests/tools/qubes_policy_admin.py
+
 %dir %{python3_sitelib}/qrexec/tests/socket
 %dir %{python3_sitelib}/qrexec/tests/socket/__pycache__
 %{python3_sitelib}/qrexec/tests/socket/__pycache__/*
