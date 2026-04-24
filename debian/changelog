@@ -1,3 +1,14 @@
+qubes-core-qrexec (4.4.2-1) unstable; urgency=medium
+
+  [ Ben Grande ]
+  * Report failure reason on WaitForSession
+  * Run vim tests without display
+
+  [ Marek Marczykowski-Górecki ]
+  * Support --prefix-data in qrexec-client too
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 24 Apr 2026 02:09:46 +0200
+
 qubes-core-qrexec (4.4.1-1) unstable; urgency=medium
 
   [ Ben Grande ]
