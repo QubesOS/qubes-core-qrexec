@@ -25,7 +25,7 @@ import unittest
 import unittest.mock
 import pathlib
 
-from ..policy import utils
+from qrexec.policy import utils
 
 
 class TestPolicyCache:

@@ -22,7 +22,7 @@ import tempfile
 
 import pytest
 
-from ..policy.admin import (
+from qrexec.policy.admin import (
     PolicyAdmin,
     PolicyAdminFileNotFoundException,
     PolicyAdminInvalidFileNameException,

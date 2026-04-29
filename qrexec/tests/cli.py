@@ -24,9 +24,9 @@ from pathlib import PosixPath
 
 import pytest
 
-from ..exc import AccessDenied
-from .. import QREXEC_CLIENT
-from ..tools import qrexec_policy_exec
+from qrexec.exc import AccessDenied
+from qrexec import QREXEC_CLIENT
+from qrexec.tools import qrexec_policy_exec
 
 # Disable warnings that conflict with Pytest's use of fixtures.
 # pylint: disable=redefined-outer-name

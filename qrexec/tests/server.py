@@ -28,7 +28,7 @@ from unittest import mock
 import pytest
 import pytest_asyncio
 
-from ..server import (
+from qrexec.server import (
     SocketService,
     call_socket_service_local,
     call_socket_service_remote,

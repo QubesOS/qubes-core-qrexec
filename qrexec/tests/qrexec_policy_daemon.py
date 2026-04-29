@@ -29,7 +29,7 @@ import functools
 import unittest
 import unittest.mock
 
-from ..tools import qrexec_policy_daemon
+from qrexec.tools import qrexec_policy_daemon
 
 server_types = [b"Simple", b"GUI"]
 import logging

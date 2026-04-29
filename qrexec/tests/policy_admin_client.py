@@ -26,8 +26,8 @@ import unittest
 
 import pytest
 
-from ..policy.admin_client import PolicyClient
-from ..policy.admin import (
+from qrexec.policy.admin_client import PolicyClient
+from qrexec.policy.admin import (
     PolicyAdminFileNotFoundException,
     PolicyAdminInvalidFileNameException,
     PolicyAdminProtocolException,
