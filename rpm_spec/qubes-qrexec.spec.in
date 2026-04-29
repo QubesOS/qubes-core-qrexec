@@ -192,24 +192,29 @@ rm -f %{name}-%{version}
 
 %dir %{python3_sitelib}/qrexec/tests
 %dir %{python3_sitelib}/qrexec/tests/__pycache__
-%{python3_sitelib}/qrexec/tests/__pycache__/*
 %{python3_sitelib}/qrexec/tests/__init__.py
-%{python3_sitelib}/qrexec/tests/cli.py
+%{python3_sitelib}/qrexec/tests/__pycache__/*
 %{python3_sitelib}/qrexec/tests/gtkhelpers.py
 %{python3_sitelib}/qrexec/tests/rpcconfirmation.py
-%{python3_sitelib}/qrexec/tests/policy_parser.py
-%{python3_sitelib}/qrexec/tests/qrexec_policy_daemon.py
-%{python3_sitelib}/qrexec/tests/qrexec_legacy_convert.py
-%{python3_sitelib}/qrexec/tests/policy_cache.py
-%{python3_sitelib}/qrexec/tests/policy_graph.py
 %{python3_sitelib}/qrexec/tests/server.py
-%{python3_sitelib}/qrexec/tests/policy_admin.py
-%{python3_sitelib}/qrexec/tests/policy_admin_client.py
+
+%dir %{python3_sitelib}/qrexec/tests/policy
+%dir %{python3_sitelib}/qrexec/tests/policy/__pycache__
+%{python3_sitelib}/qrexec/tests/policy/__pycache__/*
+%{python3_sitelib}/qrexec/tests/policy/__init__.py
+%{python3_sitelib}/qrexec/tests/policy/admin.py
+%{python3_sitelib}/qrexec/tests/policy/admin_client.py
+%{python3_sitelib}/qrexec/tests/policy/parser.py
+%{python3_sitelib}/qrexec/tests/policy/utils.py
 
 %dir %{python3_sitelib}/qrexec/tests/tools
 %dir %{python3_sitelib}/qrexec/tests/tools/__pycache__
 %{python3_sitelib}/qrexec/tests/tools/__pycache__/*
 %{python3_sitelib}/qrexec/tests/tools/__init__.py
+%{python3_sitelib}/qrexec/tests/tools/qrexec_legacy_convert.py
+%{python3_sitelib}/qrexec/tests/tools/qrexec_policy_daemon.py
+%{python3_sitelib}/qrexec/tests/tools/qrexec_policy_exec.py
+%{python3_sitelib}/qrexec/tests/tools/qrexec_policy_graph.py
 %{python3_sitelib}/qrexec/tests/tools/qubes_policy.py
 %{python3_sitelib}/qrexec/tests/tools/qubes_policy_admin.py
 
