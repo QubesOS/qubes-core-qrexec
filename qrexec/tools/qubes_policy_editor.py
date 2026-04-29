@@ -36,6 +36,7 @@ from ..policy.admin import (
     PolicyAdminFileNotFoundException,
 )
 from .. import RPCNAME_ALLOWED_CHARSET
+from .qubes_policy_lint import main as lint
 
 
 def validate_name(name):
@@ -152,31 +153,19 @@ class PolicyManager:
             print(f"Failed to open editor: {exc}", file=sys.stderr)
             sys.exit(1)
 
-        lint_cmd = "qubes-policy-lint "
+        lint_args = ["--", self.tmpfile_name]
         if self.is_include:
-            lint_cmd += "--include-service "
-        lint_cmd += "-- " + self.tmpfile_name
-
+            lint_args.insert(0, "--include-service")
         try:
-            subprocess.run(lint_cmd, shell=True, check=True)
-        except subprocess.CalledProcessError as exc:
-            return_code = exc.returncode
-            if return_code == 0:
-                return
-            if return_code == 127:
-                print(
-                    "The linting program 'qubes-policy-lint' is not installed",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            else:
-                print(
-                    "Linting failed, do you want to:\n"
-                    "  (e)dit again\n"
-                    "  (q)uit without saving changes?",
-                    file=sys.stderr,
-                )
-                self.get_reply()
+            lint(lint_args)
+        except SystemExit:
+            print(
+                "Linting failed, do you want to:\n"
+                "  (e)dit again\n"
+                "  (q)uit without saving changes?",
+                file=sys.stderr,
+            )
+            self.get_reply()
 
 
 def main():
