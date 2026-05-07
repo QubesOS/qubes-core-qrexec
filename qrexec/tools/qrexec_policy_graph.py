@@ -100,9 +100,15 @@ def handle_single_action(args, action):
         )
     if isinstance(action, parser.AskResolution):
         if args.include_ask:
-            return f'  "{action.request.source}" -> "{target}" [label="{service}" color=orange];\n'
+            return (
+                f'  "{action.request.source}" -> "{target}" '
+                f'[label="{service}" color=orange];\n'
+            )
     elif isinstance(action, parser.AllowResolution):
-        return f'  "{action.request.source}" -> "{target}" [label="{service}" color=red];\n'
+        return (
+            f'  "{action.request.source}" -> "{target}" '
+            f'[label="{service}" color=red];\n'
+        )
     return ""
 
 

@@ -23,7 +23,7 @@ from unittest import mock
 import pytest
 from pathlib import Path
 from types import MappingProxyType as Proxy
-from ..tools import qrexec_legacy_convert
+from qrexec.tools import qrexec_legacy_convert
 
 
 @pytest.fixture(autouse=True)

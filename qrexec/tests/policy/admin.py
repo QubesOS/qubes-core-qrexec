@@ -22,9 +22,12 @@ import tempfile
 
 import pytest
 
-from ..policy.admin import (
+from qrexec.policy.admin import (
     PolicyAdmin,
-    PolicyAdminException,
+    PolicyAdminFileNotFoundException,
+    PolicyAdminInvalidFileNameException,
+    PolicyAdminProtocolException,
+    PolicyAdminSyntaxException,
     PolicyAdminTokenException,
     compute_token,
 )
@@ -44,6 +47,21 @@ def policy_dir():
 @pytest.fixture
 def api(policy_dir):
     return PolicyAdmin(policy_dir)
+
+
+def test_api_basic(api):
+    with pytest.raises(
+        PolicyAdminProtocolException, match="unrecognized method"
+    ):
+        api.handle_request("policy.NonExistent", "", b"")
+    with pytest.raises(
+        PolicyAdminProtocolException, match="Unexpected argument"
+    ):
+        api.handle_request("policy.List", "arg", b"")
+    with pytest.raises(
+        PolicyAdminProtocolException, match="Unexpected payload"
+    ):
+        api.handle_request("policy.List", "", b"payload")
 
 
 def test_api_list(policy_dir, api):
@@ -73,19 +91,25 @@ def test_api_get(policy_dir, api):
     assert data.startswith("sha256:")
     assert data.endswith("\ninclude text")
 
-    with pytest.raises(PolicyAdminException, match="Not found"):
+    with pytest.raises(PolicyAdminFileNotFoundException, match="Not found"):
         api.handle_request("policy.Get", "nonexistent", b"")
 
-    with pytest.raises(PolicyAdminException, match="Invalid policy file"):
+    with pytest.raises(
+        PolicyAdminInvalidFileNameException, match="Invalid policy file"
+    ):
         api.handle_request("policy.Get", ".hidden_evil_policy", b"")
 
-    with pytest.raises(PolicyAdminException, match="Invalid policy file"):
+    with pytest.raises(
+        PolicyAdminInvalidFileNameException, match="Invalid policy file"
+    ):
         api.handle_request("policy.include.Get", "..", b"")
 
-    with pytest.raises(PolicyAdminException, match="Invalid policy file"):
+    with pytest.raises(
+        PolicyAdminInvalidFileNameException, match="Invalid policy file"
+    ):
         api.handle_request("policy.include.Get", "", b"")
 
-    with pytest.raises(PolicyAdminException, match="Invalid argument"):
+    with pytest.raises(PolicyAdminProtocolException, match="Invalid argument"):
         api.handle_request("policy.include.Get", "space in argument", b"")
 
 
@@ -113,6 +137,17 @@ def test_api_replace_check_token(policy_dir, api):
     api.handle_request("policy.Replace", "file1", compute_token(sample) + b"\n")
     assert (policy_dir / "file1.policy").read_bytes() == b""
 
+    with pytest.raises(
+        PolicyAdminProtocolException,
+        match="Payload needs to include first line with token",
+    ):
+        api.handle_request("policy.Replace", "file1", b"new")
+
+    with pytest.raises(
+        PolicyAdminProtocolException, match="Unrecognized token"
+    ):
+        api.handle_request("policy.Replace", "file1", b"oops\n")
+
     with pytest.raises(PolicyAdminTokenException, match="File exists"):
         api.handle_request("policy.Replace", "file1", b"new\n")
 
@@ -124,11 +159,13 @@ def test_api_replace_check_token(policy_dir, api):
 
 
 def test_api_replace_validate(api):
-    with pytest.raises(PolicyAdminException, match="wrong number of fields"):
+    with pytest.raises(
+        PolicyAdminSyntaxException, match="wrong number of fields"
+    ):
         api.handle_request("policy.Replace", "file1", b"any\nxxx")
 
     # Trying to include a nonexistent file
-    with pytest.raises(PolicyAdminException, match="not a file"):
+    with pytest.raises(PolicyAdminSyntaxException, match="not a file"):
         api.handle_request(
             "policy.Replace", "file1", b"any\n!include include/inc"
         )
@@ -138,7 +175,9 @@ def test_api_replace_validate(api):
         "policy.include.Replace", "inc", b"any\nrpc.Name * * * deny"
     )
     api.handle_request("policy.Replace", "file1", b"any\n!include include/inc")
-    with pytest.raises(PolicyAdminException, match="invalid number of params"):
+    with pytest.raises(
+        PolicyAdminSyntaxException, match="invalid number of params"
+    ):
         api.handle_request(
             "policy.Replace", "file1", b"any\n!include-service include/inc"
         )
@@ -172,9 +211,13 @@ def test_api_remove_validate(policy_dir, api):
     (policy_dir / "include/inc").touch()
 
     with pytest.raises(
-        PolicyAdminException, match="including a file that will be removed"
+        PolicyAdminSyntaxException,
+        match="including a file that will be removed",
     ):
         api.handle_request("policy.include.Remove", "inc", b"any")
+
+    with pytest.raises(PolicyAdminFileNotFoundException, match="Not found"):
+        api.handle_request("policy.Remove", "file100000", b"any")
 
 
 def test_api_get_files(policy_dir, api):
@@ -212,10 +255,12 @@ def test_api_get_files(policy_dir, api):
                 "policy.GetFiles", "third.service", b""
             ) == f"{other_dir / 'third.service'}\nfile2\n".encode("utf-8")
 
-    with pytest.raises(PolicyAdminException, match="Service cannot be empty"):
+    with pytest.raises(
+        PolicyAdminProtocolException, match="Service cannot be empty"
+    ):
         api.handle_request("policy.GetFiles", "", b"")
 
     with pytest.raises(
-        PolicyAdminException, match="contains invalid characters"
+        PolicyAdminProtocolException, match="contains invalid characters"
     ):
         api.handle_request("policy.GetFiles", "service+param", b"")

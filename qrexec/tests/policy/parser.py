@@ -30,11 +30,9 @@ from pathlib import Path, PurePosixPath
 import pytest
 from types import MappingProxyType
 
+from qrexec import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK, exc, utils
+from qrexec.policy import parser, parser_compat
 from qrexec.utils import FullSystemInfo
-
-from .. import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK
-from .. import exc, utils
-from ..policy import parser, parser_compat
 
 
 _SYSTEM_INFO = {

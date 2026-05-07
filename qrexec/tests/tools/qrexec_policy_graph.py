@@ -23,7 +23,7 @@ import pytest
 from unittest import mock
 from types import MappingProxyType as Proxy
 
-from ..tools.qrexec_policy_graph import main
+from qrexec.tools.qrexec_policy_graph import main
 
 
 @pytest.fixture(autouse=True)

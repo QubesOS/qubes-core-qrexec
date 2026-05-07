@@ -31,8 +31,8 @@ import unittest
 
 import psutil
 
-from . import qrexec
-from . import util
+from qrexec.tests.socket import qrexec
+from qrexec.tests.socket import util
 
 ROOT_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..")
