@@ -429,7 +429,11 @@ int prepare_local_fds(struct qrexec_parsed_command *command, struct buffer *stdi
 }
 
 // See also qrexec-agent/qrexec-agent-data.c
-static void handle_failed_exec(libvchan_t *data_vchan, bool is_service, int exit_code)
+static void handle_failed_exec(
+    libvchan_t *data_vchan,
+    bool is_service,
+    int exit_code,
+    const char *cmdline_for_logging)
 {
     const struct msg_header hdr[2] = {
         {
@@ -442,7 +446,6 @@ static void handle_failed_exec(libvchan_t *data_vchan, bool is_service, int exit
         },
     };
 
-    LOG(ERROR, "failed to spawn process, exiting");
     /*
      * TODO: In case we fail to execute a *local* process (is_service false),
      * we should either
@@ -455,8 +458,11 @@ static void handle_failed_exec(libvchan_t *data_vchan, bool is_service, int exit
      * when we support sockets as a local process.
      */
     if (is_service) {
+        LOG(ERROR, "failed to spawn process for service (exited %d): %s", exit_code, cmdline_for_logging);
         libvchan_send(data_vchan, hdr, sizeof(hdr));
         send_exit_code(data_vchan, exit_code);
+    } else {
+        LOG(ERROR, "failed to spawn process for socket (skipping exit %d): %s", exit_code, cmdline_for_logging);
     }
 }
 
@@ -524,7 +530,9 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
     if (command == NULL) {
         prepare_ret = -2;
     } else if (!wait_for_session_maybe(command)) {
-        LOG(ERROR, "Cannot load service configuration, or forking process failed");
+        LOG(ERROR,
+            "Cannot load service configuration, or forking process failed: %s+%s",
+            command->service_name, command->arg ? command->arg : "");
         prepare_ret = -2;
     } else {
         prepare_ret = prepare_local_fds(command, &stdin_buffer);
@@ -568,7 +576,7 @@ int handshake_and_go(struct handshake_params *params,
     if (data_protocol_version >= 0) {
         if (params->prepare_ret != 0) {
             rc = params->prepare_ret == -1 ? QREXEC_EXIT_SERVICE_NOT_FOUND : rc;
-            handle_failed_exec(params->data_vchan, params->remote_send_first, rc);
+            handle_failed_exec(params->data_vchan, params->remote_send_first, rc, cmd->cmdline);
         } else {
             assert((cmd != NULL) == params->remote_send_first);
             params->data_protocol_version = data_protocol_version;

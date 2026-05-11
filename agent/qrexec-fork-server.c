@@ -98,7 +98,7 @@ static void handle_single_command(int fd, struct qrexec_cmd_info *info) {
         goto fail;
 
     handle_new_process(info->type, info->connect_domain,
-                       info->connect_port, cmd);
+                       info->connect_port, cmd, cmdline);
     destroy_qrexec_parsed_command(cmd);
 fail:
     free(cmdline);

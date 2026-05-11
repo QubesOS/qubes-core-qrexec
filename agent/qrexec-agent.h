@@ -42,7 +42,7 @@ extern const bool qrexec_is_fork_server;
 
 pid_t handle_new_process(int type,
         int connect_domain, int connect_port,
-        struct qrexec_parsed_command *cmd);
+        struct qrexec_parsed_command *cmd, const char *cmdline_for_logging);
 
 int handle_data_client(int type,
         int connect_domain, int connect_port,

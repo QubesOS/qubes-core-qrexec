@@ -202,7 +202,8 @@ static int handle_just_exec(struct qrexec_parsed_command *cmd)
 static int handle_new_process_common(
     int type, int connect_domain, int connect_port,
     struct qrexec_parsed_command *cmd,
-    int buffer_size)
+    int buffer_size,
+    const char *cmdline_for_logging)
 {
     libvchan_t *data_vchan;
     int exit_code;
@@ -257,7 +258,7 @@ static int handle_new_process_common(
                     exit_code = 0;
             }
             if (exit_code != 0) {
-                LOG(ERROR, "failed to spawn process");
+                LOG(ERROR, "failed to spawn process (exited %d): %s", exit_code, cmdline_for_logging);
                 /* Send stdout+stderr EOF first, since the service is expected to send
                  * one before exit code in case of MSG_EXEC_CMDLINE. Ignore
                  * libvchan_send error if any, as we're going to terminate soon
@@ -271,7 +272,11 @@ static int handle_new_process_common(
                 libvchan_close(data_vchan);
                 return exit_code;
             }
-            LOG(INFO, "executed: %s (pid %d)", cmd->cmdline, pid);
+            if (pid == 0)
+                LOG(INFO, "executed: %s", cmd->cmdline);
+            else
+                LOG(INFO, "executed: %s (pid %d)", cmd->cmdline, pid);
+
             break;
         default:
             LOG(ERROR, "unknown request type: %d", type);
@@ -317,7 +322,7 @@ static int handle_new_process_common(
 
 /* Returns PID of data processing process */
 pid_t handle_new_process(int type, int connect_domain, int connect_port,
-                         struct qrexec_parsed_command *cmd)
+                         struct qrexec_parsed_command *cmd, const char *cmdline_for_logging)
 {
     int exit_code;
     pid_t pid;
@@ -335,8 +340,7 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
 
     /* child process */
     exit_code = handle_new_process_common(type, connect_domain, connect_port,
-                                          cmd, 0);
-
+                                          cmd, 0, cmdline_for_logging);
     exit(exit_code);
 }
 
