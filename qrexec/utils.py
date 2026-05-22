@@ -182,7 +182,6 @@ def prepare_subprocess_kwds(
     kwds: Dict[str, object] = {}
     if input is None:
         kwds["stdin"] = subprocess.DEVNULL
-        kwds["input"] = None
     elif isinstance(input, bytes):
         if for_popen:
             kwds["stdin"] = subprocess.PIPE
@@ -194,7 +193,6 @@ def prepare_subprocess_kwds(
     else:
         # XXX this breaks on file-like objects that don't have .fileno
         kwds["stdin"] = input
-        kwds["input"] = None
     if not for_check:
         kwds["stdout"] = subprocess.PIPE
     kwds["stderr"] = subprocess.PIPE
