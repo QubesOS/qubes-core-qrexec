@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <err.h>
 #include <time.h>
+#include <syslog.h>
 
 #include "libqrexec-utils.h"
 #include "qrexec-daemon-common.h"
@@ -272,6 +273,16 @@ int main(int argc, char **argv)
         usage(argv[0], 1);
     }
 
+    if (access("/run/qubes-service/qrexec-debug", F_OK) == 0) {
+        char * src_domain_for_log;
+        if (src_domain_name == NULL)
+            src_domain_for_log = "dom0";
+        else
+            src_domain_for_log = src_domain_name;
+        openlog("qrexec-client", LOG_PID, LOG_USER);
+        syslog(LOG_INFO, "qrexec: %s: %s -> %s", remote_cmdline, src_domain_for_log, domname);
+        closelog();
+    }
     if (target_refers_to_dom0(domname)) {
         if (request_id != NULL) {
             if (request_id[0] == '\0') {
