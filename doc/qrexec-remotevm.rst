@@ -7,14 +7,14 @@ General case: From one Qubes OS to another Qubes OS
 .. image:: _static/general.png
 
 1. Initial RPC request from Local-Qube to Remote-Qube on Local-QubesOS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    This is the starting point where ``Local-Qube`` on Local-QubesOS initiates an RPC request to ``Remote-Qube``,
    which is a RemoteVM. ``Local-Qube`` does not know that ``Remote-Qube`` is a RemoteVM on Remote-QubesOS.
    Assume the request is performed for the service ``my_service`` with argument ``my_arg``.
 
 2. RPC Policy process on Local-QubesOS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    Local-QubesOS processes the RPC request using its policy engine.
    It identifies that ``Remote-Qube`` is a RemoteVM, meaning it is not on Local-QubesOS but is accessible
@@ -25,7 +25,7 @@ General case: From one Qubes OS to another Qubes OS
    on ``Local-Relay``.
 
 3. Making a Qrexec call from Local-Qube to Local-Relay
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    The original RPC request is relayed through a call made from ``Local-Qube`` to ``Local-Relay`` after the policy process.
    This request includes all the necessary information to reach ``Remote-Qube`` via ``Local-Relay``.
@@ -34,7 +34,7 @@ General case: From one Qubes OS to another Qubes OS
    ``TRANSPORT_RPC+Remote-Qube+my_service+my_arg``
 
 4. Execution of TRANSPORT_RPC on Local-Relay
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    Once ``Local-Relay`` receives the RPC request, it invokes the TRANSPORT_RPC service, passing along the original RPC request.
    In this execution, ``Local-Relay`` acts as an intermediary, packaging the request and forwarding it to its destination.
@@ -49,14 +49,14 @@ General case: From one Qubes OS to another Qubes OS
       and the original name. During TRANSPORT_RPC execution, QubesDB can be used to retrieve the correct name.
 
 5. Remote-Relay forwards the RPC request to Remote-Qube on Remote-QubesOS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    TRANSPORT_RPC extracts the original service and argument, then forwards the request to ``Remote-Qube``
    by performing a qrexec from ``Remote-Relay``. The original source qube ``Local-Qube`` is specified as the
    ``qrexec-client-vm`` argument.
 
 6. RPC policy process on Remote-QubesOS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    On Remote-QubesOS, the RPC policy engine processes the request to ensure that it complies with allowed policies:
 
@@ -161,7 +161,7 @@ Below is an example Bash script implementing the ``qubesair.SSHProxy`` transport
     Using QREXEC_REMOTE_DOMAIN directly here assumes that a RemoteVM called `Local-Qube` exists in `Remote-QubesOS`.
 
 SSH client configuration hint
-+++++++++++++++++++++++++++++
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To ensure that any SSH connection to a given host actually lands on the corresponding `Remote‑Relay`, add an entry like the following to your ``~/.ssh/config``:
 
