@@ -275,10 +275,10 @@ class PolicyAdmin:
     # helpers
 
     def _get_path(self, arg: str, dir_path: str, suffix: str) -> Path:
-        if not re.compile(r"^[\w-]+$").match(arg):
+        if not re.compile(r"^[a-z0-9_-]+$").match(arg):
             raise PolicyAdminException(
                 f"Invalid policy file name: {arg}\n"
-                "Names must contain only alphanumeric characters, "
+                "Names must contain only lowercase latin letters, digits, "
                 "underscore and hyphen."
             )
         path = dir_path / (arg + suffix)
