@@ -80,6 +80,9 @@ def test_api_get(policy_dir, api):
         api.handle_request("policy.Get", ".hidden_evil_policy", b"")
 
     with pytest.raises(PolicyAdminException, match="Invalid policy file"):
+        api.handle_request("policy.Get", "Uppercase", b"")
+
+    with pytest.raises(PolicyAdminException, match="Invalid policy file"):
         api.handle_request("policy.include.Get", "..", b"")
 
     with pytest.raises(PolicyAdminException, match="Invalid policy file"):
@@ -92,6 +95,14 @@ def test_api_get(policy_dir, api):
 def test_api_replace(policy_dir, api):
     api.handle_request("policy.Replace", "file1", b"any\n")
     assert (policy_dir / "file1.policy").read_text() == ""
+
+    api.handle_request("policy.Replace", "valid-name_1", b"any\n")
+    assert (policy_dir / "valid-name_1.policy").read_text() == ""
+
+    with pytest.raises(PolicyAdminException, match="Invalid policy file"
+    ):
+        api.handle_request("policy.Replace", "Uppercase", b"any\n")
+    assert not (policy_dir / "Uppercase.policy").exists()
 
     api.handle_request("policy.Replace", "file1", b"any\nrpc.Name * * * deny")
     assert (policy_dir / "file1.policy").read_text() == "rpc.Name * * * deny"
