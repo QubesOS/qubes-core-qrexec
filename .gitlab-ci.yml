@@ -23,10 +23,6 @@ include:
     - sudo make -C ~/qubes-core-vchan-socket install LIBDIR=/usr/lib64
     - pip3 install --user --quiet -r ci/requirements.txt
 
-checks:pylint:
-  extends: .qrexec_checks
-  script:
-    - python3 -m pylint qrexec
 
 checks:tests:
   extends: .qrexec_checks
@@ -48,5 +44,7 @@ checks:fuzz:
 lint:
   extends: .lint
   variables:
-    SKIP_PYLINT: 1
-    DIR: .
+    DIR: qrexec
+  before_script:
+  - !reference [.lint, before_script]
+  - *before-script
