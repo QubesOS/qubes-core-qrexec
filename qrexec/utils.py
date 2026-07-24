@@ -113,7 +113,7 @@ def qubesd_call(
         return return_data[2:]
     if return_data.startswith(b"2\x00"):
         # pylint: disable=unused-variable
-        (_, exc_type, _traceback, _format_string, _args) = return_data.split(
+        _, exc_type, _traceback, _format_string, _args = return_data.split(
             b"\x00", 4
         )
         raise QubesMgmtException(exc_type.decode("ascii"))
