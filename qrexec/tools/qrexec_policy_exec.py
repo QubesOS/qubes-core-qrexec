@@ -191,8 +191,7 @@ def prepare_resolution_types(
     return ret
 
 
-argparser = argparse.ArgumentParser(
-    usage="""qrexec-policy-exec -h
+argparser = argparse.ArgumentParser(usage="""qrexec-policy-exec -h
 usage: qrexec-policy-exec [--assume-yes-for-ask] [--just-evaluate] [--path PATH] SOURCE TARGET service+argument
 usage: qrexec-policy-exec [--assume-yes-for-ask] [--just-evaluate] [--path PATH] domain-id SOURCE TARGET service+argument process-ident
 
@@ -211,8 +210,7 @@ To actually run a qrexec call, pass 5 positional arguments:
 - Qrexec process identifier (for data channel connection)
 
 Note that this usage is deprecated.
-"""
-)
+""")
 
 argparser.add_argument(
     "--assume-yes-for-ask",

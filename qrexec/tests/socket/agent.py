@@ -488,15 +488,13 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN"
         with open(
             os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
         ) as f:
-            f.write(
-                """\
+            f.write("""\
 wait-for-session = 0
 # should be ignored for executable service
 exit-on-service-eof = true
 exit-on-client-eof = true
 skip-service-descriptor = true
-"""
-            )
+""")
         target, dom0 = self.execute_qubesrpc("qubes.Service+arg", "domX")
         target.send_message(qrexec.MSG_DATA_STDIN, b"")
         self.assertExpectedStdout(target, b"arg: arg, remote domain: domX\n")
@@ -525,9 +523,7 @@ skip-service-descriptor = true
 #!/bin/sh
 read user
 echo "wait for session: arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, user: $user" >{}
-""".format(
-                log
-            ),
+""".format(log),
         )
         util.make_executable_service(
             self.tempdir,
@@ -538,9 +534,7 @@ echo "wait for session: arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, user: $us
 cat {}
 read input
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
-""".format(
-                log
-            ),
+""".format(log),
         )
         user = getpass.getuser()
         assert "'" not in user
@@ -548,14 +542,12 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
         with open(
             os.path.join(self.tempdir, "rpc-config", config_name), "w"
         ) as f:
-            f.write(
-                f"""\
+            f.write(f"""\
 
 # Test TOML file
 force-user = '{user}'
 wait-for-session = 1 # line comment
-"""
-            )
+""")
 
         target, dom0 = self.execute_qubesrpc(
             service_name + "+" + argument, "domX"
@@ -782,12 +774,10 @@ echo "general service"
             ),
             "w",
         ) as f:
-            f.write(
-                f"""\
+            f.write(f"""\
 {forbidden_key} = true
 force-user = '{user}'
-"""
-            )
+""")
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
 
@@ -822,12 +812,10 @@ force-user = '{user}'
             ),
             "w",
         ) as f:
-            f.write(
-                """\
+            f.write("""\
 skip-service-descriptor = true
 exit-on-client-eof = true
-"""
-            )
+""")
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
 
@@ -861,12 +849,10 @@ exit-on-client-eof = true
             ),
             "w",
         ) as f:
-            f.write(
-                """\
+            f.write("""\
 skip-service-descriptor = true
 exit-on-service-eof = true
-"""
-            )
+""")
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
 
@@ -894,11 +880,9 @@ exit-on-service-eof = true
             ),
             "w",
         ) as f:
-            f.write(
-                """\
+            f.write("""\
 skip-service-descriptor = true
-"""
-            )
+""")
         server = qrexec.socket_server(socket_path)
         self.addCleanup(server.close)
 
@@ -1222,14 +1206,12 @@ class TestAgentStreams(TestAgentBase):
     def test_close_stdin_early(self):
         # Make sure that we cover the error on writing stdin into living
         # process.
-        target, dom0 = self.execute(
-            """
+        target, dom0 = self.execute("""
 read
 exec </dev/null
 echo "closed stdin"
 sleep 1
-"""
-        )
+""")
         target.send_message(qrexec.MSG_DATA_STDIN, b"data 1\n")
         self.assertEqual(
             target.recv_message(), (qrexec.MSG_DATA_STDOUT, b"closed stdin\n")
@@ -1269,8 +1251,7 @@ sleep 1
         self.check_dom0(dom0)
 
     def test_close_stdout_stderr_early(self):
-        target, dom0 = self.execute(
-            """\
+        target, dom0 = self.execute("""\
 read
 echo closing stdout
 exec >&-
@@ -1279,8 +1260,7 @@ echo closing stderr >&2
 exec 2>&-
 read code
 exit $code
-"""
-        )
+""")
 
         target.send_message(qrexec.MSG_DATA_STDIN, b"\n")
 
@@ -1305,14 +1285,12 @@ exit $code
         self.check_dom0(dom0)
 
     def test_stdio_socket(self):
-        target, dom0 = self.execute(
-            """\
+        target, dom0 = self.execute("""\
 kill -USR1 $QREXEC_AGENT_PID
 echo hello world >&0
 read x
 echo "received: $x" >&0
-"""
-        )
+""")
         self.assertEqual(
             target.recv_message(), (qrexec.MSG_DATA_STDOUT, b"hello world\n")
         )
@@ -1326,8 +1304,7 @@ echo "received: $x" >&0
     def test_exit_before_closing_streams(self):
         fifo = os.path.join(self.tempdir, "fifo")
         os.mkfifo(fifo)
-        target, dom0 = self.execute(
-            """\
+        target, dom0 = self.execute("""\
 # duplicate original stdin to fd 3, because bash will
 # close original stdin in child process
 exec 3<&0
@@ -1337,10 +1314,7 @@ echo process waiting
 read <{fifo}
 echo process exiting
 exit 42
-""".format(
-                fifo=fifo
-            )
-        )
+""".format(fifo=fifo))
         self.assertEqual(
             target.recv_message(),
             (qrexec.MSG_DATA_STDOUT, b"process waiting\n"),
