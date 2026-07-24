@@ -27,6 +27,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 import psutil
@@ -315,6 +316,51 @@ exit 1
 
         client.close()
         self.check_dom0(dom0)
+
+    def test_incomplete_trigger_does_not_block_agent(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+
+        incomplete = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        incomplete.connect(os.path.join(self.tempdir, "agent.sock"))
+        self.addCleanup(incomplete.close)
+
+        # The incomplete client must not prevent another request from being
+        # processed.
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"target_domain", b"qubes.ServiceName"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
+    def test_fragmented_trigger_request(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+        client = self.connect_client()
+
+        source_params = (
+            struct.pack("<64s64s32s", b"", b"target_domain", b"SOCKET")
+            + b"qubes.ServiceName\0"
+        )
+        header = struct.pack(
+            "<LL", qrexec.MSG_TRIGGER_SERVICE4, len(source_params)
+        )
+        client.sendall(header[:4])
+        time.sleep(0.1)
+        client.sendall(header[4:] + source_params)
+
+        message_type, target_params = dom0.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
+        ident = target_params[128:150]
+        ident = ident[: ident.find(b"\0")]
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
 
     def test_trigger_service_refused(self):
         self.start_agent()
