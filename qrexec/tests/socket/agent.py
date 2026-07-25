@@ -321,8 +321,9 @@ exit 1
         self.start_agent()
         dom0 = self.connect_dom0()
 
-        incomplete = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        incomplete.connect(os.path.join(self.tempdir, "agent.sock"))
+        incomplete = qrexec.socket_client(
+            os.path.join(self.tempdir, "agent.sock")
+        )
         self.addCleanup(incomplete.close)
 
         # The incomplete client must not prevent another request from being
