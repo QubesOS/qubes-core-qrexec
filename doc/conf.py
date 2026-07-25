@@ -193,5 +193,5 @@ texinfo_documents = [
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     "python": ("https://docs.python.org/", None),
-    "qubes": ("http://dev.qubes-os.org/projects/core-admin/en/latest/", None),
+    "qubes": ("https://doc.qubes-os.org/projects/core-admin/en/latest/", None),
 }
