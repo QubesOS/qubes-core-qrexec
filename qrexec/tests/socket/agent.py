@@ -27,7 +27,6 @@ import struct
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 
 import psutil
@@ -341,7 +340,7 @@ exit 1
     def test_fragmented_trigger_request(self):
         self.start_agent()
         dom0 = self.connect_dom0()
-        client = self.connect_client()
+        partial_client = self.connect_client()
 
         source_params = (
             struct.pack("<64s64s32s", b"", b"target_domain", b"SOCKET")
@@ -350,9 +349,21 @@ exit 1
         header = struct.pack(
             "<LL", qrexec.MSG_TRIGGER_SERVICE4, len(source_params)
         )
-        client.sendall(header[:4])
-        time.sleep(0.1)
-        client.sendall(header[4:] + source_params)
+        partial_client.sendall(header[:4])
+
+        # A fragmented request must not prevent a complete request from being
+        # forwarded while the first client has not sent the rest of its header.
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"other_domain", b"qubes.OtherService"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
+        partial_client.sendall(header[4:] + source_params)
 
         message_type, target_params = dom0.recv_message()
         self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
@@ -361,7 +372,7 @@ exit 1
         dom0.send_message(
             qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
         )
-        self.assertEqual(client.recvall(8), b"")
+        self.assertEqual(partial_client.recvall(8), b"")
 
     def test_trigger_service_refused(self):
         self.start_agent()
