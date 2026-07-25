@@ -337,6 +337,43 @@ exit 1
         )
         self.assertEqual(client.recvall(8), b"")
 
+    def test_disconnected_trigger_does_not_block_agent(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+
+        disconnected = self.connect_client()
+        disconnected.sendall(b"\0\0\0\0")
+        disconnected.close()
+
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"target_domain", b"qubes.ServiceName"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
+    def test_invalid_trigger_does_not_block_agent(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+
+        invalid = self.connect_client()
+        invalid.send_message(qrexec.MSG_TRIGGER_SERVICE4, b"")
+        invalid.conn.settimeout(2)
+        self.assertEqual(invalid.recvall(1), b"")
+
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"target_domain", b"qubes.ServiceName"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
     def test_fragmented_trigger_request(self):
         self.start_agent()
         dom0 = self.connect_dom0()
