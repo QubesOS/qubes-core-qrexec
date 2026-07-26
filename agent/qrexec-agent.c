@@ -885,21 +885,22 @@ static int read_trigger_client(struct trigger_client *client, void *buf,
 
 static void handle_trigger_client_io(struct trigger_client *client)
 {
-    int ret = read_trigger_client(client, &client->hdr, &client->hdr_received,
-                                  sizeof(client->hdr));
-    if (ret < 0)
-        goto error;
-    if (ret == 0)
-        return;
-    if (
-        client->hdr.type != MSG_TRIGGER_SERVICE4 ||
-        client->hdr.len <= sizeof(*client->params) ||
-        client->hdr.len > sizeof(*client->params) + MAX_SERVICE_NAME_LEN
-    ) {
-        LOG(ERROR, "Invalid request received from qrexec-client-vm, is it outdated?");
-        goto error;
-    }
+    int ret;
     if (!client->params) {
+        ret = read_trigger_client(client, &client->hdr, &client->hdr_received,
+                                  sizeof(client->hdr));
+        if (ret < 0)
+            goto error;
+        if (ret == 0)
+            return;
+        if (
+            client->hdr.type != MSG_TRIGGER_SERVICE4 ||
+            client->hdr.len <= sizeof(*client->params) ||
+            client->hdr.len > sizeof(*client->params) + MAX_SERVICE_NAME_LEN
+        ) {
+            LOG(ERROR, "Invalid request received from qrexec-client-vm, is it outdated?");
+            goto error;
+        }
         client->params = malloc(client->hdr.len);
         if (!client->params)
             goto error;
@@ -938,6 +939,7 @@ static void handle_trigger_io(void)
 
     int flags = fcntl(client_fd, F_GETFL, 0);
     if (flags < 0 || fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        PERROR("fcntl trigger client");
         close(client_fd);
         return;
     }
