@@ -850,7 +850,9 @@ static void expire_trigger_clients(void)
     for (size_t i = 0; i < MAX_FDS; i++) {
         struct trigger_client *client = &trigger_clients[i];
         if (client->fd != -1 &&
-            now.tv_sec - client->accepted_at.tv_sec >= TRIGGER_CLIENT_TIMEOUT) {
+            (now.tv_sec - client->accepted_at.tv_sec > TRIGGER_CLIENT_TIMEOUT ||
+             (now.tv_sec - client->accepted_at.tv_sec == TRIGGER_CLIENT_TIMEOUT &&
+              now.tv_nsec >= client->accepted_at.tv_nsec))) {
             LOG(WARNING, "Timed out waiting for trigger request");
             close_trigger_client(client);
         }
