@@ -345,8 +345,7 @@ exit 1
         incomplete = self.connect_client()
         incomplete.conn.settimeout(2)
 
-        # The request timeout must be measured from connection acceptance, not
-        # merely from the start of its acceptance second.
+        # The incomplete request must be closed after the configured timeout.
         time.sleep(6)
         self.assertEqual(incomplete.recvall(1), b"")
 
