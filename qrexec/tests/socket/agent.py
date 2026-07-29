@@ -27,6 +27,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 import psutil
@@ -336,6 +337,29 @@ exit 1
             qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
         )
         self.assertEqual(client.recvall(8), b"")
+
+    def test_incomplete_trigger_times_out(self):
+        self.start_agent()
+        self.connect_dom0()
+
+        incomplete = self.connect_client()
+        incomplete.conn.settimeout(2)
+
+        # The request timeout must be measured from connection acceptance, not
+        # merely from the start of its acceptance second.
+        time.sleep(6)
+        self.assertEqual(incomplete.recvall(1), b"")
+
+    def test_oldest_incomplete_trigger_is_dropped_at_capacity(self):
+        self.start_agent()
+        self.connect_dom0()
+
+        clients = [self.connect_client() for _ in range(257)]
+        clients[0].conn.settimeout(2)
+
+        # The 257th incomplete request must evict the oldest of the 256
+        # tracked requests instead of letting the pending-request pool grow.
+        self.assertEqual(clients[0].recvall(1), b"")
 
     def test_disconnected_trigger_does_not_block_agent(self):
         self.start_agent()
