@@ -22,7 +22,6 @@ import os
 import struct
 import time
 
-
 # See libqrexec/qrexec.h
 MSG_DATA_STDIN = 0x190
 MSG_DATA_STDOUT = 0x191

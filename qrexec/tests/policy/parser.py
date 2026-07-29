@@ -34,7 +34,6 @@ from qrexec import QREXEC_CLIENT, QUBESD_INTERNAL_SOCK, exc, utils
 from qrexec.policy import parser, parser_compat
 from qrexec.utils import FullSystemInfo
 
-
 _SYSTEM_INFO = {
     "domains": {
         "dom0": {
@@ -1335,8 +1334,7 @@ class TC_20_Policy(ParserTestCase):
         self.assertEqual(policy.rules[3].action.default_target, "@dispvm")
 
     def test_010_find_rule(self):
-        policy = parser.StringPolicy(
-            policy="""\
+        policy = parser.StringPolicy(policy="""\
             * * test-vm1 test-vm2 allow
             * * test-vm1 @anyvm ask
             * * test-vm2 @tag:tag1 deny
@@ -1346,8 +1344,7 @@ class TC_20_Policy(ParserTestCase):
             * * test-vm2 @dispvm:default-dvm allow
             * * @type:AppVM @default allow target=test-vm3
             * * @tag:tag1 @type:AppVM allow
-        """
-        )
+        """)
         self.assertEqual(
             policy.rules[0],
             policy.find_matching_rule(self.gen_req("test-vm1", "test-vm2")),
@@ -1400,8 +1397,7 @@ class TC_20_Policy(ParserTestCase):
             )
 
     def test_020_collect_targets_for_ask(self):
-        policy = parser.StringPolicy(
-            policy="""\
+        policy = parser.StringPolicy(policy="""\
             * * test-vm1 test-vm2 allow
             * * test-vm1 @anyvm ask
             * * test-vm2 @tag:tag1 deny
@@ -1415,8 +1411,7 @@ class TC_20_Policy(ParserTestCase):
             * * uuid:c9024a97-9b15-46cc-8341-38d75d5d421b bogus2 deny
             * * uuid:c798d6db-360f-473a-b902-1cc58ffd3ab0 uuid:6d7a02b5-532b-467f-b9fb-6596bae03c33 ask
             * * test2-vm1 @dispvm:uuid:91e4fe8d-083b-4ddf-ad7b-fb4ebac537b9 ask
-        """
-        )
+        """)
 
         self.assertCountEqual(
             sorted(
@@ -1630,39 +1625,31 @@ class TC_30_Resolution(ParserTestCase):
 
 class TC_40_evaluate(ParserTestCase):
     def setUp(self):
-        self.policy = parser.StringPolicy(
-            policy="""\
+        self.policy = parser.StringPolicy(policy="""\
             * * test-vm1 test-vm2 allow
             * * test-vm1 @default allow target=test-vm2
             * * @tag:tag1 test-vm2 ask
             * * @tag:tag1 test-vm3 ask default_target=test-vm3
             * * @tag:tag2 @anyvm allow
-            * * test-vm3 @anyvm deny"""
-        )
+            * * test-vm3 @anyvm deny""")
 
     def test_000_deny(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * @anyvm @anyvm deny"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * @anyvm @anyvm deny""")
         with self.assertRaises(exc.AccessDenied) as e:
             policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertTrue(e.exception.notify)
 
     def test_001_deny_no_notify(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * @anyvm @anyvm deny notify=no"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * @anyvm @anyvm deny notify=no""")
         with self.assertRaises(exc.AccessDenied) as e:
             policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertFalse(e.exception.notify)
 
     def test_030_eval_simple(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm1 test-vm2 allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm1 test-vm2 allow""")
 
         request = self.gen_req("test-vm1", "test-vm2")
         resolution = policy.evaluate(request)
@@ -1690,11 +1677,9 @@ class TC_40_evaluate(ParserTestCase):
 
     def test_032_eval_no_autostart(self):
         # test-vm2 is running, test-vm3 is halted
-        policy = parser.StringPolicy(
-            policy="""\
+        policy = parser.StringPolicy(policy="""\
             * * test-vm1 test-vm2 allow autostart=no
-            * * test-vm1 test-vm3 allow autostart=no"""
-        )
+            * * test-vm1 test-vm3 allow autostart=no""")
 
         request = self.gen_req("test-vm1", "test-vm2")
         resolution = policy.evaluate(request)
@@ -1775,18 +1760,14 @@ class TC_40_evaluate(ParserTestCase):
         )
 
     def test_042_eval_ask_no_targets(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @default ask"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 @default ask""")
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(self.gen_req("test-vm3", "@default"))
 
     def test_043_eval_ask_no_autostart(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm1 @anyvm ask"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm1 @anyvm ask""")
         resolution = policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertCountEqual(
@@ -1813,10 +1794,8 @@ class TC_40_evaluate(ParserTestCase):
             ],
         )
 
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm1 @anyvm ask autostart=no"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm1 @anyvm ask autostart=no""")
         resolution = policy.evaluate(self.gen_req("test-vm1", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
         self.assertCountEqual(
@@ -1834,10 +1813,8 @@ class TC_40_evaluate(ParserTestCase):
         )
 
     def test_043_eval_ask_invalid_default_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 test-vm2 ask default_target=test-vm1"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 test-vm2 ask default_target=test-vm1""")
         with unittest.mock.patch("qrexec.policy.parser.logging") as mock_log:
             resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm2"))
         self.assertIsInstance(resolution, parser.AskResolution)
@@ -1851,10 +1828,8 @@ class TC_40_evaluate(ParserTestCase):
         mock_log.warning.assert_called_once()
 
     def test_050_eval_resolve_dispvm(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @dispvm allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 @dispvm allow""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "@dispvm"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1863,18 +1838,14 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "@dispvm")
 
     def test_051_eval_resolve_dispvm_fail(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-no-dvm @dispvm allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-no-dvm @dispvm allow""")
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(self.gen_req("test-no-dvm", "@dispvm"))
 
     def test_053_eval_resolve_dispvm_from_any(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * @anyvm @dispvm allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * @anyvm @dispvm allow""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "@dispvm"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1883,10 +1854,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "@dispvm")
 
     def test_054_eval_resolve_dispvm_from_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * @anyvm @anyvm allow target=@dispvm"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * @anyvm @anyvm allow target=@dispvm""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1895,11 +1864,9 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_055_eval_resolve_dispvm_from_default_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
+        policy = parser.StringPolicy(policy="""\
             * * @anyvm @anyvm ask default_target=@dispvm
-            * * @anyvm @dispvm ask"""
-        )
+            * * @anyvm @dispvm ask""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
@@ -1908,10 +1875,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_060_eval_to_dom0(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @adminvm allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 @adminvm allow""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1920,10 +1885,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "dom0")
 
     def test_061_eval_to_dom0_keyword(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @adminvm allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 @adminvm allow""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "@adminvm"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1932,10 +1895,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "@adminvm")
 
     def test_062_eval_to_dom0_literal(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 dom0 allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 dom0 allow""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1944,10 +1905,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "dom0")
 
     def test_063_eval_to_dom0_literal_policy(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 dom0 allow"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 dom0 allow""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "@adminvm"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -1971,10 +1930,8 @@ class TC_40_evaluate(ParserTestCase):
                 policy.evaluate(self.gen_req("test-vm3", "test-vm2"))
 
     def test_070_eval_to_dom0_ask_default_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 dom0 ask default_target=dom0"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 dom0 ask default_target=dom0""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
@@ -1984,10 +1941,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_071_eval_to_dom0_ask_default_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 dom0 ask default_target=@adminvm"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 dom0 ask default_target=@adminvm""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
@@ -1997,10 +1952,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_072_eval_to_dom0_ask_default_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @adminvm ask default_target=dom0"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 @adminvm ask default_target=dom0""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
@@ -2010,10 +1963,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_073_eval_to_dom0_ask_default_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @adminvm ask default_target=@adminvm"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 @adminvm ask default_target=@adminvm""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "dom0"))
 
         self.assertIsInstance(resolution, parser.AskResolution)
@@ -2044,10 +1995,8 @@ class TC_40_evaluate(ParserTestCase):
                 self.assertEqual(resolution.targets_for_ask, ["dom0"])
 
     def test_080_eval_override_target(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * @anyvm @anyvm allow target=test-vm2"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * @anyvm @anyvm allow target=test-vm2""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -2056,10 +2005,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_081_eval_override_target_dispvm(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * @anyvm @anyvm allow target=@dispvm"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * @anyvm @anyvm allow target=@dispvm""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -2068,10 +2015,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_082_eval_override_target_dispvm_specific(self):
-        policy = parser.StringPolicy(
-            policy="""\
-                    * * @anyvm @anyvm allow target=@dispvm:test-vm3"""
-        )
+        policy = parser.StringPolicy(policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm:test-vm3""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -2080,18 +2025,14 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_083_eval_override_target_dispvm_none(self):
-        policy = parser.StringPolicy(
-            policy="""\
-                    * * @anyvm @anyvm allow target=@dispvm"""
-        )
+        policy = parser.StringPolicy(policy="""\
+                    * * @anyvm @anyvm allow target=@dispvm""")
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(self.gen_req("test-no-dvm", "test-vm1"))
 
     def test_084_eval_override_target_dom0(self):
-        policy = parser.StringPolicy(
-            policy="""\
-                    * * @anyvm @anyvm allow target=dom0"""
-        )
+        policy = parser.StringPolicy(policy="""\
+                    * * @anyvm @anyvm allow target=dom0""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -2100,10 +2041,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_085_eval_override_target_adminvm(self):
-        policy = parser.StringPolicy(
-            policy="""\
-                    * * @anyvm @anyvm allow target=@adminvm"""
-        )
+        policy = parser.StringPolicy(policy="""\
+                    * * @anyvm @anyvm allow target=@adminvm""")
         resolution = policy.evaluate(self.gen_req("test-vm3", "test-vm1"))
 
         self.assertIsInstance(resolution, parser.AllowResolution)
@@ -2112,10 +2051,8 @@ class TC_40_evaluate(ParserTestCase):
         self.assertEqual(resolution.request.target, "test-vm1")
 
     def test_086_eval_override_target_invalid(self):
-        policy = parser.StringPolicy(
-            policy="""\
-            * * test-vm3 @anyvm allow target=no-such-vm"""
-        )
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm3 @anyvm allow target=no-such-vm""")
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(self.gen_req("test-vm3", "@default"))
 
@@ -2876,14 +2813,12 @@ class TC_90_Compat40(ParserTestCase):
 
     def test_100_implicit_deny(self):
         policy = parser.StringPolicy(
-            policy={
-                "__main__": """
+            policy={"__main__": """
                 test.AllowBefore    * @anyvm @anyvm allow
                 !compat-4.0
                 test.AllowAfter     * @anyvm @anyvm allow
                 test.ImplicitDeny   * @anyvm @anyvm allow
-            """
-            },
+            """},
             policy_compat={
                 "test.AllowAfter": """
                     test-vm1 test-vm2 allow

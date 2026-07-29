@@ -137,12 +137,10 @@ def test_simplest_convert(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]):
 
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.Filecopy").write_text(
-        """
+    (old_policy_dir / "qubes.Filecopy").write_text("""
 dom0 @anyvm ask
 work @anyvm ask
-personal @anyvm deny"""
-    )
+personal @anyvm deny""")
 
     qrexec_legacy_convert.main([])
 
@@ -166,17 +164,13 @@ def test_multiple_files(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]):
     # multiple files + some rules should be ignored
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.Filecopy").write_text(
-        """
+    (old_policy_dir / "qubes.Filecopy").write_text("""
 work @anyvm deny
-@anyvm @anyvm allow"""
-    )
+@anyvm @anyvm allow""")
 
-    (old_policy_dir / "qubes.ClipboardPaste").write_text(
-        """
+    (old_policy_dir / "qubes.ClipboardPaste").write_text("""
 work @anyvm ask
-@anyvm @anyvm deny"""
-    )
+@anyvm @anyvm deny""")
 
     qrexec_legacy_convert.main([])
 
@@ -207,16 +201,12 @@ def test_complex_rules(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]):
     # rules that are too complex for the configtool
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.Filecopy").write_text(
-        """
+    (old_policy_dir / "qubes.Filecopy").write_text("""
 work @anyvm ask default_target=personal
-@anyvm @anyvm allow"""
-    )
+@anyvm @anyvm allow""")
 
-    (old_policy_dir / "qubes.ClipboardPaste").write_text(
-        """
-work @anyvm allow target=personal"""
-    )
+    (old_policy_dir / "qubes.ClipboardPaste").write_text("""
+work @anyvm allow target=personal""")
 
     qrexec_legacy_convert.main([])
 
@@ -254,18 +244,12 @@ def test_input_rules_simple(
     # rules that are too complex for the configtool
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.InputKeyboard").write_text(
-        """
-sys-usb dom0 ask"""
-    )
-    (old_policy_dir / "qubes.InputMouse").write_text(
-        """
-sys-usb dom0 allow"""
-    )
-    (old_policy_dir / "qubes.InputTablet").write_text(
-        """
-sys-usb dom0 deny"""
-    )
+    (old_policy_dir / "qubes.InputKeyboard").write_text("""
+sys-usb dom0 ask""")
+    (old_policy_dir / "qubes.InputMouse").write_text("""
+sys-usb dom0 allow""")
+    (old_policy_dir / "qubes.InputTablet").write_text("""
+sys-usb dom0 deny""")
 
     qrexec_legacy_convert.main([])
 
@@ -297,23 +281,17 @@ def test_input_multiple_rules(
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
     # the deny @anyvm should be move to 30-user file
-    (old_policy_dir / "qubes.InputKeyboard").write_text(
-        """
+    (old_policy_dir / "qubes.InputKeyboard").write_text("""
 sys-usb dom0 ask default_target=dom0
 sys-usb @anyvm deny
-"""
-    )
+""")
 
     # the "work" rule should be moved to 30-user file
-    (old_policy_dir / "qubes.InputMouse").write_text(
-        """
+    (old_policy_dir / "qubes.InputMouse").write_text("""
 sys-usb dom0 allow
-sys-usb work allow"""
-    )
-    (old_policy_dir / "qubes.InputTablet").write_text(
-        """
-sys-usb dom0 deny"""
-    )
+sys-usb work allow""")
+    (old_policy_dir / "qubes.InputTablet").write_text("""
+sys-usb dom0 deny""")
 
     qrexec_legacy_convert.main([])
 
@@ -352,26 +330,20 @@ def test_input_multiple_sys_usbs(
     # rules that are too complex for the configtool
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.InputKeyboard").write_text(
-        """
+    (old_policy_dir / "qubes.InputKeyboard").write_text("""
 sys-usb dom0 ask
 sys-usb-2 dom0 deny
-"""
-    )
+""")
     # the sys-usb-2 @anyvm rule should go to 30-user
-    (old_policy_dir / "qubes.InputMouse").write_text(
-        """
+    (old_policy_dir / "qubes.InputMouse").write_text("""
 sys-usb @adminvm allow
 sys-usb-2 @anyvm deny
 sys-usb-2 @adminvm allow
-"""
-    )
+""")
     # first rule goes to 50-config
-    (old_policy_dir / "qubes.InputTablet").write_text(
-        """
+    (old_policy_dir / "qubes.InputTablet").write_text("""
 sys-usb dom0 ask
-sys-usb dom0 deny"""
-    )
+sys-usb dom0 deny""")
 
     qrexec_legacy_convert.main([])
 
@@ -410,15 +382,13 @@ def test_paste_rules(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]):
     # rules with target / default target are not supported
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.ClipboardPaste").write_text(
-        """
+    (old_policy_dir / "qubes.ClipboardPaste").write_text("""
 personal @anyvm allow
 work personal ask default_target=personal
 sys-usb work deny
 @type:TemplateVM work deny
 @anyvm @anyvm deny
-"""
-    )
+""")
 
     qrexec_legacy_convert.main([])
 
@@ -449,13 +419,11 @@ qubes.ClipboardPaste\t*\twork\tpersonal\task default_target=personal"""
 def test_openinvm_rules(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]):
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.OpenInVM").write_text(
-        """
+    (old_policy_dir / "qubes.OpenInVM").write_text("""
 personal @dispvm allow target=@dispvm:dvm_template
 work @dispvm ask default_target=@dispvm:dvm_template
 work personal deny
-"""
-    )
+""")
 
     qrexec_legacy_convert.main([])
 
@@ -486,32 +454,24 @@ qubes.OpenInVM\t*\twork\t@dispvm\task default_target=@dispvm:dvm_template
 def test_u2f_rules(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]):
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "u2f.Authenticate+123").write_text(
-        """
+    (old_policy_dir / "u2f.Authenticate+123").write_text("""
 work sys-usb allow
-"""
-    )
+""")
 
-    (old_policy_dir / "u2f.Authenticate").write_text(
-        """
+    (old_policy_dir / "u2f.Authenticate").write_text("""
 personal sys-usb ask
 sys-usb-2 @anyvm deny
-"""
-    )
+""")
 
-    (old_policy_dir / "u2f.Register").write_text(
-        """
+    (old_policy_dir / "u2f.Register").write_text("""
 work sys-usb allow
 personal sys-usb deny
 sys-usb-2 sys-usb deny
-"""
-    )
+""")
 
-    (old_policy_dir / "policy.RegisterArgument+u2f.Authenticate").write_text(
-        """
+    (old_policy_dir / "policy.RegisterArgument+u2f.Authenticate").write_text("""
 work sys-usb allow
-"""
-    )
+""")
 
     qrexec_legacy_convert.main([])
 
@@ -551,17 +511,14 @@ u2f.Authenticate\t*\tsys-usb-2\t@anyvm\tdeny
 def test_merge_files(mock_policy_dirs: Tuple[pathlib.Path, pathlib.Path]):
     new_policy_dir, old_policy_dir = mock_policy_dirs
 
-    (old_policy_dir / "qubes.Filecopy").write_text(
-        """
+    (old_policy_dir / "qubes.Filecopy").write_text("""
 work @anyvm deny
 personal work allow
 @anyvm @anyvm ask
-"""
-    )
+""")
 
     (new_policy_dir / "50-config-filecopy.policy").write_text(
-        qrexec_legacy_convert.TOOL_DISCLAIMER
-        + """
+        qrexec_legacy_convert.TOOL_DISCLAIMER + """
 qubes.Filecopy * @anyvm @anyvm ask
 """
     )

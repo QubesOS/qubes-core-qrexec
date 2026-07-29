@@ -343,15 +343,12 @@ exit $exit_code
             capture_output=True,
             text=True,
         )
-        assert (
-            result.stdout
-            == """result=allow
+        assert result.stdout == """result=allow
 autostart=True
 user=toto
 target=anotherdomain
 requested_target=anotherdomain
 """
-        )
 
         # check allowed request
         agent.send_message(
@@ -1220,9 +1217,7 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input, service path
             """\
 #!/bin/sh
 echo "wait for session: remote domain: $QREXEC_REMOTE_DOMAIN" >{}
-""".format(
-                log
-            ),
+""".format(log),
         )
         util.make_executable_service(
             self.tempdir,
@@ -1233,9 +1228,7 @@ echo "wait for session: remote domain: $QREXEC_REMOTE_DOMAIN" >{}
 cat {}
 read input
 echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
-""".format(
-                log
-            ),
+""".format(log),
         )
         with open(
             os.path.join(self.tempdir, "rpc-config", "qubes.Service+arg"), "w"
@@ -1425,14 +1418,12 @@ echo "arg: $1, remote domain: $QREXEC_REMOTE_DOMAIN, input: $input"
     def test_close_stdin_early(self):
         # Make sure that we cover the error on writing stdin into living
         # process.
-        source = self.connect_service_request(
-            """
+        source = self.connect_service_request("""
 read
 exec <&-
 echo closed stdin
 sleep 1
-"""
-        )
+""")
         source.send_message(qrexec.MSG_DATA_STDIN, b"data 1\n")
         self.assertEqual(
             source.recv_message(), (qrexec.MSG_DATA_STDOUT, b"closed stdin\n")

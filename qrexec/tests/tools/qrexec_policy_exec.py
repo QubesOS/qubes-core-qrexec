@@ -224,15 +224,12 @@ def test_000_allow(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert (
-        retval
-        == """user=user
+    assert retval == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
-    )
     assert agent_service.mock_calls == []
 
 
@@ -241,15 +238,12 @@ def test_001_allow_notify(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert (
-        retval
-        == """user=user
+    assert retval == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
-    )
     assert agent_service.mock_calls == [
         notify_call("allow"),
     ]
@@ -262,15 +256,12 @@ def test_002_allow_notify_failed(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert (
-        retval
-        == """user=user
+    assert retval == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
-    )
     assert agent_service.mock_calls == [
         notify_call("allow"),
     ]
@@ -283,15 +274,12 @@ def test_004_allow_no_guivm(policy, system_info, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert (
-        retval
-        == """user=user
+    assert retval == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
-    )
     assert agent_service.mock_calls == []
 
 
@@ -301,15 +289,12 @@ def test_010_ask_allow(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert (
-        retval
-        == """user=user
+    assert retval == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
-    )
     assert agent_service.mock_calls == [
         ask_call(),
     ]
@@ -321,15 +306,12 @@ def test_011_ask_allow_notify(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert (
-        retval
-        == """user=user
+    assert retval == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
-    )
     assert agent_service.mock_calls == [
         ask_call(),
         notify_call("allow"),
@@ -381,15 +363,12 @@ def test_017_ask_default_target(policy, agent_service):
     retval = qrexec_policy_exec.get_result(
         ["source", "test-vm1", "service+arg"]
     )
-    assert (
-        retval
-        == """user=user
+    assert retval == """user=user
 result=allow
 target=test-vm1
 target_uuid=uuid:42d488d0-1168-44eb-9829-81bde8f43065
 autostart=True
 requested_target=test-vm1"""
-    )
     assert agent_service.mock_calls == [
         ask_call(default_target="test-vm1"),
     ]
