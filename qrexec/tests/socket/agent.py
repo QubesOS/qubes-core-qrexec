@@ -27,6 +27,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 import psutil
@@ -315,6 +316,123 @@ exit 1
 
         client.close()
         self.check_dom0(dom0)
+
+    def test_incomplete_trigger_does_not_block_agent(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+
+        incomplete = qrexec.socket_client(
+            os.path.join(self.tempdir, "agent.sock")
+        )
+        self.addCleanup(incomplete.close)
+
+        # The incomplete client must not prevent another request from being
+        # processed.
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"target_domain", b"qubes.ServiceName"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
+    def test_incomplete_trigger_times_out(self):
+        self.start_agent()
+        self.connect_dom0()
+
+        incomplete = self.connect_client()
+        incomplete.conn.settimeout(2)
+
+        # The incomplete request must be closed after the configured timeout.
+        time.sleep(6)
+        self.assertEqual(incomplete.recvall(1), b"")
+
+    def test_oldest_incomplete_trigger_is_dropped_at_capacity(self):
+        self.start_agent()
+        self.connect_dom0()
+
+        clients = [self.connect_client() for _ in range(257)]
+        clients[0].conn.settimeout(2)
+
+        # The 257th incomplete request must evict the oldest of the 256
+        # tracked requests instead of letting the pending-request pool grow.
+        self.assertEqual(clients[0].recvall(1), b"")
+
+    def test_disconnected_trigger_does_not_block_agent(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+
+        disconnected = self.connect_client()
+        disconnected.sendall(b"\0\0\0\0")
+        disconnected.close()
+
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"target_domain", b"qubes.ServiceName"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
+    def test_invalid_trigger_does_not_block_agent(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+
+        invalid = self.connect_client()
+        invalid.send_message(qrexec.MSG_TRIGGER_SERVICE4, b"")
+        invalid.conn.settimeout(2)
+        self.assertEqual(invalid.recvall(1), b"")
+
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"target_domain", b"qubes.ServiceName"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
+    def test_fragmented_trigger_request(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+        partial_client = self.connect_client()
+
+        source_params = (
+            struct.pack("<64s64s32s", b"", b"target_domain", b"SOCKET")
+            + b"qubes.ServiceName\0"
+        )
+        header = struct.pack(
+            "<LL", qrexec.MSG_TRIGGER_SERVICE4, len(source_params)
+        )
+        partial_client.sendall(header[:4])
+
+        # A fragmented request must not prevent a complete request from being
+        # forwarded while the first client has not sent the rest of its header.
+        client = self.connect_client()
+        dom0.conn.settimeout(2)
+        ident = self.trigger_service(
+            dom0, client, b"other_domain", b"qubes.OtherService"
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
+        partial_client.sendall(header[4:] + source_params)
+
+        message_type, target_params = dom0.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_TRIGGER_SERVICE4)
+        ident = target_params[128:150]
+        ident = ident[: ident.find(b"\0")]
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(partial_client.recvall(8), b"")
 
     def test_trigger_service_refused(self):
         self.start_agent()

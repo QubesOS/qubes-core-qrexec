@@ -38,6 +38,7 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <limits.h>
+#include <time.h>
 #ifdef HAVE_PAM
 #include <security/pam_appl.h>
 #endif
@@ -62,10 +63,21 @@ struct waiting_request {
     struct qrexec_parsed_command *cmd;
 };
 
+struct trigger_client {
+    int fd;
+    struct msg_header hdr;
+    size_t hdr_received;
+    struct trigger_service_params4 *params;
+    size_t params_received;
+    struct timespec accepted_at;
+};
+
 /*  */
 static struct connection_info connection_info[MAX_FDS];
 
 static struct waiting_request requests_waiting_for_session[MAX_FDS];
+
+static struct trigger_client trigger_clients[MAX_FDS];
 
 static libvchan_t *ctrl_vchan;
 
@@ -79,6 +91,8 @@ static int meminfo_write_started = 0;
 
 static const char *agent_trigger_path = QREXEC_AGENT_TRIGGER_PATH;
 static const char *fork_server_path = QREXEC_FORK_SERVER_SOCKET;
+
+#define TRIGGER_CLIENT_TIMEOUT 5
 
 static void handle_server_exec_request_do(int type,
                                           struct qrexec_parsed_command *cmd,
@@ -402,6 +416,8 @@ static void init(void)
     old_umask = umask(0);
     trigger_fd = get_server_socket(agent_trigger_path);
     umask(old_umask);
+    for (size_t i = 0; i < MAX_FDS; i++)
+        trigger_clients[i].fd = -1;
     register_exec_func(do_exec);
 
     /* wait for qrexec daemon */
@@ -819,47 +835,147 @@ static void reap_children(void)
     child_exited = 0;
 }
 
-static void handle_trigger_io(void)
+static void close_trigger_client(struct trigger_client *client)
 {
-    struct msg_header hdr;
-    struct trigger_service_params4 *params = NULL;
-    int client_fd;
+    close(client->fd);
+    free(client->params);
+    *client = (struct trigger_client) { .fd = -1 };
+}
 
-    client_fd = do_accept(trigger_fd);
-    if (client_fd < 0)
+static void expire_trigger_clients(void)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) {
+        PERROR("clock_gettime");
         return;
-    if (!read_all(client_fd, &hdr, sizeof(hdr)))
-        goto error;
-    if (
-        hdr.type != MSG_TRIGGER_SERVICE4 ||
-        hdr.len <= sizeof(*params) ||
-        hdr.len > sizeof(*params) + MAX_SERVICE_NAME_LEN
-    ) {
-        LOG(ERROR, "Invalid request received from qrexec-client-vm, is it outdated?");
-        goto error;
     }
-    params = malloc(hdr.len);
-    if (!params)
-        goto error;
-    if (!read_all(client_fd, params, hdr.len))
-        goto error;
+    for (size_t i = 0; i < MAX_FDS; i++) {
+        struct trigger_client *client = &trigger_clients[i];
+        if (client->fd != -1 &&
+            (now.tv_sec - client->accepted_at.tv_sec > TRIGGER_CLIENT_TIMEOUT ||
+             (now.tv_sec - client->accepted_at.tv_sec == TRIGGER_CLIENT_TIMEOUT &&
+              now.tv_nsec >= client->accepted_at.tv_nsec))) {
+            LOG(WARNING, "Timed out waiting for trigger request");
+            close_trigger_client(client);
+        }
+    }
+}
 
-    int res = snprintf(params->request_id.ident, sizeof(params->request_id), "SOCKET%d", client_fd);
-    if (res < 0 || res >= (int)sizeof(params->request_id))
+/* Return 1 when the whole buffer was read, 0 when more data is needed, and
+ * -1 on EOF or error. */
+static int read_trigger_client(struct trigger_client *client, void *buf,
+                               size_t *received, size_t size)
+{
+    while (*received < size) {
+        ssize_t ret = read(client->fd, (char *)buf + *received,
+                           size - *received);
+        if (ret > 0) {
+            *received += (size_t)ret;
+            continue;
+        }
+        if (ret == 0)
+            return -1;
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
+        PERROR("read trigger client");
+        return -1;
+    }
+    return 1;
+}
+
+static void handle_trigger_client_io(struct trigger_client *client)
+{
+    int ret;
+    if (!client->params) {
+        ret = read_trigger_client(client, &client->hdr, &client->hdr_received,
+                                  sizeof(client->hdr));
+        if (ret < 0)
+            goto error;
+        if (ret == 0)
+            return;
+        if (
+            client->hdr.type != MSG_TRIGGER_SERVICE4 ||
+            client->hdr.len <= sizeof(*client->params) ||
+            client->hdr.len > sizeof(*client->params) + MAX_SERVICE_NAME_LEN
+        ) {
+            LOG(ERROR, "Invalid request received from qrexec-client-vm, is it outdated?");
+            goto error;
+        }
+        client->params = malloc(client->hdr.len);
+        if (!client->params)
+            goto error;
+    }
+    ret = read_trigger_client(client, client->params, &client->params_received,
+                              client->hdr.len);
+    if (ret < 0)
+        goto error;
+    if (ret == 0)
+        return;
+
+    int res = snprintf(client->params->request_id.ident,
+                       sizeof(client->params->request_id), "SOCKET%d", client->fd);
+    if (res < 0 || res >= (int)sizeof(client->params->request_id))
         abort();
-    if (libvchan_send(ctrl_vchan, &hdr, sizeof(hdr)) != sizeof(hdr))
+    if (libvchan_send(ctrl_vchan, &client->hdr, sizeof(client->hdr)) != sizeof(client->hdr))
         handle_vchan_error("write hdr");
-    if (libvchan_send(ctrl_vchan, params, hdr.len) != (int)hdr.len)
+    if (libvchan_send(ctrl_vchan, client->params, client->hdr.len) != (int)client->hdr.len)
         handle_vchan_error("write params");
 
-    free(params);
+    free(client->params);
     /* do not close client_fd - we'll need it to send the connection details
      * later (when dom0 accepts the request) */
+    *client = (struct trigger_client) { .fd = -1 };
     return;
 error:
     LOG(ERROR, "Failed to retrieve/execute request from qrexec-client-vm");
-    free(params);
-    close(client_fd);
+    close_trigger_client(client);
+}
+
+static void handle_trigger_io(void)
+{
+    int client_fd = do_accept(trigger_fd);
+    if (client_fd < 0)
+        return;
+
+    int flags = fcntl(client_fd, F_GETFL, 0);
+    if (flags < 0 || fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        PERROR("fcntl trigger client");
+        close(client_fd);
+        return;
+    }
+
+    struct trigger_client *slot = NULL;
+    for (size_t i = 0; i < MAX_FDS; i++) {
+        if (trigger_clients[i].fd == -1) {
+            slot = &trigger_clients[i];
+            break;
+        }
+    }
+    if (!slot) {
+        /* Preserve service availability when untrusted clients exhaust the
+         * pending-request limit. */
+        slot = &trigger_clients[0];
+        for (size_t i = 1; i < MAX_FDS; i++) {
+            if (trigger_clients[i].accepted_at.tv_sec < slot->accepted_at.tv_sec ||
+                (trigger_clients[i].accepted_at.tv_sec == slot->accepted_at.tv_sec &&
+                 trigger_clients[i].accepted_at.tv_nsec < slot->accepted_at.tv_nsec))
+                slot = &trigger_clients[i];
+        }
+        LOG(WARNING, "Too many incomplete trigger requests, dropping oldest");
+        close_trigger_client(slot);
+    }
+    struct timespec accepted_at;
+    if (clock_gettime(CLOCK_MONOTONIC, &accepted_at) < 0) {
+        PERROR("clock_gettime");
+        close(client_fd);
+        return;
+    }
+    *slot = (struct trigger_client) {
+        .fd = client_fd,
+        .accepted_at = accepted_at,
+    };
 }
 
 static void handle_terminated_fork_client(int id) {
@@ -938,7 +1054,7 @@ int main(int argc, char **argv)
     sigprocmask(SIG_BLOCK, &selectmask, NULL);
     sigemptyset(&selectmask);
 
-    struct pollfd fds[MAX_FDS + 2];
+    struct pollfd fds[2 * MAX_FDS + 2];
     fds[0] = (struct pollfd) { libvchan_fd_for_select(ctrl_vchan), POLLIN | POLLHUP, 0 };
     fds[1] = (struct pollfd) { trigger_fd, POLLIN | POLLHUP, 0 };
 
@@ -950,6 +1066,8 @@ int main(int argc, char **argv)
         if (child_exited)
             reap_children();
 
+        expire_trigger_clients();
+
         if (libvchan_buffer_space(ctrl_vchan) > (int)sizeof(struct msg_header)) {
             /* vchan has space, so poll for clients */
 
@@ -957,6 +1075,10 @@ int main(int argc, char **argv)
             for (size_t i = 0; i < MAX_FDS; i++) {
                 if (connection_info[i].pid != 0 && connection_info[i].fd != -1)
                     fds[nfds++] = (struct pollfd) { connection_info[i].fd, POLLIN | POLLHUP, 0 };
+            }
+            for (size_t i = 0; i < MAX_FDS; i++) {
+                if (trigger_clients[i].fd != -1)
+                    fds[nfds++] = (struct pollfd) { trigger_clients[i].fd, POLLIN | POLLHUP, 0 };
             }
         }
 
@@ -968,7 +1090,7 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        if (nfds > 2) {
+        if (nfds > 1) {
             size_t fds_checked = 2;
 
             /*
@@ -992,6 +1114,20 @@ int main(int argc, char **argv)
                     assert(fd_info.fd == connection_info[i].fd);
                     if (fd_info.revents)
                         handle_terminated_fork_client(i);
+                }
+            }
+
+            for (size_t i = 0; i < MAX_FDS; i++) {
+                if (trigger_clients[i].fd != -1) {
+                    if (nfds <= fds_checked) {
+                        fprintf(stderr, "BAD: nfds (%zu) <= fds_checked (%zu), aborting!\n", nfds, fds_checked);
+                        assert(nfds > fds_checked);
+                        abort();
+                    }
+                    struct pollfd fd_info = fds[fds_checked++];
+                    assert(fd_info.fd == trigger_clients[i].fd);
+                    if (fd_info.revents)
+                        handle_trigger_client_io(&trigger_clients[i]);
                 }
             }
 
