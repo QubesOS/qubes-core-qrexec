@@ -1,3 +1,41 @@
+qubes-core-qrexec (4.3.13-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Increase default connection timeout to 10s
+
+  [ Rohit Yadav ]
+  * qrexec: validate socket fd before use
+
+  [ Marek Marczykowski-Górecki ]
+  * Support --prefix-data in qrexec-client too
+
+  [ Ben Grande ]
+  * Log calls made from dom0 to the journal
+
+  [ parulin ]
+  * Fix heading styles according to style guide
+  * Remove duplicate qrexec module
+
+  [ Ashlen ]
+  * Reject uppercase policy file names in admin API
+
+  [ parulin ]
+  * Include qrexec-client-vm in doc/manpages
+
+  [ Marek Marczykowski-Górecki ]
+  * ci: use common job template for pylint
+
+  [ parulin ]
+  * Update from dev.qubes-os.org to doc.qubes-os.org
+
+  [ Marek Marczykowski-Górecki ]
+  * Update black to 26.5.1
+
+  [ Ben Grande ]
+  * Install test dependencies
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 31 Jul 2026 13:23:21 +0200
+
 qubes-core-qrexec (4.3.12-1) unstable; urgency=medium
 
   [ Ben Grande ]
