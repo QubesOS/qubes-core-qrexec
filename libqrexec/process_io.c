@@ -124,6 +124,7 @@ int qrexec_process_io(const struct process_io_request *req,
     struct timespec zero_timeout = { 0, 0 };
     struct timespec normal_timeout = { 10, 0 };
     struct prefix_data empty = { 0, 0 }, prefix = req->prefix_data;
+    bool have_vchan_buffer_space;
 
     if (is_service && stderr_fd == -1) {
         struct msg_header hdr = { .type = MSG_DATA_STDERR, .len = 0 };
@@ -276,7 +277,9 @@ int qrexec_process_io(const struct process_io_request *req,
 
         fds[FD_STDOUT].fd = -1;
         fds[FD_STDERR].fd = -1;
-        if (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
+        have_vchan_buffer_space =
+            libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header);
+        if (have_vchan_buffer_space) {
             if (prefix.len == 0 && stdout_fd >= 0) {
                 fds[FD_STDOUT].fd = stdout_fd;
                 fds[FD_STDOUT].events = POLLIN;
@@ -290,7 +293,8 @@ int qrexec_process_io(const struct process_io_request *req,
         fds[FD_VCHAN].fd = libvchan_fd_for_select(vchan);
         fds[FD_VCHAN].events = POLLIN;
 
-        if (!buffer_len(stdin_buf) && libvchan_data_ready(vchan) > 0)
+        if ((prefix.len && have_vchan_buffer_space) ||
+                (!buffer_len(stdin_buf) && libvchan_data_ready(vchan) > 0))
             /* check for other FDs, but exit immediately */
             ret = ppoll(fds, FD_NUM, &zero_timeout, &pollmask);
         else
