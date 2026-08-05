@@ -636,10 +636,15 @@ class DispVMTemplate(Source, Target, Redirect, IntendedTarget):
     ) -> bool:
         assert self.startswith("@dispvm:"), f"missing prefix in {self!r}"
         if isinstance(other, DispVM) and source is not None:
+            other_template = other.get_dispvm_template(
+                source, system_info=system_info
+            )
+            if other_template is None:
+                return False
             return match_strings(
                 system_info["domains"],
                 self,
-                other.get_dispvm_template(source, system_info=system_info),
+                other_template,
             )
         if not isinstance(other, DispVMTemplate):
             return False  # not a disposable VM template

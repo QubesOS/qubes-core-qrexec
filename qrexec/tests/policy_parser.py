@@ -1845,6 +1845,12 @@ class TC_40_evaluate(ParserTestCase):
         with self.assertRaises(exc.AccessDenied):
             policy.evaluate(self.gen_req("test-no-dvm", "@dispvm"))
 
+    def test_052_eval_resolve_dispvm_template_without_default(self):
+        policy = parser.StringPolicy(policy="""\
+            * * test-no-dvm @dispvm:default-dvm allow""")
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(self.gen_req("test-no-dvm", "@dispvm"))
+
     def test_053_eval_resolve_dispvm_from_any(self):
         policy = parser.StringPolicy(policy="""\
             * * @anyvm @dispvm allow""")
