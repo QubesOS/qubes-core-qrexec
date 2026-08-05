@@ -454,6 +454,22 @@ exit 1
         data = client.recvall(8)
         self.assertEqual(data, b"")
 
+    def test_max_size_trigger_service(self):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+        client = self.connect_client()
+
+        # The vchan ring is smaller than the protocol's maximum trigger
+        # payload, so forwarding must support partial vchan writes.
+        service_name = b"S" * (qrexec.MAX_SERVICE_NAME_LEN - 1)
+        ident = self.trigger_service(
+            dom0, client, b"target_domain", service_name
+        )
+        dom0.send_message(
+            qrexec.MSG_SERVICE_REFUSED, struct.pack("<32s", ident)
+        )
+        self.assertEqual(client.recvall(8), b"")
+
     def trigger_service(
         self, dom0, client, target_domain_name, service_name, source_domain=b""
     ):
