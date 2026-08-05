@@ -1,3 +1,23 @@
+qubes-core-qrexec (4.3.14-1) unstable; urgency=medium
+
+  [ Divina Commedia ]
+  * fix(agent): avoid blocking on incomplete trigger requests
+  * test(agent): wait for trigger socket readiness
+  * test(agent): make fragmented trigger regression deterministic
+  * test(agent): cover invalid trigger clients
+  * fix(agent): clarify trigger read state
+  * test(agent): cover incomplete trigger eviction
+  * test(agent): clarify incomplete trigger timeout
+
+  [ Marek Marczykowski-Górecki ]
+  * Avoid ppoll timeout if there is prefix data already ready to send
+
+  [ Mafi ]
+  * fix(agent): forward large trigger requests incrementally
+  * policy: handle missing default DispVM template
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Wed, 05 Aug 2026 22:08:26 +0200
+
 qubes-core-qrexec (4.3.13-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
