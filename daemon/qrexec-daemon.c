@@ -1180,8 +1180,6 @@ static _Noreturn void do_exec(const char *prog, const char *cmd, const char *use
 }
 
 _Noreturn static void handle_execute_service_child(
-        const int remote_domain_id,
-        const char *remote_domain_name,
         const char *requested_source_domain,
         const char *target_domain,
         const char *requested_service_name,
@@ -1279,8 +1277,6 @@ _Noreturn static void handle_execute_service_child(
 }
 
 static void handle_execute_service(
-        const int remote_domain_id,
-        const char *remote_domain_name, // qube that calls qrexec from daemon internal point of view
         const char *requested_source_domain, // source domain passed from qrexec client call argument
         const char *target_domain,
         const char *service_name,
@@ -1306,8 +1302,8 @@ static void handle_execute_service(
                 _exit(QREXEC_EXIT_PROBLEM);
             if (sigaction(SIGTERM, &sa, NULL))
                 LOG(WARNING, "Failed to restore SIGTERM handler: %d", errno);
-            handle_execute_service_child(remote_domain_id, remote_domain_name,
-                requested_source_domain, target_domain, service_name, request_id);
+            handle_execute_service_child(requested_source_domain, target_domain,
+                                         service_name, request_id);
             abort();
         default:
             policy_pending[policy_pending_slot].pid = pid;
@@ -1489,8 +1485,7 @@ void handle_message_from_agent(void)
             params = untrusted_params;
             /* sanitize end */
 
-            handle_execute_service(remote_domain_id, remote_domain_name,
-                    NULL,
+            handle_execute_service(NULL,
                     params.target_domain,
                     params.service_name,
                     &params.request_id);
@@ -1530,8 +1525,7 @@ void handle_message_from_agent(void)
             untrusted_params3 = NULL;
             /* sanitize end */
 
-            handle_execute_service(remote_domain_id, remote_domain_name,
-                    NULL,
+            handle_execute_service(NULL,
                     params3->target_domain,
                     params3->service_name,
                     &params3->request_id);
@@ -1577,8 +1571,7 @@ fail3:
             untrusted_params4 = NULL;
             /* sanitize end */
 
-            handle_execute_service(remote_domain_id, remote_domain_name,
-                    params4->source_domain,
+            handle_execute_service(params4->source_domain,
                     params4->target_domain,
                     params4->service_name,
                     &params4->request_id);
