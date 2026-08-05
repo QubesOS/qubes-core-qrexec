@@ -918,7 +918,7 @@ static void handle_trigger_client_io(struct trigger_client *client)
         abort();
     if (libvchan_send(ctrl_vchan, &client->hdr, sizeof(client->hdr)) != sizeof(client->hdr))
         handle_vchan_error("write hdr");
-    if (libvchan_send(ctrl_vchan, client->params, client->hdr.len) != (int)client->hdr.len)
+    if (!write_vchan_all(ctrl_vchan, client->params, client->hdr.len))
         handle_vchan_error("write params");
 
     free(client->params);
