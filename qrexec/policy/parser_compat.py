@@ -15,22 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
-"""This module is transitional and may go away any time.
-
-.. autofunction:: walk_compat_files
-
-.. autoclass:: Compat40Loader
-   :members:
-   :member-order: bysource
-
-.. autoclass:: Compat40Parser
-   :members:
-   :member-order: bysource
-
-.. autoclass:: TestCompat40Loader
-   :members:
-   :member-order: bysource
-"""
+"""This module is transitional and may go away any time."""
 
 import abc
 import collections
@@ -114,8 +99,8 @@ def walk_compat_files(legacy_path=POLICYPATH_OLD):
 class Compat40Parser(parser.AbstractDirectoryLoader, parser.AbstractFileLoader):
     """Abstract parser for compat policy. Needs :py:func:`walk_includes`.
 
-    Args:
-        master (qrexec.policy.parser.AbstractPolicyParser):
+    Attributes:
+        master (parser.AbstractPolicy):
             the parser that will handle all the syntax parsed from the legacy
             policy
     """
@@ -192,7 +177,8 @@ class Compat40Loader(Compat40Parser):
     """This parser should be used as helper for executing compatibility
     statement:
 
-        >>> class MyParser(qrexec.policy.parser.AbstractPolicyParser):
+        >>> from qrexec.policy.parser import AbstractPolicy
+        >>> class MyParser(AbstractPolicy):
         ...     def handle_compat40(self, *, filepath, lineno):
         ...         subparser = Compat40Parser(master=self)
         ...         subparser.execute(filepath=filepath, lineno=lineno)

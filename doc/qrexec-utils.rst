@@ -1,4 +1,5 @@
 :py:mod:`qrexec.utils` -- Misc utilities
 ========================================
 
-.. py:module:: qrexec.utils
+.. automodule:: qrexec.utils
+   :members:
