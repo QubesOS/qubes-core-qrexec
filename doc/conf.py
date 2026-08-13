@@ -185,6 +185,14 @@ texinfo_documents = [
     ),
 ]
 
+# -- -- Options for the nitpicky mode ------------------------------------------
+
+nitpicky = True
+nitpick_ignore = [
+    ("py:class", "qrexec.utils.FullSystemInfo"),
+    ("py:class", "qrexec.policy.parser._BaseTarget"),
+]
+
 
 # -- Extension configuration -------------------------------------------------
 
