@@ -1,3 +1,10 @@
+qubes-core-qrexec (4.3.15-1) unstable; urgency=medium
+
+  [ Ben Grande ]
+  * Read link to canonical path
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sat, 19 Sep 2026 03:39:06 +0200
+
 qubes-core-qrexec (4.3.14-1) unstable; urgency=medium
 
   [ Divina Commedia ]
