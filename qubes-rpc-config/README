@@ -54,7 +54,7 @@ Supported settings:
         having to modify the policy in dom0.
     *   Service type: executable, socket
     *   Value type: string
-    *   Default value: same user as in the policy, else it is 'user'.
+    *   Default value: same user as in the policy, else the qube's default user.
     *   Example: force-user='user'
 
 *   skip-service-descriptor:

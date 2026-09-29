@@ -6,7 +6,12 @@ wait_self_session(){
     if ! test "$in_dom0" = "true" &&
         test "$(qubesdb-read --default=True /qubes-gui-enabled)" = "True"
     then
-        user="$(qubesdb-read /default-user || echo 'user')"
+        # Callers pass user name on stdin
+        user=""
+        IFS= read -r user || :
+        case "$user" in
+            ''|*[!A-Za-z0-9._-]*) user="$(qubesdb-read /default-user || echo 'user')" ;;
+        esac
         while ! test -e "/var/run/qubes/qrexec-server.$user.sock"; do
             sleep 0.1
         done
