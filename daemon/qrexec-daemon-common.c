@@ -404,7 +404,7 @@ bool wait_for_session_maybe(struct qrexec_parsed_command *cmd)
             break;
     }
 
-    if (waitpid(local_pid, &status, 0) > 0) {
+    if (waitpid(pid, &status, 0) > 0) {
         if (status != 0)
             LOG(ERROR, "wait-for-session exited with status %d", status);
     } else
