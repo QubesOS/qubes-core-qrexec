@@ -29,7 +29,7 @@ import gi  # isort:skip
 gi.require_version("Gtk", "3.0")  # isort:skip
 from gi.repository import Gtk  # isort:skip pylint:
 
-from qrexec.tools.qrexec_policy_agent import (
+from qrexec.rpcconfirmation.base import (
     VMListModeler,
     GtkOneTimerHelper,
     FocusStealingHelper,
