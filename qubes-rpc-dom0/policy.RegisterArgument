@@ -63,11 +63,11 @@ from qrexec import POLICYPATH
 POLICY_FILE = POLICYPATH / '60-registered-arguments.policy'
 POLICY_RULE = '{service} +{argument} {frontend} {backend} allow\n'
 
-# linux-utils/qrexec-lib/qrexec.h
-MAX_ARGUMENT_LEN = 64
+# core-qrexec/qrexec-lib/qrexec.h
+MAX_ARGUMENT_LEN = 65000
 
-# core-admin-linux/qrexec/qrexec-daemon.c
-VALID_CHARS = set(map(ord, string.ascii_letters + string.digits + '-._'))
+# core-qrexec/daemon/qrexec-daemon.c
+VALID_CHARS = set(map(ord, string.ascii_letters + string.digits + '-._+'))
 
 def die(*args, **kwargs):
     logging.error(*args, **kwargs)
