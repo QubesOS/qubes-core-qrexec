@@ -708,6 +708,29 @@ class DispVMTag(Source, Target):
                 yield DispVMTemplate("@dispvm:" + name)
 
 
+class DispVMAll(Target):
+    # any new DispVM, whatever its template; only allowed in deny rules
+    # pylint: disable=missing-docstring,unused-argument
+    EXACT = "@dispvm:@all"
+
+    def match(
+        self,
+        other: str,
+        *,
+        system_info: FullSystemInfo,
+        source: Optional[VMToken] = None,
+    ) -> bool:
+        return isinstance(other, (DispVM, DispVMTemplate))
+
+    def expand(self, *, system_info: FullSystemInfo) -> Iterable[VMToken]:
+        for name, domain in system_info["domains"].items():
+            if name.startswith("uuid:"):
+                continue
+            if domain["template_for_dispvms"]:
+                yield DispVMTemplate("@dispvm:" + name)
+        yield DispVM("@dispvm")
+
+
 #
 # resolutions
 #
@@ -1460,6 +1483,14 @@ class Rule:
                 filepath,
                 lineno,
                 "allow action for @default rule must specify target= option",
+            )
+        if isinstance(self.target, DispVMAll) and not isinstance(
+            self.action, Deny
+        ):
+            raise PolicySyntaxError(
+                filepath,
+                lineno,
+                "@dispvm:@all can only be used with deny action",
             )
 
     def __repr__(self) -> str:

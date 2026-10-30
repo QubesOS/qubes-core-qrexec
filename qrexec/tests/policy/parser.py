@@ -262,6 +262,8 @@ class TC_00_VMToken(ParserTestCase):
             parser.Source("@dispvm")
         parser.Source("@dispvm:default-dvm")
         parser.Source("@dispvm:@tag:tag3")
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Source("@dispvm:@all")
 
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Source("@invalid")
@@ -286,6 +288,7 @@ class TC_00_VMToken(ParserTestCase):
         parser.Target("@dispvm")
         parser.Target("@dispvm:default-dvm")
         parser.Target("@dispvm:@tag:tag3")
+        parser.Target("@dispvm:@all")
         parser.Target("uuid:d8a249f1-b02b-4944-a9e5-437def2fbe2c")
 
         with self.assertRaises(exc.PolicySyntaxError):
@@ -495,6 +498,16 @@ class TC_00_VMToken(ParserTestCase):
             ).expand(system_info=self.system_info),
             ["@dispvm:test-vm3"],
         )
+        self.assertCountEqual(
+            parser.Target("@dispvm:@all").expand(system_info=self.system_info),
+            [
+                "@dispvm:test-vm3",
+                "@dispvm:test-vm4",
+                "@dispvm:default-dvm",
+                "@dispvm:default-mgmt-dvm",
+                "@dispvm",
+            ],
+        )
 
     def test_030_Redirect(self):
         self.assertIs(parser.Redirect(None), None)
@@ -517,6 +530,8 @@ class TC_00_VMToken(ParserTestCase):
         parser.Redirect("@dispvm:default-dvm")
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect("@dispvm:@tag:tag3")
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.Redirect("@dispvm:@all")
 
         with self.assertRaises(exc.PolicySyntaxError):
             parser.Redirect("")
@@ -549,6 +564,8 @@ class TC_00_VMToken(ParserTestCase):
         parser.IntendedTarget("@dispvm:default-dvm")
         with self.assertRaises(exc.PolicySyntaxError):
             parser.IntendedTarget("@dispvm:@tag:tag3")
+        with self.assertRaises(exc.PolicySyntaxError):
+            parser.IntendedTarget("@dispvm:@all")
 
         with self.assertRaises(exc.PolicySyntaxError):
             parser.IntendedTarget("")
@@ -609,6 +626,13 @@ class TC_00_VMToken(ParserTestCase):
             ("@dispvm:@tag:tag1", "@dispvm:test-vm3", False),
             # default-dvm has no tag3
             ("@dispvm:@tag:tag3", "@dispvm:default-dvm", False),
+            ("@dispvm:@all", "@dispvm", True),
+            ("@dispvm:@all", "@dispvm:default-dvm", True),
+            ("@dispvm:@all", "@dispvm:test-vm3", True),
+            ("@dispvm:@all", "default-dvm", False),
+            ("@dispvm:@all", "test-vm1", False),
+            ("@dispvm:@all", "@default", False),
+            ("@dispvm:@all", "@adminvm", False),
             ("@anyvm", "dom0", False),
             ("@anyvm", "@adminvm", False),
             ("@tag:dom0-tag", "@adminvm", False),
@@ -866,6 +890,9 @@ class TC_10_Rule(ParserTestCase):
             "test.Service +argument @anyvm @anyvm allow notify",  # missing =yes/=no
             "test.Service +argument @anyvm @anyvm allow notify=xx",  # invalid notify
             "* +argument @anyvm @default allow",  # specific argument for * service
+            "test.Service +argument @anyvm @dispvm:@all allow",  # only deny
+            "test.Service +argument @anyvm @dispvm:@all ask",  # only deny
+            "test.Service +argument @dispvm:@all @anyvm deny",  # not a source
         ]
         for line in invalid_lines:
             with self.subTest(line):
@@ -1512,6 +1539,26 @@ class TC_20_Policy(ParserTestCase):
             policy.collect_targets_for_ask(
                 self.gen_req("test-vm1", "@default")
             ),
+        )
+
+    def test_022_collect_targets_for_ask_deny_dispvm_all(self):
+        policy = parser.StringPolicy(policy="""\
+            * * @anyvm @dispvm:@all deny
+            * * @anyvm @anyvm ask
+        """)
+        targets = policy.collect_targets_for_ask(
+            self.gen_req("test-vm1", "@default")
+        )
+        self.assertFalse([t for t in targets if t.startswith("@dispvm")])
+        self.assertIn("default-dvm", targets)
+        self.assertIn("test-vm2", targets)
+        for target in ["@dispvm", "@dispvm:default-dvm", "@dispvm:test-vm3"]:
+            with self.subTest(target):
+                with self.assertRaises(exc.AccessDenied):
+                    policy.evaluate(self.gen_req("test-vm1", target))
+        self.assertIsInstance(
+            policy.evaluate(self.gen_req("test-vm1", "test-vm2")),
+            parser.AskResolution,
         )
 
 
