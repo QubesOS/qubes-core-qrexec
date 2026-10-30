@@ -1899,6 +1899,15 @@ class AbstractPolicy(AbstractParser):
                         continue
                 if isinstance(rule.action, Action.deny.value):
                     targets.difference_update(expansion)
+                    # @dispvm is replaced with the source's default DispVM
+                    # template below, so remove it too if this rule denies
+                    # that template (like evaluate() does)
+                    if rule_target.match(
+                        DispVM("@dispvm"),
+                        source=source,
+                        system_info=request.system_info,
+                    ):
+                        targets.discard("@dispvm")
                 else:
                     targets.update(expansion)
 

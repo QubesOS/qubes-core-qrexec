@@ -1487,6 +1487,33 @@ class TC_20_Policy(ParserTestCase):
             ["test-standalone", "@dispvm:test-vm4", "test-vm3"],
         )
 
+    def test_021_collect_targets_for_ask_deny_default_dispvm(self):
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm1 @dispvm:default-dvm deny
+            * * test-vm1 @anyvm ask
+        """)
+        targets = policy.collect_targets_for_ask(
+            self.gen_req("test-vm1", "@default")
+        )
+        self.assertNotIn("@dispvm:default-dvm", targets)
+        self.assertIn("@dispvm:test-vm3", targets)
+        self.assertIn("default-dvm", targets)
+        with self.assertRaises(exc.AccessDenied):
+            policy.evaluate(self.gen_req("test-vm1", "@dispvm"))
+
+        # an earlier rule still takes precedence
+        policy = parser.StringPolicy(policy="""\
+            * * test-vm1 @dispvm allow
+            * * test-vm1 @dispvm:default-dvm deny
+            * * test-vm1 @anyvm ask
+        """)
+        self.assertIn(
+            "@dispvm:default-dvm",
+            policy.collect_targets_for_ask(
+                self.gen_req("test-vm1", "@default")
+            ),
+        )
+
 
 class TC_30_Resolution(ParserTestCase):
     def setUp(self):
