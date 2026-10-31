@@ -42,6 +42,7 @@ For that case, argument also has to be `*`.
 | `@dispvm`             | -         | +         | +         | +         |
 | `@dispvm:VMNAME`      | +         | +         | +         | +         |
 | `@dispvm:@tag:TAG`    | +         | +         | -         | -         |
+| `@dispvm:@all`        | -         | + (deny)  | -         | -         |
 | `@tag:TAG`            | +         | +         | -         | -         |
 | `@type:TYPE`          | +         | +         | -         | -         |
 

@@ -82,6 +82,11 @@ means anything goes after the prefix. When two different prefixes match
 
    .. autoattribute:: PREFIX
 
+.. autoclass:: DispVMAll
+   :show-inheritance:
+
+   .. autoattribute:: EXACT
+
 There is a helper metaclass for this, do not use it elsewhere:
 
 .. autoclass:: VMTokenMeta
