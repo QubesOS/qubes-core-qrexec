@@ -4,6 +4,8 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "qrexec.h"
@@ -140,6 +142,7 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
                            "uuid", use_uuid ? 4 : 0, &resp_len);
         if (buf == NULL) // error already printed by qubesd_call
             return false;
+        timing_mark("create_dispvm");
         if (memcmp(buf, "0", 2) == 0) {
             if (strlen(buf + 2) != resp_len - 2) {
                 LOG(ERROR, "NUL byte in qubesd response");
@@ -182,6 +185,7 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
             return false;
         }
         free(buf);
+        timing_mark("start_vm");
         s = connect_unix_socket(target);
     }
     if (s < 0)
@@ -196,6 +200,7 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
                 &data_domain,
                 &data_port))
         goto kill;
+    timing_mark("exec_target");
     int wait_connection_fd = -1;
     if (wait_connection_end) {
         /* save socket fd, 's' will be reused for the other qrexec-daemon
@@ -212,6 +217,7 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
         rc = send_service_connect(s, request_id, data_domain, data_port);
         close(s);
     }
+    timing_mark("connect_source");
 
     if (wait_connection_end) {
         /* wait for EOF */
@@ -219,10 +225,13 @@ bool qrexec_execute_vm(const char *target, bool autostart, int remote_domain_id,
             { .fd = wait_connection_fd, .events = POLLIN | POLLHUP, .revents = 0 },
         };
         poll(fds, 1, -1);
+        timing_mark("service");
         size_t l;
 kill:
-        if (disposable)
+        if (disposable) {
             qubesd_call(target, "admin.vm.Kill", "", &l);
+            timing_mark("kill");
+        }
     }
     return rc;
 }
@@ -522,6 +531,7 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
             &data_domain,
             &data_port))
         return QREXEC_EXIT_PROBLEM;
+    timing_mark("connect_source");
 
     struct buffer stdin_buffer;
     buffer_init(&stdin_buffer);
@@ -537,6 +547,7 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
     } else {
         prepare_ret = prepare_local_fds(command, &stdin_buffer);
     }
+    timing_mark("start_service");
     int wait_fd;
     data_vchan = libvchan_client_init_async(data_domain, data_port, &wait_fd);
     if (!data_vchan) {
@@ -549,6 +560,7 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
         libvchan_close(data_vchan);
         return QREXEC_EXIT_PROBLEM;
     }
+    timing_mark("data_vchan");
 
     struct handshake_params params = {
         .data_vchan = data_vchan,
@@ -560,7 +572,9 @@ int run_qrexec_to_dom0(const struct service_params *svc_params,
         .replace_chars_stderr = false, // stderr is _from_ dom0
         .prefix_data = prefix_data,
     };
-    return handshake_and_go(&params, command);
+    int rc = handshake_and_go(&params, command);
+    timing_mark("service");
+    return rc;
 }
 
 int handshake_and_go(struct handshake_params *params,
@@ -588,4 +602,52 @@ cleanup:
         libvchan_close(params->data_vchan);
     params->data_vchan = NULL;
     return rc;
+}
+
+static bool timing_enabled;
+static struct timespec timing_first, timing_last;
+static char timing_stages[256];
+
+static double timing_ms(const struct timespec *from, const struct timespec *to)
+{
+    return (double)(to->tv_sec - from->tv_sec) * 1000.0 +
+        (double)(to->tv_nsec - from->tv_nsec) / 1e6;
+}
+
+void timing_start(void)
+{
+    const char *path = getenv("QREXEC_LOG_TIMING_PATH");
+
+    timing_enabled = access(path ? path : QREXEC_LOG_TIMING_PATH, F_OK) == 0;
+    if (!timing_enabled)
+        return;
+    timing_stages[0] = '\0';
+    clock_gettime(CLOCK_MONOTONIC, &timing_first);
+    timing_last = timing_first;
+}
+
+void timing_mark(const char *stage)
+{
+    struct timespec now;
+    size_t len;
+
+    if (!timing_enabled)
+        return;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    len = strlen(timing_stages);
+    snprintf(timing_stages + len, sizeof(timing_stages) - len, " %s=%.1fms",
+             stage, timing_ms(&timing_last, &now));
+    timing_last = now;
+}
+
+void timing_log(const char *service_name, const char *source,
+                const char *target)
+{
+    struct timespec now;
+
+    if (!timing_enabled)
+        return;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    LOG(INFO, "qrexec: %s: %s -> %s: timing:%s total=%.1fms", service_name,
+        source, target, timing_stages, timing_ms(&timing_first, &now));
 }

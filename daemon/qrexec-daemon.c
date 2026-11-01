@@ -1186,6 +1186,7 @@ _Noreturn static void handle_execute_service_child(
         const struct service_params *request_id) {
     int i;
 
+    timing_start();
 #ifdef SYS_close_range
     int close_range_res = syscall(SYS_close_range, 3, ~0U, 0);
 #else
@@ -1198,16 +1199,21 @@ _Noreturn static void handle_execute_service_child(
     char *user = NULL, *target = NULL, *requested_target = NULL, *target_uuid = NULL,
         *service_name = NULL, *policy_source = NULL;
     int autostart = -1;
+    const char *const intended_target = target_domain;
     int policy_response = connect_daemon_socket(remote_domain_name,
         requested_source_domain, target_domain, requested_service_name,
         &user, &target_uuid, &target, &requested_target, &service_name, &autostart, &policy_source);
-    if (policy_response != RESPONSE_ALLOW)
+    timing_mark("policy");
+    if (policy_response != RESPONSE_ALLOW) {
+        timing_log(requested_service_name, remote_domain_name, intended_target);
         daemon__exit(QREXEC_EXIT_REQUEST_REFUSED);
+    }
 
     /* Replace the target domain with the version normalized by the policy engine */
     target_domain = requested_target;
     char *cmd = NULL;
     const char *target_service_name = NULL;
+    int rc;
     if (service_name) {
         /* If policy program has not provided service replacement then,
          use the requested one. Service replacement happens for RemoteVM. */
@@ -1249,13 +1255,13 @@ _Noreturn static void handle_execute_service_child(
                      target_domain) <= 0)
             daemon__exit(QREXEC_EXIT_PROBLEM);
         register_exec_func(&do_exec);
-        daemon__exit(run_qrexec_to_dom0(request_id,
-                           remote_domain_id,
-                           source_domain,
-                           cmd,
-                           5 /* 5 second timeout */,
-                           false /* return 0 not remote status code */,
-                           NULL /* prefix data */));
+        rc = run_qrexec_to_dom0(request_id,
+                                remote_domain_id,
+                                source_domain,
+                                cmd,
+                                5 /* 5 second timeout */,
+                                false /* return 0 not remote status code */,
+                                NULL /* prefix data */);
     } else {
         bool const use_uuid = target_uuid != NULL;
         const char *const selected_target = use_uuid ? target_uuid : target;
@@ -1266,14 +1272,16 @@ _Noreturn static void handle_execute_service_child(
                                       source_domain);
         if (service_length < 0)
             daemon__exit(QREXEC_EXIT_PROBLEM);
-        daemon__exit(qrexec_execute_vm(selected_target, autostart,
-                                       remote_domain_id,
-                                       cmd,
-                                       (size_t)service_length + 1,
-                                       request_id->ident, false, false,
-                                       use_uuid)
-                ? 0 : QREXEC_EXIT_PROBLEM);
+        rc = qrexec_execute_vm(selected_target, autostart,
+                               remote_domain_id,
+                               cmd,
+                               (size_t)service_length + 1,
+                               request_id->ident, false, false,
+                               use_uuid)
+            ? 0 : QREXEC_EXIT_PROBLEM;
     }
+    timing_log(requested_service_name, remote_domain_name, intended_target);
+    daemon__exit(rc);
 }
 
 static void handle_execute_service(
