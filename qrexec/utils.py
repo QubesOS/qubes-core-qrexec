@@ -21,13 +21,14 @@
 import json
 import socket
 import subprocess
+import time
 from typing import Set, Optional, TypedDict, List, Dict, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import TypeAlias
 
 # pylint: disable=wrong-import-position
-from . import QUBESD_SOCK, QUBESD_INTERNAL_SOCK
+from . import QUBESD_SOCK, QUBESD_INTERNAL_SOCK, QREXEC_LOG_TIMING_PATH
 from .exc import QubesMgmtException
 
 
@@ -198,3 +199,26 @@ def prepare_subprocess_kwds(
         kwds["stdout"] = subprocess.PIPE
     kwds["stderr"] = subprocess.PIPE
     return kwds
+
+
+def log_timing_enabled() -> bool:
+    """Check if policy request timing should be logged"""
+    return QREXEC_LOG_TIMING_PATH.exists()
+
+
+class Timer:
+    """Measure how long each stage of a policy request takes"""
+
+    def __init__(self) -> None:
+        self.start = self.last = time.monotonic()
+        self.stages: List[str] = []
+
+    def mark(self, stage: str) -> None:
+        """Record the time since the previous mark as *stage*"""
+        now = time.monotonic()
+        self.stages.append(f"{stage}={(now - self.last) * 1000:.1f}ms")
+        self.last = now
+
+    def __str__(self) -> str:
+        total = (time.monotonic() - self.start) * 1000
+        return " ".join(self.stages + [f"total={total:.1f}ms"])
