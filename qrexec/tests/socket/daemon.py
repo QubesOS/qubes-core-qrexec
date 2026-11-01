@@ -85,7 +85,7 @@ exit $exit_code
         self.stop_daemon()
         super().tearDown()
 
-    def start_daemon(self):
+    def start_daemon(self, extra_env=None, stderr=None):
         policy_program_path = os.path.join(self.tempdir, "qrexec-policy-exec")
         with open(policy_program_path, "w") as f:
             f.write(self.POLICY_PROGRAM.format(tempdir=self.tempdir))
@@ -95,6 +95,7 @@ exit $exit_code
         env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
         env["VCHAN_DOMAIN"] = "0"
         env["VCHAN_SOCKET_DIR"] = self.tempdir
+        env.update(extra_env or {})
         cmd = [
             os.path.join(ROOT_PATH, "daemon", "qrexec-daemon"),
             "--uuid=" + self.domain_uuid,
@@ -109,6 +110,7 @@ exit $exit_code
         self.daemon = subprocess.Popen(
             cmd,
             env=env,
+            stderr=stderr,
         )
 
     def stop_daemon(self):
@@ -143,9 +145,9 @@ exit $exit_code
         ) as f:
             f.write(str(exitcode))
 
-    def start_daemon_with_agent(self):
+    def start_daemon_with_agent(self, **kwargs):
         agent = self.connect_agent()
-        self.start_daemon()
+        self.start_daemon(**kwargs)
         agent.accept()
         return agent
 
@@ -177,6 +179,85 @@ exit $exit_code
         )
         self.assertEqual(message_type, qrexec.MSG_SERVICE_REFUSED)
         self.assertEqual(data, struct.pack("<32s", ident.encode()))
+
+    def allowed_request_log(self, extra_env):
+        log_path = os.path.join(self.tempdir, "daemon.log")
+        with open(log_path, "w") as log:
+            agent = self.start_daemon_with_agent(
+                extra_env=extra_env, stderr=log
+            )
+        agent.handshake()
+        self.set_policy_params(0, 0)
+        self.send_trigger_service(
+            agent, self.domain_name, "qubes.Service", "SOCKET42"
+        )
+        message_type, _ = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_EXEC_CMDLINE)
+        message_type, _ = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_SERVICE_CONNECT)
+        self.wait_for_daemon_children()
+        with open(log_path) as log:
+            return log.read()
+
+    def test_log_timing(self):
+        timing_path = os.path.join(self.tempdir, "qrexec-log-timing")
+        open(timing_path, "w").close()
+        log = self.allowed_request_log({"QREXEC_LOG_TIMING_PATH": timing_path})
+        self.assertRegex(
+            log,
+            r"qrexec: qubes\.Service: domain_name -> domain_name: timing: "
+            r"policy=[0-9.]+ms exec_target=[0-9.]+ms connect_source=[0-9.]+ms "
+            r"total=[0-9.]+ms\n",
+        )
+
+    def test_no_log_timing(self):
+        timing_path = os.path.join(self.tempdir, "qrexec-log-timing")
+        log = self.allowed_request_log({"QREXEC_LOG_TIMING_PATH": timing_path})
+        self.assertNotIn("timing:", log)
+
+    def test_log_timing_dom0(self):
+        os.mkdir(os.path.join(self.tempdir, "rpc"))
+        util.make_executable_service(
+            self.tempdir, "rpc", "qubes.Service", "#!/bin/sh\necho hello\n"
+        )
+        timing_path = os.path.join(self.tempdir, "qrexec-log-timing")
+        open(timing_path, "w").close()
+        log_path = os.path.join(self.tempdir, "daemon.log")
+        with open(log_path, "w") as log:
+            agent = self.start_daemon_with_agent(
+                extra_env={
+                    "QREXEC_LOG_TIMING_PATH": timing_path,
+                    "QREXEC_SERVICE_PATH": os.path.join(self.tempdir, "rpc"),
+                    "QUBES_RPC_CONFIG_PATH": os.path.join(
+                        self.tempdir, "rpc-config"
+                    ),
+                },
+                stderr=log,
+            )
+        agent.handshake()
+        self.set_policy_params(0, 0)
+        self.send_trigger_service(agent, "dom0", "qubes.Service", "SOCKET42")
+        message_type, data = agent.recv_message()
+        self.assertEqual(message_type, qrexec.MSG_SERVICE_CONNECT)
+        _, port = struct.unpack_from("<LL", data)
+
+        source = qrexec.vchan_server(self.tempdir, self.domain, 0, port)
+        self.addCleanup(source.close)
+        source.accept()
+        source.handshake()
+        source.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self.assertIn(
+            (qrexec.MSG_DATA_STDOUT, b"hello\n"), source.recv_all_messages()
+        )
+        self.wait_for_daemon_children()
+        with open(log_path) as log:
+            self.assertRegex(
+                log.read(),
+                r"qrexec: qubes\.Service: domain_name -> dom0: timing: "
+                r"policy=[0-9.]+ms connect_source=[0-9.]+ms "
+                r"start_service=[0-9.]+ms data_vchan=[0-9.]+ms "
+                r"service=[0-9.]+ms total=[0-9.]+ms\n",
+            )
 
     def test_bad_request_id_1(self):
         agent = self.start_daemon_with_agent()

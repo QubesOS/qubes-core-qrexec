@@ -192,6 +192,9 @@ enum {
 // support only very small configuration files,
 #define MAX_CONFIG_SIZE 4096
 
+// if this file exists, qrexec-daemon logs how long each stage of a call took
+#define QREXEC_LOG_TIMING_PATH "/run/qubes/qrexec-log-timing"
+
 // Exit codes
 
 // Service allowed, but service file not found

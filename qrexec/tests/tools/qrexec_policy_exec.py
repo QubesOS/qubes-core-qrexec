@@ -512,3 +512,72 @@ def test_034_allow_policy_exec(policy, agent_service):
                 )
             ),
         ]
+
+
+@pytest.fixture
+def log_timing_path(tmp_path):
+    path = tmp_path / "qrexec-log-timing"
+    with mock.patch("qrexec.utils.QREXEC_LOG_TIMING_PATH", path):
+        yield path
+
+
+def timing_stages(caplog):
+    """Stage names of each timing line logged"""
+    return [
+        [stage.split("=")[0] for stage in message.split(" timing: ")[1].split()]
+        for message in (record.getMessage() for record in caplog.records)
+        if " timing: " in message
+    ]
+
+
+def test_040_log_timing_allow(policy, agent_service, caplog, log_timing_path):
+    log_timing_path.touch()
+    policy.set_allow("test-vm1")
+    qrexec_policy_exec.get_result(["source", "test-vm1", "service+arg"])
+    assert any(
+        record.getMessage().startswith(
+            "qrexec: service+arg: source -> test-vm1: timing: "
+        )
+        for record in caplog.records
+    )
+    assert timing_stages(caplog) == [
+        ["system_info", "load_policy", "evaluate", "execute", "total"]
+    ]
+
+
+def test_041_log_timing_deny(policy, agent_service, caplog, log_timing_path):
+    log_timing_path.touch()
+    policy.set_deny()
+    qrexec_policy_exec.get_result(["source", "test-vm1", "service+arg"])
+    assert timing_stages(caplog) == [
+        ["system_info", "load_policy", "evaluate", "notify", "total"]
+    ]
+
+
+def test_042_no_log_timing(policy, agent_service, caplog, log_timing_path):
+    policy.set_allow("test-vm1")
+    qrexec_policy_exec.get_result(["source", "test-vm1", "service+arg"])
+    assert timing_stages(caplog) == []
+
+
+def test_043_no_log_timing_just_evaluate(
+    policy, agent_service, caplog, log_timing_path
+):
+    log_timing_path.touch()
+    policy.set_allow("test-vm1")
+    qrexec_policy_exec.get_result(
+        ["--just-evaluate", "source", "test-vm1", "service+arg"]
+    )
+    assert timing_stages(caplog) == []
+
+
+def test_044_log_timing_ask_deny(
+    policy, agent_service, caplog, log_timing_path
+):
+    log_timing_path.touch()
+    policy.set_ask(["test-vm1", "test-vm2"])
+    agent_service.return_value = "deny"
+    qrexec_policy_exec.get_result(["source", "test-vm1", "service+arg"])
+    assert timing_stages(caplog) == [
+        ["system_info", "load_policy", "evaluate", "execute", "total"]
+    ]

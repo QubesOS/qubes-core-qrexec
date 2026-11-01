@@ -33,7 +33,7 @@ from .. import utils
 from ..policy import parser
 from ..policy.utils import PolicyCache
 from ..server import call_socket_service
-from ..utils import FullSystemInfo
+from ..utils import FullSystemInfo, Timer
 
 
 def create_default_policy(service_name):
@@ -356,21 +356,28 @@ async def handle_request(
     # Add source domain information, required by qrexec-client for establishing
     # connection
     log_prefix = f"qrexec: {service_and_arg}: {source} -> {intended_target}:"
+    # evaluate-only requests (policy.EvalSimple and such) are not calls
+    log_timing = not just_evaluate and utils.log_timing_enabled()
+    timer = Timer()
     if system_info is None:
         try:
             system_info = utils.get_system_info()
         except exc.QubesMgmtException as err:
             log.error("%s error getting system info: %s", log_prefix, err)
             return "result=deny"
+        timer.mark("system_info")
     try:
         i = service_and_arg.index("+")
         service, argument = service_and_arg[:i], service_and_arg[i:]
     except ValueError:
         service, argument = service_and_arg, "+"
 
+    # the stage that was running if access is denied
+    stage = "evaluate"
     try:
         assert policy_cache is not None
         policy = policy_cache.get_policy()
+        timer.mark("load_policy")
 
         allow_resolution_class: Type[parser.AllowResolution]
         if allow_resolution_type is None:
@@ -392,12 +399,17 @@ async def handle_request(
             requested_source=requested_source,
         )
         resolution = policy.evaluate(request)
-        return await resolution.execute()
+        timer.mark("evaluate")
+        stage = "execute"
+        result = await resolution.execute()
+        timer.mark("execute")
+        return result
 
     except exc.PolicySyntaxError as err:
         log.error("%s error loading policy: %s", log_prefix, err)
         return "result=deny"
     except exc.AccessDenied as err:
+        timer.mark(stage)
         log.info("%s denied: %s", log_prefix, err)
 
         if err.notify and not just_evaluate:
@@ -413,8 +425,13 @@ async def handle_request(
                         "target": intended_target,
                     },
                 )
+                timer.mark("notify")
 
         return "result=deny"
+    finally:
+        if log_timing:
+            # format now, so that total doesn't include logging
+            log.info("%s timing: %s", log_prefix, str(timer))
 
 
 if __name__ == "__main__":

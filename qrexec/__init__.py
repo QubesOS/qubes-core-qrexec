@@ -20,6 +20,10 @@ Constants
    Suffix for policy files. Any file in :const:`POLICYPATH` without this suffix
    is ignored.
 
+.. data:: QREXEC_LOG_TIMING_PATH
+
+   If this file exists, qrexec logs how long each stage of every call took.
+
 .. data:: RPCNAME_ALLOWED_CHARSET
 
    Allowed characters in name of qrexec calls and in argument, including ``+``.
@@ -46,6 +50,7 @@ INCLUDEPATH = POLICYPATH / "include"
 RUNTIME_INCLUDE_PATH = RUNTIME_POLICY_PATH / "include"
 POLICYSUFFIX = ".policy"
 POLICYPATH_OLD = pathlib.Path("/etc/qubes-rpc/policy")
+QREXEC_LOG_TIMING_PATH = pathlib.Path("/run/qubes/qrexec-log-timing")
 
 RPCNAME_ALLOWED_CHARSET = frozenset(
     string.ascii_uppercase + string.ascii_lowercase + string.digits + "+-._"

@@ -154,3 +154,19 @@ bool target_refers_to_dom0(const char *target);
 /** Wait for a session if needed. */
 __attribute__((warn_unused_result))
 bool wait_for_session_maybe(struct qrexec_parsed_command *cmd);
+
+/**
+ * Start timing a service call.  Timing is enabled only if
+ * QREXEC_LOG_TIMING_PATH exists.  Only qrexec-daemon calls this, so the
+ * other timing functions do nothing in qrexec-client.
+ */
+void timing_start(void);
+/**
+ * Record the time since the previous mark as the given stage.
+ */
+void timing_mark(const char *stage);
+/**
+ * Log the recorded stages of a service call.
+ */
+void timing_log(const char *service_name, const char *source,
+                const char *target);
