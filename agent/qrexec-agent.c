@@ -52,6 +52,8 @@ struct connection_info {
     int fd;  /* socket to the process handling the data (wait for EOF here) */
     int connect_domain;
     int connect_port;
+    int type; /* request type (MSG_*) */
+    char *fork_server_cmdline; /* NULL if not passed to fork server */
 };
 
 /* structure describing a single request waiting for qubes.WaitForSession to
@@ -524,7 +526,8 @@ fail:
 }
 
 
-static void register_vchan_connection(pid_t pid, int fd, int domain, int port)
+static void register_vchan_connection(pid_t pid, int fd, int domain, int port,
+                                      int type, const char *fork_server_cmdline)
 {
     int i;
 
@@ -534,6 +537,15 @@ static void register_vchan_connection(pid_t pid, int fd, int domain, int port)
             connection_info[i].fd = fd;
             connection_info[i].connect_domain = domain;
             connection_info[i].connect_port = port;
+            connection_info[i].type = type;
+            connection_info[i].fork_server_cmdline = NULL;
+            if (fork_server_cmdline) {
+                connection_info[i].fork_server_cmdline = strdup(fork_server_cmdline);
+                if (!connection_info[i].fork_server_cmdline) {
+                    LOG(ERROR, "Memory allocation failed");
+                    exit(1);
+                }
+            }
             return;
         }
     }
@@ -683,7 +695,7 @@ static void handle_server_exec_request_do(int type,
          * (close socket, send MSG_CONNECTION_TERMINATED) when qrexec-client-vm
          * will close the socket (terminate itself). */
         register_vchan_connection(-1, client_fd,
-                params->connect_domain, params->connect_port);
+                params->connect_domain, params->connect_port, type, NULL);
         return;
     }
 
@@ -694,8 +706,15 @@ static void handle_server_exec_request_do(int type,
                 params->connect_domain, params->connect_port,
                 cmdline, cmdline_len, cmd->username);
         if (child_socket >= 0) {
+            /* The fork server logs to the user session, not here. Log the
+             * call here too, so all calls show up in qrexec-agent log. */
+            if (type == MSG_JUST_EXEC)
+                LOG(INFO, "passed to fork server (nowait): %s", cmdline);
+            else
+                LOG(INFO, "passed to fork server: %s", cmdline);
             register_vchan_connection(-1, child_socket,
-                    params->connect_domain, params->connect_port);
+                    params->connect_domain, params->connect_port,
+                    type, cmdline);
             return;
         }
     }
@@ -703,10 +722,10 @@ static void handle_server_exec_request_do(int type,
     /* No fork server case */
     child_agent = handle_new_process(type,
             params->connect_domain, params->connect_port,
-            cmd, cmdline);
+            cmd, cmdline, -1);
 
     register_vchan_connection(child_agent, -1,
-            params->connect_domain, params->connect_port);
+            params->connect_domain, params->connect_port, type, NULL);
     return;
 bad_ident:
     LOG(ERROR, "Got MSG_SERVICE_CONNECT from qrexec-daemon with invalid ident (%s), ignoring",
@@ -784,6 +803,8 @@ static int find_connection(int pid)
 static void release_connection(int id) {
     terminate_connection(connection_info[id].connect_domain,
                          connection_info[id].connect_port);
+    free(connection_info[id].fork_server_cmdline);
+    connection_info[id].fork_server_cmdline = NULL;
     connection_info[id].pid = 0;
 }
 
@@ -980,11 +1001,25 @@ static void handle_trigger_io(void)
 
 static void handle_terminated_fork_client(int id) {
     ssize_t ret;
-    char buf[2];
+    char buf[sizeof(int) + 1];
+    const char *fork_server_cmdline = connection_info[id].fork_server_cmdline;
 
     ret = read(connection_info[id].fd, buf, sizeof(buf));
-    if (!(ret == 0 || (ret == -1 && errno == ECONNRESET)))
+    if (fork_server_cmdline && ret == (ssize_t)sizeof(int)) {
+        /* fork server process sent its exit code */
+        int exit_code;
+        memcpy(&exit_code, buf, sizeof(exit_code));
+        if (connection_info[id].type == MSG_EXEC_CMDLINE)
+            LOG(INFO, "fork server process for %s exited with %d",
+                fork_server_cmdline, exit_code);
+    } else if (ret == 0 || (ret == -1 && errno == ECONNRESET)) {
+        /* Older fork server, or its process failed early */
+        if (fork_server_cmdline && connection_info[id].type == MSG_EXEC_CMDLINE)
+            LOG(INFO, "fork server process for %s exited, exit code unknown",
+                fork_server_cmdline);
+    } else {
         PERROR("Unexpected read on fork-server connection: %zd", ret);
+    }
     close(connection_info[id].fd);
     release_connection(id);
 }

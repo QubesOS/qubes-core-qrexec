@@ -22,6 +22,7 @@ import os
 import os.path
 import shlex
 import shutil
+import signal
 import socket
 import struct
 import subprocess
@@ -47,6 +48,9 @@ class TestAgentBase(unittest.TestCase):
     target_domain = 43
     target_port = 1024
     protocol_version = 4
+    # path pattern (with %s for user name) of fork server socket, or None
+    fork_server_socket = None
+    agent_stderr = None
 
     def check_dom0(self, dom0):
         self.assertEqual(
@@ -112,9 +116,7 @@ class TestAgentBase(unittest.TestCase):
         os.mkdir(os.path.join(self.tempdir, "rpc-config"))
         self.addCleanup(shutil.rmtree, self.tempdir)
 
-    def start_agent(self):
-        if self.agent is not None:
-            return
+    def agent_env(self):
         env = os.environ.copy()
         env["LD_LIBRARY_PATH"] = os.path.join(ROOT_PATH, "libqrexec")
         env["VCHAN_DOMAIN"] = str(self.domain)
@@ -129,16 +131,25 @@ class TestAgentBase(unittest.TestCase):
             ]
         )
         env["QUBES_RPC_CONFIG_PATH"] = os.path.join(self.tempdir, "rpc-config")
+        return env
+
+    def start_agent(self):
+        if self.agent is not None:
+            return
         cmd = [
             os.path.join(ROOT_PATH, "agent", "qrexec-agent"),
-            "--no-fork-server",
             "--agent-socket=" + os.path.join(self.tempdir, "agent.sock"),
         ]
+        if self.fork_server_socket:
+            cmd.append("--fork-server-socket=" + self.fork_server_socket)
+        else:
+            cmd.append("--no-fork-server")
         if os.environ.get("USE_STRACE"):
             cmd = ["strace", "-fD"] + cmd
         self.agent = subprocess.Popen(
             cmd,
-            env=env,
+            env=self.agent_env(),
+            stderr=self.agent_stderr,
         )
         self.addCleanup(self.stop_agent)
 
@@ -1468,6 +1479,116 @@ exit 42
             f.flush()
         self.assertExpectedStdout(target, b"child exiting\n", exit_code=42)
         self.check_dom0(dom0)
+
+
+@unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")
+class TestAgentForkServer(TestAgentBase):
+    def setUp(self):
+        super().setUp()
+        self.fork_server_socket = os.path.join(
+            self.tempdir, "fork-server.%s.sock"
+        )
+        self.agent_log_path = os.path.join(self.tempdir, "agent.log")
+        # pylint: disable=consider-using-with
+        self.agent_stderr = open(self.agent_log_path, "wb")
+        self.addCleanup(self.agent_stderr.close)
+
+    def agent_log(self):
+        with open(self.agent_log_path, encoding="utf-8") as f:
+            return f.read()
+
+    def start_fork_server(self):
+        log_path = os.path.join(self.tempdir, "fork-server.log")
+        with open(log_path, "wb") as log:
+            # it forks into background once the socket is ready
+            with subprocess.Popen(
+                [
+                    os.path.join(ROOT_PATH, "agent", "qrexec-fork-server"),
+                    self.fork_server_socket % getpass.getuser(),
+                ],
+                env=self.agent_env(),
+                stderr=log,
+                start_new_session=True,
+            ) as proc:
+                self.assertEqual(proc.wait(), 0)
+        # the background process stays in the process group of proc
+        self.addCleanup(self.stop_fork_server, proc.pid)
+
+    @staticmethod
+    def stop_fork_server(pgid):
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    def execute(self, cmd: str):
+        self.start_agent()
+        dom0 = self.connect_dom0()
+        cmdline = "{}:{}".format(getpass.getuser(), cmd)
+        dom0.send_message(
+            qrexec.MSG_EXEC_CMDLINE,
+            struct.pack("<LL", self.target_domain, self.target_port)
+            + cmdline.encode("ascii")
+            + b"\0",
+        )
+        return cmdline, dom0
+
+    def test_exec_cmdline(self):
+        self.start_fork_server()
+        cmdline, dom0 = self.execute("echo Hello world")
+        target = self.connect_target()
+        target.send_message(qrexec.MSG_DATA_STDIN, b"")
+        self.assertExpectedStdout(target, b"Hello world\n")
+        self.check_dom0(dom0)
+        log = self.agent_log()
+        self.assertIn("passed to fork server: " + cmdline + "\n", log)
+        self.assertIn(
+            "fork server process for " + cmdline + " exited with 0\n", log
+        )
+        # the agent did not run it itself
+        self.assertNotIn("executed:", log)
+
+    def test_exec_service_not_found(self):
+        self.start_fork_server()
+        cmdline, dom0 = self.execute("QUBESRPC qubes.Service+arg domX")
+        target = self.connect_target()
+        self.assertListEqual(
+            util.sort_messages(target.recv_all_messages()),
+            [
+                (qrexec.MSG_DATA_STDOUT, b""),
+                (qrexec.MSG_DATA_STDERR, b""),
+                (
+                    qrexec.MSG_DATA_EXIT_CODE,
+                    struct.pack("<L", qrexec.QREXEC_EXIT_SERVICE_NOT_FOUND),
+                ),
+            ],
+        )
+        self.check_dom0(dom0)
+        self.assertIn(
+            "fork server process for {} exited with {}\n".format(
+                cmdline, qrexec.QREXEC_EXIT_SERVICE_NOT_FOUND
+            ),
+            self.agent_log(),
+        )
+
+    def test_fork_server_without_exit_code(self):
+        # like an older fork server, that does not send the exit code
+        server = qrexec.socket_server(
+            self.fork_server_socket % getpass.getuser()
+        )
+        self.addCleanup(server.close)
+        cmdline, dom0 = self.execute("echo Hello world")
+        server.accept()
+        server.close()
+        self.check_dom0(dom0)
+        log = self.agent_log()
+        self.assertIn("passed to fork server: " + cmdline + "\n", log)
+        self.assertIn(
+            "fork server process for "
+            + cmdline
+            + " exited, exit code unknown\n",
+            log,
+        )
 
 
 @unittest.skipIf(os.environ.get("SKIP_SOCKET_TESTS"), "socket tests not set up")

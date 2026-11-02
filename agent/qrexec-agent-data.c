@@ -322,7 +322,8 @@ static int handle_new_process_common(
 
 /* Returns PID of data processing process */
 pid_t handle_new_process(int type, int connect_domain, int connect_port,
-                         struct qrexec_parsed_command *cmd, const char *cmdline_for_logging)
+                         struct qrexec_parsed_command *cmd, const char *cmdline_for_logging,
+                         int status_fd)
 {
     int exit_code;
     pid_t pid;
@@ -341,6 +342,10 @@ pid_t handle_new_process(int type, int connect_domain, int connect_port,
     /* child process */
     exit_code = handle_new_process_common(type, connect_domain, connect_port,
                                           cmd, 0, cmdline_for_logging);
+    /* Tell qrexec-agent the exit code, so it can log it. Ignore errors:
+     * qrexec-agent may have closed the socket already (e.g. restarted). */
+    if (status_fd >= 0)
+        (void)write_all(status_fd, &exit_code, sizeof(exit_code));
     exit(exit_code);
 }
 
