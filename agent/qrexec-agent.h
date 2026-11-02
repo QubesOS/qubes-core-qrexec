@@ -40,9 +40,12 @@ extern int replace_chars_stderr;
 /* true in qrexec-fork-server, false in qrexec-agent */
 extern const bool qrexec_is_fork_server;
 
+/* If status_fd is not -1, the child process writes its exit code (as int)
+ * there before exiting. */
 pid_t handle_new_process(int type,
         int connect_domain, int connect_port,
-        struct qrexec_parsed_command *cmd, const char *cmdline_for_logging);
+        struct qrexec_parsed_command *cmd, const char *cmdline_for_logging,
+        int status_fd);
 
 int handle_data_client(int type,
         int connect_domain, int connect_port,
