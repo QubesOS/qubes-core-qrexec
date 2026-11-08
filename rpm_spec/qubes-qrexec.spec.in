@@ -33,6 +33,7 @@ License:	GPL
 URL:		https://www.qubes-os.org
 
 BuildRequires:	gcc
+BuildRequires:	gettext
 BuildRequires:  python%{python3_pkgversion}-devel
 BuildRequires:  python%{python3_pkgversion}-setuptools
 # for building documentation
@@ -150,6 +151,7 @@ rm -f %{name}-%{version}
 %{_sysconfdir}/qubes-rpc/qubes.WaitForSession
 
 %{_sysconfdir}/xdg/autostart/qrexec-policy-agent.desktop
+%{_datadir}/locale/*/LC_MESSAGES/qubes-core-qrexec.mo
 
 %{_tmpfilesdir}/qrexec-volatile-config.conf
 

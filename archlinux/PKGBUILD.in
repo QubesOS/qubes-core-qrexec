@@ -19,6 +19,7 @@ depends=(
 )
 makedepends=(
     gcc
+    gettext
     make
     pkg-config
     pandoc
