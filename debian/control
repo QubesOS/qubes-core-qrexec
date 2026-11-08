@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: unman <unman@thirdeyesecurity.org>
 Build-Depends:
  debhelper,
+ gettext,
  libpam0g-dev,
  libvchan-xen-dev,
  pkg-config,

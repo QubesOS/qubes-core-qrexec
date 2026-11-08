@@ -42,6 +42,12 @@ install-base: all-base
 	install -d $(DESTDIR)/etc/xdg/autostart -m 755
 	install -m 644 policy-agent-extra/qrexec-policy-agent.desktop \
 		$(DESTDIR)/etc/xdg/autostart/qrexec-policy-agent.desktop
+	for po in locale/*/LC_MESSAGES/qubes-core-qrexec.po; do \
+		[ -e "$$po" ] || continue; \
+		lang=$${po#locale/}; lang=$${lang%%/*}; \
+		install -d $(DESTDIR)$(DATADIR)/locale/$$lang/LC_MESSAGES -m 755; \
+		msgfmt -o $(DESTDIR)$(DATADIR)/locale/$$lang/LC_MESSAGES/qubes-core-qrexec.mo $$po; \
+	done
 	install -m 755 -d $(DESTDIR)/usr/lib/tmpfiles.d
 	install -m 644 -t $(DESTDIR)/usr/lib/tmpfiles.d/ systemd/qrexec-volatile-config.conf
 .PHONY: install-base

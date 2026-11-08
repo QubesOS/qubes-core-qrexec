@@ -23,6 +23,7 @@
 """Agent running in user session, responsible for asking the user about policy
 decisions."""
 
+import gettext
 import itertools
 import os
 import argparse
@@ -53,6 +54,19 @@ from ..utils import sanitize_domain_name, sanitize_service_name
 from ..server import SocketService
 
 # pylint: enable=wrong-import-position
+
+TRANSLATION_DOMAIN = "qubes-core-qrexec"
+t = gettext.translation(TRANSLATION_DOMAIN, fallback=True)
+_ = t.gettext
+
+
+def isolate(text):
+    """Wrap a value inserted into a translated sentence in Unicode
+    FIRST STRONG ISOLATE / POP DIRECTIONAL ISOLATE, so neutral characters
+    at its edges (like '-' or '.') are not reordered by the surrounding
+    right-to-left text. Apply after escaping; it does not change the value.
+    """
+    return "⁨" + text + "⁩"
 
 
 class VMListModeler:
@@ -96,7 +110,10 @@ class VMListModeler:
             icon = self._get_icon(vm.get("icon", None))
 
             if dispvm:
-                display_name = f"Disposable VM ({vm_name})"
+                # TRANSLATORS: {name} is the name of a disposable template
+                display_name = _("Disposable VM ({name})").format(
+                    name=vm_name
+                )
             else:
                 display_name = vm_name
             self._entries[display_name] = {
@@ -421,7 +438,7 @@ class RPCConfirmationWindow:
         if target is not None:
             if target == source:
                 self._show_error(
-                    "Source and target domains must not be the same."
+                    _("Source and target domains must not be the same.")
                 )
             else:
                 model = self._rpc_combo_box.get_model()
@@ -438,7 +455,11 @@ class RPCConfirmationWindow:
                         break
 
                 if not found:
-                    self._show_error("Domain '%s' doesn't exist." % target)
+                    self._show_error(
+                        _("Domain '{name}' doesn't exist.").format(
+                            name=isolate(target)
+                        )
+                    )
 
     def _can_perform_action(self):
         return self._focus_helper.can_perform_action()
@@ -458,6 +479,7 @@ class RPCConfirmationWindow:
         sanitize_service_name(service, assert_sanitized=True)
 
         self._gtk_builder = Gtk.Builder()
+        self._gtk_builder.set_translation_domain(TRANSLATION_DOMAIN)
         with importlib.resources.as_file(self._source_file_ref) as path:
             self._gtk_builder.add_from_file(str(path))
         self._rpc_window = self._gtk_builder.get_object(
@@ -634,19 +656,21 @@ class PolicyAgent(SocketService):
 
         if resolution == "allow":
             app_icon = None
-            summary = "Allowed: {service}"
-            body = (
+            summary = _("Allowed: {service}")
+            body = _(
                 "Allowed <b>{rpc}</b> "
                 "from <b>{source}</b> to <b>{target}</b>"
             )
         elif resolution == "deny":
             app_icon = "dialog-error"
-            summary = "Denied: {service}"
-            body = "Denied <b>{rpc}</b> from <b>{source}</b> to <b>{target}</b>"
+            summary = _("Denied: {service}")
+            body = _(
+                "Denied <b>{rpc}</b> from <b>{source}</b> to <b>{target}</b>"
+            )
         elif resolution == "fail":
             app_icon = "dialog-warning"
-            summary = "Failed: {service}"
-            body = (
+            summary = _("Failed: {service}")
+            body = _(
                 "Failed to execute <b>{rpc}</b> "
                 "(from <b>{source}</b> to <b>{target}</b>)"
             )
@@ -654,11 +678,11 @@ class PolicyAgent(SocketService):
             assert False, resolution
 
         # summary is plain text, body is markup
-        summary = summary.format(service=service)
+        summary = summary.format(service=isolate(service))
         body = body.format(
-            rpc=GLib.markup_escape_text(rpc),
-            source=GLib.markup_escape_text(source),
-            target=GLib.markup_escape_text(target),
+            rpc=isolate(GLib.markup_escape_text(rpc)),
+            source=isolate(GLib.markup_escape_text(source)),
+            target=isolate(GLib.markup_escape_text(target)),
         )
 
         notification = Gio.Notification.new(summary)

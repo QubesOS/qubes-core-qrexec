@@ -33,6 +33,7 @@ License:	GPL
 URL:		https://www.qubes-os.org
 
 BuildRequires:	gcc
+BuildRequires:	gettext
 BuildRequires:  python%{python3_pkgversion}-devel
 BuildRequires:  python%{python3_pkgversion}-setuptools
 # for building documentation

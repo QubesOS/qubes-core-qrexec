@@ -27,3 +27,4 @@ build/
 \#*#
 /selinux/*.pp
 /selinux/tmp/
+locale/*.pot
