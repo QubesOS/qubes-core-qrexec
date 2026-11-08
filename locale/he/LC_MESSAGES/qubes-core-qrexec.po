@@ -1,0 +1,101 @@
+# Hebrew translation for qubes-core-qrexec.
+# This file is distributed under the same license as the qubes-core-qrexec package.
+msgid ""
+msgstr ""
+"Project-Id-Version: qubes-core-qrexec\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-08 02:28+0200\n"
+"PO-Revision-Date: 2026-11-08 02:28+0200\n"
+"Last-Translator: David wacholder <185147826+David-wacholder@users.noreply.github.com>\n"
+"Language-Team: Hebrew\n"
+"Language: he\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. TRANSLATORS: {name} is the name of a disposable template
+#: qrexec/tools/qrexec_policy_agent.py:114
+#, python-brace-format
+msgid "Disposable VM ({name})"
+msgstr "‏qube זמני ({name})"
+
+#: qrexec/tools/qrexec_policy_agent.py:441
+msgid "Source and target domains must not be the same."
+msgstr "‏qube המקור ו-qube היעד חייבים להיות שונים."
+
+#: qrexec/tools/qrexec_policy_agent.py:459
+#, python-brace-format
+msgid "Domain '{name}' doesn't exist."
+msgstr "ה-qube \"{name}\" לא קיים."
+
+#: qrexec/tools/qrexec_policy_agent.py:659
+#, python-brace-format
+msgid "Allowed: {service}"
+msgstr "אושר: {service}"
+
+#: qrexec/tools/qrexec_policy_agent.py:661
+#, python-brace-format
+msgid "Allowed <b>{rpc}</b> from <b>{source}</b> to <b>{target}</b>"
+msgstr "אושרה הפעולה <b>{rpc}</b> מ-<b>{source}</b> אל <b>{target}</b>"
+
+#: qrexec/tools/qrexec_policy_agent.py:666
+#, python-brace-format
+msgid "Denied: {service}"
+msgstr "סורב: {service}"
+
+#: qrexec/tools/qrexec_policy_agent.py:668
+#, python-brace-format
+msgid "Denied <b>{rpc}</b> from <b>{source}</b> to <b>{target}</b>"
+msgstr "סורבה הפעולה <b>{rpc}</b> מ-<b>{source}</b> אל <b>{target}</b>"
+
+#: qrexec/tools/qrexec_policy_agent.py:672
+#, python-brace-format
+msgid "Failed: {service}"
+msgstr "נכשל: {service}"
+
+#: qrexec/tools/qrexec_policy_agent.py:674
+#, python-brace-format
+msgid ""
+"Failed to execute <b>{rpc}</b> (from <b>{source}</b> to <b>{target}</b>)"
+msgstr "ביצוע הפעולה <b>{rpc}</b> נכשל (מ-<b>{source}</b> אל <b>{target}</b>)"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:8
+msgid "Operation execution"
+msgstr "ביצוע פעולה"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:170
+msgid ""
+"Do you want to allow the following operation?\n"
+"<small>Select the target domain and confirm with 'OK'</small>"
+msgstr ""
+"לאפשר את הפעולה הבאה?\n"
+"<small>יש לבחור qube יעד ולאשר בלחיצה על \"אישור\"</small>"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:200
+msgid "Target:"
+msgstr "יעד:"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:218
+msgid "Start typing or use the arrow"
+msgstr "יש להתחיל להקליד או להשתמש בחץ"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:233
+msgid "Source:"
+msgstr "מקור:"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:258
+msgid "Operation:"
+msgstr "פעולה:"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:298
+msgid "Display templates in the target list"
+msgstr "הצגת תבניות ברשימת היעדים"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:313
+msgid "Choose a custom destination in the target"
+msgstr "בחירת מיקום מותאם אישית ב-qube היעד"
+
+#: qrexec/glade/RPCConfirmationWindow.glade:331
+msgid "Advanced options"
+msgstr "אפשרויות מתקדמות"
