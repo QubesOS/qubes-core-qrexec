@@ -168,7 +168,7 @@
                         <property name="can_focus">False</property>
                         <property name="halign">start</property>
                         <property name="label" translatable="yes">Do you want to allow the following operation?
-&lt;small&gt;Select the target domain and confirm with 'OK'&lt;/small&gt;</property>
+&lt;small&gt;Select the target qube and confirm with 'OK'&lt;/small&gt;</property>
                         <property name="use_markup">True</property>
                       </object>
                       <packing>

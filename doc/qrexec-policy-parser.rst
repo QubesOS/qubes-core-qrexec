@@ -6,7 +6,7 @@
 Qrexec policy format is available as separate specification:
 :doc:`multifile-policy`.
 
-Representing domain names
+Representing qube names
 -------------------------
 
 .. autoclass:: VMToken

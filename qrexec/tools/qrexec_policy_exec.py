@@ -197,15 +197,15 @@ usage: qrexec-policy-exec [--assume-yes-for-ask] [--just-evaluate] [--path PATH]
 
 To evaluate policy, pass 3 positional arguments:
 
-- Source domain name
-- Target domain name
+- Source qube name
+- Target qube name
 - Service name and argument separated by "+"
 
 To actually run a qrexec call, pass 5 positional arguments:
 
 - Source domain ID (Xen or similar, not Qubes ID)
-- Source domain name
-- Target domain name
+- Source qube name
+- Target qube name
 - Service name and argument separated by "+"
 - Qrexec process identifier (for data channel connection)
 
@@ -353,7 +353,7 @@ async def handle_request(
     system_info: Optional[FullSystemInfo] = None,
     requested_source: Optional[str] = None,
 ) -> str:
-    # Add source domain information, required by qrexec-client for establishing
+    # Add source qube information, required by qrexec-client for establishing
     # connection
     log_prefix = f"qrexec: {service_and_arg}: {source} -> {intended_target}:"
     if system_info is None:

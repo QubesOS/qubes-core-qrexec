@@ -9,12 +9,12 @@ The policy agent works as a socket-based service. It handles the following Qubes
 Display a prompt about whether to allow an action.
 
 The request is a JSON dictionary with the following keys:
-- `source` - source domain (`"work"`)
+- `source` - source qube (`"work"`)
 - `service` - name of service without argument (`"qubes.Filecopy"`)
 - `argument` - argument, always starts with `+` (`"+arg"`, `"+"` if empty)
 - `targets` - list of possible targets (`["personal", "@dispvm:work"]`)
 - `default_target` - initially chosen target (`"personal"`) or empty string (`""`)
-- `icons` - a dictionary icon names (recognizable by GTK) for all domains mentioned in other keys (`{"personal": "red", "work": "green", ...}`)
+- `icons` - a dictionary icon names (recognizable by GTK) for all qubes mentioned in other keys (`{"personal": "red", "work": "green", ...}`)
 
 The response is plain ASCII. It's either `allow:` followed by a chosen target (`allow:personal`) or `deny`.
 
@@ -28,7 +28,7 @@ The request is a JSON dictionary with the following keys:
   - "allow" - the service was allowed to run
   - "deny" - the service was denied
   - "fail" - the service was allowed, but failed to start
-- `source` - source domain ("work")
+- `source` - source qube ("work")
 - `service` - name of service without argument (`"qubes.Filecopy"`)
 - `argument` - argument, always starts with `+` (`"+arg"`, `"+"` if empty)
 - `target` - target, either intended (in case of `"deny"`) or actual (otherwise)

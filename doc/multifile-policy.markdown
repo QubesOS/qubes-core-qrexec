@@ -24,7 +24,7 @@ Parameters should be separated by whitespace, separation by comma is no longer
 supported. Rationale: simplicity.
 
 Supported params for actions other than `deny` (*NO CHANGE*):
-- `target` means the call is directed to this domain; see below for possible
+- `target` means the call is directed to this qube; see below for possible
 - `user`
 - `default_target` (only for `ask`)
 

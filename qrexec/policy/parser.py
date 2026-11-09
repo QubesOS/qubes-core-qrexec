@@ -245,7 +245,7 @@ def is_dom0(token) -> bool:
 
 
 class VMToken(str, metaclass=VMTokenMeta):
-    """A domain specification
+    """A qube specification
 
     Wherever policy evaluation needs to represent a VM or a ``@something``
     token, instances of this class (and subclasses) are used. Each ``@token``
@@ -386,7 +386,7 @@ class Source(VMToken):
 class _BaseTarget(VMToken):
     # pylint: disable=missing-docstring
     def expand(self, *, system_info: FullSystemInfo) -> Iterable[VMToken]:
-        """An iterator over all valid domain names that this token would match
+        """An iterator over all valid qube names that this token would match
 
         This is used as part of :py:meth:`Policy.collect_targets_for_ask()`.
         """
@@ -423,8 +423,8 @@ class IntendedTarget(VMToken):
         """Check if given value names valid target
 
         This function check if given value is not only syntactically correct,
-        but also if names valid service call target (existing domain, or valid
-        ``'@dispvm'`` like keyword). If the domain does not exist,
+        but also if names valid service call target (existing qube, or valid
+        ``'@dispvm'`` like keyword). If the qube does not exist,
         returns a DefaultVM.
 
         Args:
@@ -758,7 +758,7 @@ class AllowResolution(AbstractResolution):
         autostart: bool,
     ):
         super().__init__(rule, request, user=user)
-        #: target domain the service should be connected to
+        #: target qube the service should be connected to
         self.target = target
         self.autostart = autostart
         assert isinstance(self.autostart, bool)
@@ -972,7 +972,7 @@ class Request:
     A request object keeps what is searched for in the policy. It keeps the
     principal quadruple: service, argument, source and target that are
     parameters of the qrexec call. There is also `system_info`, which represents
-    current state of the system, incl. the list of all domains in the system and
+    current state of the system, incl. the list of all qubes in the system and
     their respective properties that are relevant to policy.
 
     Args:
@@ -1876,7 +1876,7 @@ class AbstractPolicy(AbstractParser):
             source_uuid, source_name = "uuid:" + info[source]["uuid"], source
 
         # iterate over rules in reversed order to easier handle 'deny'
-        # actions - simply remove matching domains from allowed set
+        # actions - simply remove matching qubes from allowed set
         for rule in reversed(self.rules):
             if rule.is_match_but_target(request):
                 # getattr() is for Deny, which doesn't have this attribute
