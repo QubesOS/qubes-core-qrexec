@@ -232,7 +232,7 @@ async def qrexec_policy_eval(
         untrusted_source = untrusted_source.decode("ascii", "strict")
         untrusted_target = untrusted_target.decode("ascii", "strict")
 
-        # these throw exceptions if the domain name is not valid
+        # these throw exceptions if the qube name is not valid
         sanitize_domain_name(untrusted_source, True)
         sanitize_domain_name(untrusted_target, True)
         ### SANITIZE END

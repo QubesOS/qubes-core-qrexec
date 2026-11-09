@@ -155,9 +155,9 @@ def get_system_info() -> FullSystemInfo:
     data is nested dict structure with this structure:
 
     - domains:
-       - `<domain name>`:
+       - `<qube name>`:
           - tags: list of tags
-          - type: domain type
+          - type: qube type
           - template_for_dispvms: should DispVM based on this VM be allowed
           - default_dispvm: name of default AppVM for DispVMs started from here
     """
