@@ -20,7 +20,15 @@
 
 # pylint: disable=too-many-lines
 
-"""Qrexec policy parser and evaluator"""
+"""Qrexec policy parser and evaluator
+
+
+.. testsetup:: *
+
+   import asyncio
+   import qrexec
+   from qrexec.policy.parser import FilePolicy, Request, StringPolicy, VMToken
+"""
 
 import abc
 import collections
@@ -76,7 +84,7 @@ def filter_filepaths(filepaths: Iterable[pathlib.Path]) -> List[pathlib.Path]:
     Args:
         filepaths: the file paths
     Returns:
-        list of pathlib.Path: sorted list of paths, without ignored ones
+        list[pathlib.Path]: sorted list of paths, without ignored ones
     Raises:
         qrexec.exc.AccessDenied: for invalid path which is not ignored
     """
@@ -105,7 +113,7 @@ def parse_service_and_argument(
 
     Parse ``SERVICE+ARGUMENT``. Argument may be empty (single ``+`` at the end)
     or omitted (no ``+`` at all). If no argument is given, `no_arg` is returned
-    instead. By default this returns ``'+'``, as if argument is empty.
+    instead. By default this returns ``+``, as if argument is empty.
 
     A `Path` from :py:mod:`pathlib` is also accepted, in which case the filename
     is parsed.
@@ -252,11 +260,12 @@ class VMToken(str, metaclass=VMTokenMeta):
     has its own dedicated class.
 
     There are 4 such contexts:
-        - :py:class:`Source`: for whatever was specified in policy in 3rd column
-        - :py:class:`Target`: 4th column in policy
-        - :py:class:`Redirect`: ``target=`` parameter to :py:class:`Allow` and
-          :py:class:`Ask`, and ``default_target=`` for the latter
-        - :py:class:`IntendedTarget`: for what **user** invoked the call for
+
+    - :py:class:`Source`: for whatever was specified in policy in 3rd column
+    - :py:class:`Target`: 4th column in policy
+    - :py:class:`Redirect`: ``target=`` parameter to :py:class:`Allow` and
+      :py:class:`Ask`, and ``default_target=`` for the latter
+    - :py:class:`IntendedTarget`: for what **user** invoked the call for
 
     Not all ``@tokens`` can be used everywhere. Where they can be used is
     specified by inheritance.
@@ -615,7 +624,9 @@ class DispVM(Target, Redirect, IntendedTarget):
         *,
         system_info: FullSystemInfo,
     ) -> Optional["DispVMTemplate"]:
-        """Given source, get appropriate template for DispVM. Maybe None."""
+        """Given source, get appropriate template for DispVM
+
+        :returns: DispVMTemplate | None"""
         _system_info = system_info["domains"]
         if source not in _system_info:
             return None
@@ -714,8 +725,10 @@ class DispVMTag(Source, Target):
 
 
 class AbstractResolution(metaclass=abc.ABCMeta):
-    """Object representing positive policy evaluation result -
-    either ask or allow action"""
+    """Object representing positive policy evaluation result.
+
+    It could be either ``ask`` or ``allow`` action
+    """
 
     notify: bool
 
@@ -734,9 +747,10 @@ class AbstractResolution(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     async def execute(self) -> str:
-        """
-        Execute the action. For allow, this runs the qrexec. For ask, it asks
-        user and then (depending on verdict) runs the call.
+        """Execute the action.
+
+        For ``allow``, this runs the qrexec. For ``ask``, it asks user and then
+        (depending on verdict) runs the call.
 
         Args:
             caller_ident (str): Service caller ident
@@ -890,6 +904,11 @@ class AskResolution(AbstractResolution):
     The child class should be supplied as part of :py:class:`Request`.
     """
 
+    #: user choices
+    targets_for_ask: Sequence[str]
+    #: default choice for the user
+    default_target: Optional[str]
+
     # pylint: disable=too-many-arguments
     def __init__(
         self,
@@ -912,14 +931,14 @@ class AskResolution(AbstractResolution):
     def handle_user_response(
         self, response: bool, target: str
     ) -> AllowResolution:
-        """
-        Handle user response for the 'ask' action. Children class'
-        :py:meth:`execute` is supposed to call this method to report the
+        """Handle user response for the ``ask`` action.
+
+        Children class' :py:meth:`execute` is supposed to call this method to report the
         user's verdict.
 
         Args:
             response (bool): whether the call was allowed or denied
-            target (str): target chosen by the user (if reponse==True)
+            target (str): target chosen by the user (if `response` == :obj:`True`)
 
         Returns:
             AllowResolution: for positive answer
@@ -944,8 +963,10 @@ class AskResolution(AbstractResolution):
         )
 
     def handle_invalid_response(self) -> NoReturn:
-        """
-        Handle invalid response for the 'ask' action. Throws AccessDenied.
+        """Handle invalid response for the ``ask`` action.
+
+        Raises:
+            qrexec.exc.AccessDenied
         """
         # pylint: disable=no-self-use
         raise AccessDenied("invalid response")
@@ -967,21 +988,21 @@ class AskResolution(AbstractResolution):
 #
 # pylint: disable=too-many-instance-attributes
 class Request:
-    """Qrexec request
+    """Qrexec request.
 
     A request object keeps what is searched for in the policy. It keeps the
     principal quadruple: service, argument, source and target that are
-    parameters of the qrexec call. There is also `system_info`, which represents
-    current state of the system, incl. the list of all domains in the system and
-    their respective properties that are relevant to policy.
+    parameters of the qrexec call. There is also :obj:`system_info`, which
+    represents current state of the system, incl. the list of all domains in
+    the system and their respective properties that are relevant to policy.
 
     Args:
         service (str or None): Service name.
-        argument (str): The argument. Must start with ``'+'``.
+        argument (str): The argument. Must start with ``+``.
         source (str): name of source qube
         target (str): target designation
         system_info (dict): as returned from
-            :py:func:`qrexec.utils.system_info()`
+            :py:func:`qrexec.utils.get_system_info`
         allow_resolution_type (type): a child of :py:class:`AllowResolution`
         ask_resolution_type (type): a child of :py:class:`AskResolution`
     """
@@ -1088,13 +1109,13 @@ class ActionType(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     def actual_target(self, intended_target: VMToken) -> IntendedTarget:
-        """If action has redirect, it is it. Otherwise, the rule's own target
+        """If action has redirect, it is it. Otherwise, the rule's own target.
 
         Args:
             intended_target (IntendedTarget): :py:attr:`Request.target`
 
         Returns:
-            IntendedTarget: either :py:attr:`target`, if not None, or
+            IntendedTarget: either :py:attr:`!target`, if not None, or
                 *intended_target*
         """
         return IntendedTarget(self.target or intended_target)
@@ -1127,9 +1148,10 @@ class Deny(ActionType):
         return "deny"
 
     def evaluate(self, request: Request) -> NoReturn:
-        """
+        """Evalute policy.
+
         Raises:
-            qrexec.exc.AccessDenied:
+            qrexec.exc.AccessDenied
         """
         raise AccessDenied(
             "denied by policy {}:{}".format(
@@ -1182,7 +1204,8 @@ class Allow(ActionType):
         return return_str
 
     def evaluate(self, request: Request) -> AllowResolution:
-        """
+        """Evaluate policy.
+
         Returns:
             AllowResolution: for successful requests
 
@@ -1276,7 +1299,8 @@ class Ask(ActionType):
         return return_str
 
     def evaluate(self, request: Request) -> AskResolution:
-        """
+        """Evaluate policy.
+
         Returns:
             AskResolution
 
@@ -1486,8 +1510,8 @@ class Rule:
 
     @classmethod
     def from_line(cls, policy, line, *, filepath, lineno):
-        """
-        Load a single line of qrexec policy and check its syntax.
+        """Load a single line of qrexec policy and check its syntax.
+
         Do not verify existence of named objects.
 
         Args:
@@ -1582,11 +1606,12 @@ class Rule:
     def is_match_but_target(self, request: Request) -> bool:
         """Check if given (service, argument source) matches this line.
 
-        Target is ignored. This is used for :py:meth:`collect_targets_for_ask`.
+        Target is ignored. This is used for
+        :py:meth:`AbstractPolicy.collect_targets_for_ask`.
 
         :param system_info: information about the system - available VMs,
             their types, labels, tags etc. as returned by
-            :py:func:`app_to_system_info`
+            :py:func:`~qrexec.utils.get_system_info`
         :param service: name of the service
         :param argument: the argument
         :param source: name of the source VM
@@ -1764,8 +1789,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
     def handle_include(
         self, included_path: pathlib.PurePosixPath, *, filepath, lineno
     ):
-        """Handle ``!include`` line when encountered in
-        :meth:`policy_load_file`.
+        """Handle ``!include`` line when encountered in :meth:`!load_policy_file`.
 
         This method is to be provided by subclass.
         """
@@ -1775,8 +1799,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
     def handle_include_dir(
         self, included_path: pathlib.PurePosixPath, *, filepath, lineno
     ):
-        """Handle ``!include-dir`` line when encountered in
-        :meth:`policy_load_file`.
+        """Handle ``!include-dir`` line when encountered in :meth:`!load_policy_file`.
 
         This method is to be provided by subclass.
         """
@@ -1792,8 +1815,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
         filepath,
         lineno,
     ):
-        """Handle ``!include-service`` line when encountered in
-        :meth:`policy_load_file`.
+        """Handle ``!include-service`` line when encountered in :meth:`!load_policy_file`.
 
         This method is to be provided by subclass.
         """
@@ -1809,8 +1831,7 @@ class AbstractParser(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def handle_compat40(self, *, filepath, lineno):
-        """Handle ``!compat-4.0`` line when encountered in
-        :meth:`policy_load_file`.
+        """Handle ``!compat-4.0`` line when encountered in :meth:`! load_policy_file`.
 
         This method is to be provided by subclass.
         """
@@ -1836,7 +1857,7 @@ class AbstractPolicy(AbstractParser):
         self.rules.append(rule)
 
     def evaluate(self, request):
-        """Evaluate policy
+        """Evaluate policy.
 
         Returns:
             AbstractResolution: For allow or ask resolutions.
@@ -2114,12 +2135,15 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
 
     Usage:
 
-    >>> policy = qrexec.policy.parser.FilePolicy()
-    >>> request = Request(
-    ...     'qrexec.Service', '+argument', 'source-name', 'target-name',
-    ...     system_info=qrexec.utils.get_system_info())
-    >>> resolution = policy.evaluate(request)
-    >>> await resolution.execute('process-ident')  # asynchroneous method
+    .. doctest::
+       :skipif: True
+
+       >>> policy = FilePolicy()
+       >>> request = Request(
+       ...     'qrexec.Service', '+argument', 'source-name', 'target-name',
+       ...     system_info=qrexec.utils.get_system_info())
+       >>> resolution = policy.evaluate(request)
+       >>> asyncio.run(resolution.execute('process-ident')) # asynchronous method
     """
 
     def handle_compat40(self, *, filepath, lineno):
@@ -2132,10 +2156,9 @@ class FilePolicy(AbstractFileSystemLoader, AbstractPolicy):
 
 
 class ValidateParser(FilePolicy):
-    """
-    A parser that validates the policy directory along with proposed changes.
+    """A parser that validates the policy directory along with proposed changes.
 
-    Pass files to be overriden in the ``overrides`` dictionary, with either
+    Pass files to be overridden in the ``overrides`` dictionary, with either
     new content, or None if the file is to be deleted.
     """
 
@@ -2186,7 +2209,11 @@ class ValidateParser(FilePolicy):
 
 
 class ToposortMixIn:
-    """A helper for topological sorting the policy files"""
+    """A helper for topological sorting the policy files
+
+    .. attribute:: policy_path
+       :type: pathlib.PurePath
+    """
 
     # pylint can't deal with mixins
     # pylint: disable=no-member
@@ -2225,7 +2252,7 @@ class ToposortMixIn:
         A file does not include anything from any file that follows in the
         sequence.
 
-        *file* is an open()'d file for reading.
+        *file* is an :obj:`open`'d file for reading.
         """
         if not self.order:
             self.queue = set(self.included_paths.keys())
@@ -2341,7 +2368,8 @@ class StringLoader(AbstractFileLoader):
         filepath,
         lineno,
     ) -> Tuple[TextIO, pathlib.PurePath]:
-        """
+        """Resolve filepath.
+
         Raises:
             qrexec.exc.PolicySyntaxError: when wrong path is included
         """
@@ -2369,7 +2397,7 @@ class StringPolicy(ToposortMixIn, StringLoader, AbstractPolicy):
     can be used to test most of the code paths used in policy parsing.
 
     >>> testpolicy = StringPolicy(policy={
-    ...     '__main__': '!include policy2'
+    ...     '__main__': '!include policy2',
     ...     'policy2': '* * @anyvm @anyvm allow'})
     """
 

@@ -2,3 +2,5 @@
 =================================================================
 
 .. automodule:: qrexec.policy.parser_compat
+   :members:
+   :member-order: bysource

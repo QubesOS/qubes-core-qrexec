@@ -6,6 +6,12 @@
 Qrexec policy format is available as separate specification:
 :doc:`multifile-policy`.
 
+.. testsetup:: *
+
+   import asyncio
+   import qrexec
+   from qrexec.policy.parser import Redirect, StringPolicy, Target, VMToken
+
 Representing domain names
 -------------------------
 
@@ -156,6 +162,10 @@ Miscellaneous and test facilities
 ---------------------------------
 
 .. autoclass:: ValidateParser
+   :members:
+   :member-order: bysource
+
+.. autoclass:: ToposortMixIn
    :members:
    :member-order: bysource
 

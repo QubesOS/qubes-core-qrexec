@@ -23,12 +23,11 @@ from typing import Optional
 
 
 class AccessDenied(Exception):
-    """
-    Raised when qrexec policy denied access.
+    """Raised when qrexec policy denied access.
 
-    :py:attr:`notify` controls whether to notify the user about denying
-    access. This defaults to true, except when specified otherwise
-    (e.g. because we applied a policy that says `notify=no`).
+    :param bool notify: controls whether to notify the user about denying
+       access. This defaults to :obj:`True`, except when specified otherwise
+       (e.g. because we applied a policy that says ``notify=no``).
     """
 
     def __init__(self, msg: str, notify: bool = True):
