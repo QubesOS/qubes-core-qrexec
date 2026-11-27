@@ -792,6 +792,7 @@ int find_qrexec_service(
     int ret = find_file(qrexec_service_path, cmd->service_descriptor,
                         path_buffer->data, (size_t)path_buffer->buflen,
                         &statbuf);
+    bool found_with_arg = ret == 0;
     if (ret == -1)
         ret = find_file(qrexec_service_path, cmd->service_name,
                         path_buffer->data, (size_t)path_buffer->buflen,
@@ -875,7 +876,7 @@ int find_qrexec_service(
                 /* Get just port from service arguments */
                 port = cmd->arg;
             }
-        } else {
+        } else if (!found_with_arg) {
             if (cmd->arg != NULL && *cmd->arg != '\0') {
                 LOG(ERROR, "Unexpected argument %s to service %s", cmd->arg,
                     path_buffer->data);
