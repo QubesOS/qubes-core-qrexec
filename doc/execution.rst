@@ -233,7 +233,8 @@ between service types is mostly invisible to callers.
        /dev/tcp/HOST
        /dev/tcp
 
-   The first syntax ignores the service argument.  The second syntax
+   The first syntax refuses a service argument, unless the symlink is the
+   ``SERVICE+ARGUMENT`` file for that argument.  The second syntax
    treats the entire service argument as the port, and the third syntax
    splits the service argument (on the last ``+``) to obtain both the host
    and the port.

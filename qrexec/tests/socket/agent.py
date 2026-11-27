@@ -1041,6 +1041,27 @@ skip-service-descriptor = true
         os.symlink(f"/dev/tcp/{host}/{port}", socket_path)
         self._test_tcp(socket.AF_INET, "qubes.SocketService", host, port)
 
+    def test_connect_socket_tcp_specific_arg(self):
+        """/dev/tcp/HOST/PORT symlink at SERVICE+ARG accepts that argument."""
+        socket_path = os.path.join(
+            self.tempdir, "rpc", "qubes.SocketService+4321"
+        )
+        port = 65531
+        host = "127.0.0.1"
+        os.symlink(f"/dev/tcp/{host}/{port}", socket_path)
+        self._test_tcp(socket.AF_INET, "qubes.SocketService+4321", host, port)
+
+    def test_connect_socket_tcp_unexpected_arg(self):
+        """/dev/tcp/HOST/PORT symlink at plain SERVICE refuses an argument."""
+        socket_path = os.path.join(self.tempdir, "rpc", "qubes.SocketService")
+        port = 65531
+        host = "127.0.0.1"
+        os.symlink(f"/dev/tcp/{host}/{port}", socket_path)
+        target = self._test_tcp_raw(
+            socket.AF_INET, "qubes.SocketService+4321", host, port, accept=False
+        )
+        self.assertExpectedStdout(target, b"", exit_code=125)
+
     def _test_tcp_raw(
         self,
         family: int,
@@ -1054,6 +1075,7 @@ skip-service-descriptor = true
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((host, port))
         server.listen(1)
+        server.settimeout(10)
         server = qrexec.QrexecServer(server)
         self.addCleanup(server.close)
         if skip:
